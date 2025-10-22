@@ -6,7 +6,6 @@
     "dev": "bun --hot src/index.ts",
     "build": "tsc -p . && tsc-alias -p .",
     "start": "node --experimental-specifier-resolution=node dist/index.js",
-
     "db:seed": "node --loader tsx src/db/seed/index.ts",
     "db:seed:nodrop": "node --loader tsx src/db/seed/index.ts --no-drop",
     "db:seed:only": "node --loader tsx src/db/seed/index.ts --only="
@@ -28,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "20",
+    "bun-types": "^1.3.1",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
