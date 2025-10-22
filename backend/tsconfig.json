@@ -8,9 +8,7 @@
     "outDir": "dist",
 
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    },
+    "paths": { "@/*": ["src/*"] },
 
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -20,9 +18,10 @@
     "skipLibCheck": true,
     "sourceMap": false,
 
-    "types": ["node", "@fastify/cookie", "@fastify/jwt"],
+    "types": ["node", "bun-types"],
     "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
+
