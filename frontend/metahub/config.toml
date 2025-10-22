@@ -1,0 +1,10 @@
+project_id = "krbintayhtsfoqpkgsbv"
+
+[functions.paytr-callback]
+verify_jwt = false
+
+[functions.shopier-callback]
+verify_jwt = false
+
+[functions.sitemap]
+verify_jwt = false

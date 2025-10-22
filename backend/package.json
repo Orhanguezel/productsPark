@@ -1,0 +1,35 @@
+{
+  "name": "productspark-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "build": "tsc -p . && tsc-alias -p .",
+    "start": "node --experimental-specifier-resolution=node dist/index.js",
+
+    "db:seed": "node --loader tsx src/db/seed/index.ts",
+    "db:seed:nodrop": "node --loader tsx src/db/seed/index.ts --no-drop",
+    "db:seed:only": "node --loader tsx src/db/seed/index.ts --only="
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11",
+    "@fastify/cors": "^11",
+    "@fastify/jwt": "^10",
+    "@fastify/multipart": "^9",
+    "argon2": "^0.44.0",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.44.6",
+    "fastify": "^5",
+    "google-auth-library": "^10.4.1",
+    "mysql2": "^3.15.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "20",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

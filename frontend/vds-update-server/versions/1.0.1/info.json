@@ -1,0 +1,10 @@
+{
+  "version": "1.0.1",
+  "releaseDate": "2025-01-15T10:00:00Z",
+  "requiredVersion": "1.0.0",
+  "isCritical": false,
+  "changelog": {
+    "tr": "## Test Güncellemesi v1.0.1\n\n### Değişiklikler\n- Ana sayfa 'Nasıl Çalışır?' başlığı test için güncellendi\n- Başlık artık 'Nasıl Çalışır? TEST' olarak görünecek\n\n### Teknik Detaylar\n- site_settings tablosunda home_how_it_works_title güncellendi\n- Kullanıcı ayarları korundu\n- Geri alma (rollback) desteği mevcut"
+  },
+  "estimatedTime": "1-2 dakika"
+}

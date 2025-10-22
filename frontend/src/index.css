@@ -1,0 +1,217 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 25% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 142 71% 45%;
+    
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+    
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 142 76% 36%;
+    
+    --radius: 0.75rem;
+    
+    --navy: 222 47% 11%;
+    --navy-light: 220 26% 14%;
+    
+    --chart-1: 142 76% 36%;
+    --chart-2: 221 83% 53%;
+    --chart-3: 262 83% 58%;
+    --chart-4: 142 71% 45%;
+    --chart-5: 45 93% 58%;
+    
+    --gradient-primary: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 71% 45%));
+    --gradient-hero: linear-gradient(135deg, hsl(222 47% 11%), hsl(220 26% 14%));
+    
+    --shadow-elegant: 0 10px 30px -10px hsl(142 76% 36% / 0.2);
+    --shadow-card: 0 4px 20px -4px hsl(222 47% 11% / 0.1);
+    
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 220 26% 14%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 26% 14%;
+    --popover-foreground: 210 40% 98%;
+    
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 142 71% 45%;
+    
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 142 76% 36%;
+    
+    --chart-1: 142 76% 45%;
+    --chart-2: 221 83% 63%;
+    --chart-3: 262 83% 68%;
+    --chart-4: 142 71% 55%;
+    --chart-5: 45 93% 68%;
+    
+    --gradient-primary: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 71% 45%));
+    --gradient-hero: linear-gradient(135deg, hsl(220 26% 14%), hsl(222 47% 11%));
+    
+    --shadow-elegant: 0 10px 30px -10px hsl(142 76% 36% / 0.3);
+    --shadow-card: 0 4px 20px -4px hsl(0 0% 0% / 0.3);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+  
+  .shadow-elegant {
+    box-shadow: var(--shadow-elegant);
+  }
+  
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+  
+  @keyframes gradient {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+  
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient 15s ease infinite;
+  }
+
+  /* Prose heading styles for ReactQuill content */
+  .prose h1 {
+    @apply text-4xl font-bold mt-8 mb-4;
+  }
+  
+  .prose h2 {
+    @apply text-3xl font-bold mt-6 mb-3;
+  }
+  
+  .prose h3 {
+    @apply text-2xl font-semibold mt-5 mb-2;
+  }
+  
+  .prose h4 {
+    @apply text-xl font-semibold mt-4 mb-2;
+  }
+  
+  .prose h5 {
+    @apply text-lg font-medium mt-3 mb-2;
+  }
+  
+  .prose h6 {
+    @apply text-base font-medium mt-2 mb-1;
+  }
+  
+  .prose p {
+    @apply text-base leading-7 mb-4;
+  }
+  
+  .prose ul, .prose ol {
+    @apply mb-4 ml-6;
+  }
+  
+  .prose li {
+    @apply mb-2;
+  }
+  
+  .prose strong {
+    @apply font-semibold;
+  }
+  
+  .prose em {
+    @apply italic;
+  }
+  
+  .prose a {
+    @apply text-primary underline hover:text-accent transition-colors;
+  }
+  
+  .prose blockquote {
+    @apply border-l-4 border-primary pl-4 italic my-4;
+  }
+  
+  .prose code {
+    @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+  }
+  
+  .prose pre {
+    @apply bg-muted p-4 rounded-lg overflow-x-auto mb-4;
+  }
+  
+  .prose img {
+    @apply rounded-lg my-4;
+  }
+  
+  .prose hr {
+    @apply border-border my-8;
+  }
+}
