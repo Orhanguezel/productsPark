@@ -1,0 +1,24 @@
+{
+  "tables": [
+    {
+      "name": "orders",
+      "protectedColumns": ["*"],
+      "note": "Tüm sipariş verileri korunur"
+    },
+    {
+      "name": "profiles",
+      "protectedColumns": ["*"],
+      "note": "Kullanıcı profilleri korunur"
+    },
+    {
+      "name": "products",
+      "protectedColumns": ["image_url", "price", "stock_quantity", "name", "description"],
+      "note": "Ürün temel bilgileri korunur"
+    },
+    {
+      "name": "user_roles",
+      "protectedColumns": ["*"],
+      "note": "Kullanıcı rolleri korunur"
+    }
+  ]
+}
