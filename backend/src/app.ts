@@ -1,6 +1,4 @@
 // src/app.ts
-import type { FastifyCookieOptions } from '@fastify/cookie'
-import fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
