@@ -48,3 +48,17 @@ mkdir -p dist/db/seed/sql
 cp -f src/db/seed/sql/*.sql dist/db/seed/sql/
 
 
+cd ~/Documents/productsPark   # doğru klasör
+git status                    # ne değişmiş gör
+git add -A
+git commit -m "mesajın"
+git pull --rebase origin main
+git push origin main
+
+
+```sh
+pm2 flush
+```
+
+
+
