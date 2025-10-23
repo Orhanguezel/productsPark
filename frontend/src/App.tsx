@@ -100,6 +100,7 @@ const AppContent = () => {
         <Suspense fallback={<LoadingSpinner />}>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/hakkimizda" element={<About />} />
             <Route path="/sitemap.xml" element={<Sitemap />} />
             <Route path="/urunler" element={<Products />} />
             <Route path="/kategoriler/:slug" element={<Products />} />

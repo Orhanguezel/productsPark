@@ -3,6 +3,7 @@
 // FILE: src/integrations/metahub/client.ts  (UPDATED aggregator)
 // =============================================================
 import { auth } from "./client/auth/client";
+import { user_roles } from "./client/user_roles/client";
 import { functions } from "./client/functions/client";
 import { products } from "./client/products/client";
 import { categories } from "./client/categories/client";
@@ -48,6 +49,11 @@ import * as seoMeta from "./seo/meta";
 import * as seoJsonld from "./seo/jsonld";
 import { payments } from "./client/payments/client";
 import { uploader } from "./client/uploader/client";
+import { menu_items } from "./client/menu_items/client";
+import { popups } from "./client/popup/client";
+import { topbar_settings } from "./client/topbar_settings/client";
+
+
 import { siteSettingsAdmin } from "./client/admin/siteSettings";
 import { categoriesAdmin } from "./client/admin/categories";
 import { productsAdmin } from "./client/admin/products";
@@ -82,7 +88,7 @@ import { inventoryAdmin } from "./client/admin/inventory";
 
 import { baseApi } from "./rtk/baseApi";
 import * as rtk from "./rtk";
-import { from } from "./db/from";
+import { from as fromDb, type FromFn } from "./db/from";
 import { channel, removeChannel, removeAllChannels } from "./realtime/channel";
 
 export const metahub = {
@@ -128,6 +134,10 @@ export const metahub = {
   exports: exportsUtil,
   rbac,
   seo: { meta: seoMeta, jsonld: seoJsonld },
+  menu_items,
+  popups,
+  user_roles,
+  topbar_settings,
 
 
 
@@ -167,7 +177,7 @@ admin: {
   // RTK + helpers
   api: rtk,
   baseApi,
-  from,
+  from: fromDb as FromFn,
   channel,
   removeChannel,
   removeAllChannels,
