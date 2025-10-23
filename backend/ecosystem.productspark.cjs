@@ -1,3 +1,4 @@
+// /var/www/productsPark/backend/ecosystem.config.cjs
 module.exports = {
   apps: [
     {
@@ -10,6 +11,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '8081'
+        // Diğer tüm değişkenler .env'den yüklenecek (dotenv/config)
       },
 
       instances: 1,          // istersen 'max'
@@ -25,3 +27,4 @@ module.exports = {
     }
   ]
 }
+
