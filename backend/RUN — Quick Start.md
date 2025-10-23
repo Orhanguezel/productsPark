@@ -38,3 +38,13 @@ mysql -u root -p
 # veya kullanıcı/adres/port belirterek:
 mysql -h 127.0.0.1 -P 3306 -u your_user -p your_db
 
+
+cd /var/www/productsPark/backend
+
+rm -rf dist .tsbuildinfo
+bun run build
+
+mkdir -p dist/db/seed/sql
+cp -f src/db/seed/sql/*.sql dist/db/seed/sql/
+
+
