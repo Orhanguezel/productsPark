@@ -18,10 +18,10 @@
     "skipLibCheck": true,
     "sourceMap": false,
 
-    "types": ["node", "bun-types"],
-    "ignoreDeprecations": "6.0"
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
-

@@ -1,3 +1,4 @@
+// src/modules/productOptions/schema.ts
 import {
   mysqlTable, varchar, text, json, timestamp,
 } from 'drizzle-orm/mysql-core';

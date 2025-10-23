@@ -97,6 +97,15 @@ export const productFaqs = mysqlTable('product_faqs', {
   updated_at: datetime('updated_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`).$onUpdateFn(() => new Date()),
 });
 
+export const productOptions = mysqlTable('product_options', {
+  id: char('id', { length: 36 }).primaryKey().notNull(),
+  product_id: char('product_id', { length: 36 }).notNull(),
+  option_name: varchar('option_name', { length: 100 }).notNull(),
+  option_values: json('option_values').notNull(),
+  created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  updated_at: datetime('updated_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`).$onUpdateFn(() => new Date()),
+});
+
 export const productReviews = mysqlTable('product_reviews', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   product_id: char('product_id', { length: 36 }).notNull(),
@@ -119,7 +128,3 @@ export const productStock = mysqlTable('product_stock', {
   created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
   order_item_id: char('order_item_id', { length: 36 }),
 });
-
-
-export { productOptions } from '../productOptions/schema';
-
