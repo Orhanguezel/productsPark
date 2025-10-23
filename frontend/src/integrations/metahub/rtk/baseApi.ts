@@ -108,6 +108,8 @@ export const baseApi = createApi({
     "MediaFolders","MediaFolder",
     "Permissions","Permission",
     "Invoices","Invoice",
+    "UserRoles","UserRole",
+    "TopbarSettings","TopbarSetting",
 
   ] as const,
 });

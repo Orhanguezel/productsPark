@@ -10,7 +10,6 @@ import {
   type JsonLike,
 } from './validation';
 
-/** "\"true\"" → true, "{\"a\":1}" → {a:1} ; parse edilemiyorsa string kalır */
 function parseDbValue(s: string): unknown {
   try { return JSON.parse(s); } catch { return s; }
 }
@@ -18,10 +17,21 @@ function stringifyValue(v: JsonLike): string {
   return JSON.stringify(v);
 }
 
+/** Tek satırı FE'nin beklediği DTO'ya çevir */
+function rowToDto(r: typeof siteSettings.$inferSelect) {
+  return {
+    id: r.id,
+    key: r.key,
+    value: parseDbValue(r.value),
+    created_at: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+    updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
+  };
+}
+
 /**
  * GET /site_settings
  * Query:
- * - select:   (yok sayılır; FE uyumu)
+ * - select:   (yok sayılır; FE uyumu için var)
  * - key:      eşitlik
  * - key_in:   "a,b,c" -> IN(...)
  * - prefix:   LIKE 'prefix%'
@@ -32,14 +42,13 @@ export const listSiteSettings: RouteHandler = async (req, reply) => {
   const q = (req.query || {}) as {
     select?: string;
     key?: string;
-    key_in?: string;     // a,b,c
+    key_in?: string;
     prefix?: string;
-    order?: string;      // col(.desc|.asc)
+    order?: string;
     limit?: string | number;
     offset?: string | number;
   };
 
-  // Dinamik builder: tip düşürmeleri önlemek için .$dynamic()
   let qb = db.select().from(siteSettings).$dynamic();
 
   const conditions: unknown[] = [];
@@ -77,13 +86,7 @@ export const listSiteSettings: RouteHandler = async (req, reply) => {
   }
 
   const rows = await qb;
-  const out = rows.map(r => ({
-    key: r.key,
-    value: parseDbValue(r.value),
-    updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
-  }));
-
-  return reply.send(out);
+  return reply.send(rows.map(rowToDto));
 };
 
 /** GET /site_settings/:key */
@@ -93,14 +96,10 @@ export const getSiteSettingByKey: RouteHandler = async (req, reply) => {
   const rows = await db.select().from(siteSettings)
     .where(eq(siteSettings.key, key))
     .limit(1);
+
   if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
 
-  const r = rows[0];
-  return reply.send({
-    key: r.key,
-    value: parseDbValue(r.value),
-    updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
-  });
+  return reply.send(rowToDto(rows[0]));
 };
 
 /** PUT /site_settings  body: { key, value } (upsert) */
@@ -126,11 +125,7 @@ export const upsertSiteSetting: RouteHandler = async (req, reply) => {
     const [row] = await db.select().from(siteSettings)
       .where(eq(siteSettings.key, input.key)).limit(1);
 
-    return reply.send({
-      key: row.key,
-      value: parseDbValue(row.value),
-      updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
-    });
+    return reply.send(rowToDto(row));
   } catch (e) {
     req.log.error(e);
     return reply.code(400).send({ error: { message: 'validation_error' } });
@@ -154,7 +149,6 @@ export const upsertManySiteSettings: RouteHandler = async (req, reply) => {
     await db.insert(siteSettings).values(values)
       .onDuplicateKeyUpdate({
         set: {
-          // MariaDB’de VALUES() geçerli.
           value: sql`VALUES(${siteSettings.value})`,
           updated_at: sql`VALUES(${siteSettings.updated_at})`,
         },
@@ -164,12 +158,7 @@ export const upsertManySiteSettings: RouteHandler = async (req, reply) => {
     const rows = await db.select().from(siteSettings)
       .where(inArray(siteSettings.key, keys));
 
-    const out = rows.map(r => ({
-      key: r.key,
-      value: parseDbValue(r.value),
-      updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
-    }));
-    return reply.send(out);
+    return reply.send(rows.map(rowToDto));
   } catch (e) {
     req.log.error(e);
     return reply.code(400).send({ error: { message: 'validation_error' } });
