@@ -1,5 +1,5 @@
 // src/index.ts
-import { createApp } from '@/app';
+import { createApp } from './app';
 import { env } from '@/core/env';
 
 async function main() {
