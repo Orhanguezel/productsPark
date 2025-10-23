@@ -1,4 +1,4 @@
-// /var/www/productsPark/backend/ecosystem.config.cjs
+// backend/ecosystem.config.cjs
 module.exports = {
   apps: [
     {
@@ -8,10 +8,17 @@ module.exports = {
       interpreter: 'node',
       node_args: '--experimental-specifier-resolution=node',
 
+      // pm2 start için varsayılan env
       env: {
+        NODE_ENV: 'development',
+        PORT: '8081'
+        // Diğer değişkenler .env'den (dotenv/config) okunur
+      },
+
+      // pm2 start --env production için
+      env_production: {
         NODE_ENV: 'production',
         PORT: '8081'
-        // Diğer tüm değişkenler .env'den yüklenecek (dotenv/config)
       },
 
       instances: 1,          // istersen 'max'
