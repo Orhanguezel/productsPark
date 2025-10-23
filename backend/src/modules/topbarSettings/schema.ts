@@ -1,18 +1,24 @@
 import {
-  mysqlTable, varchar, text, tinyint, timestamp,
+  mysqlTable, char, varchar, boolean, datetime, index,
 } from 'drizzle-orm/mysql-core';
+import { sql } from 'drizzle-orm';
 
-export const topbarSettings = mysqlTable('topbar_settings', {
-  id: varchar('id', { length: 36 }).primaryKey().notNull(),
-  is_active: tinyint('is_active').notNull().default(1),
-  message: text('message').notNull(),
-  coupon_code: text('coupon_code'),
-  link_url: text('link_url'),
-  link_text: text('link_text'),
-  background_color: text('background_color').default('hsl(var(--primary))'),
-  text_color: text('text_color').default('hsl(var(--primary-foreground))'),
-  created_at: timestamp('created_at').defaultNow(),
-  updated_at: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
-
-
+export const topbarSettings = mysqlTable(
+  'topbar_settings',
+  {
+    id: char('id', { length: 36 }).primaryKey().notNull(),
+    text: varchar('text', { length: 255 }).notNull(),
+    link: varchar('link', { length: 500 }),
+    is_active: boolean('is_active').notNull().default(false),
+    show_ticker: boolean('show_ticker').notNull().default(false),
+    created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    updated_at: datetime('updated_at', { fsp: 3 })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdateFn(() => new Date()),
+  },
+  (t) => [
+    index('topbar_settings_active_idx').on(t.is_active),
+    index('topbar_settings_created_idx').on(t.created_at),
+  ]
+);

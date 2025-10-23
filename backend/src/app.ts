@@ -21,6 +21,11 @@ import { registerOrders } from '@/modules/orders/router';
 import { registerCoupons } from '@/modules/coupons/router';
 import { registerCustomPages } from '@/modules/custom-pages/router';
 import { registerBlog } from '@/modules/blog/router';
+import { registerMenuItems } from '@/modules/menuItems/router';
+import { registerSiteSettings } from '@/modules/siteSettings/router';
+import { registerPopups } from '@/modules/popups/router';
+import { registerUserRoles } from "@/modules/userRoles/router";
+import { registerTopbar } from '@/modules/topbarSettings/router';
 
 export async function createApp() {
   // Dinamik import + gevşek tip: TS2349 kökten biter
@@ -83,6 +88,11 @@ export async function createApp() {
   await registerCoupons(app);
   await registerCustomPages(app);
   await registerBlog(app);
+  await registerMenuItems(app);
+  await registerSiteSettings(app);
+  await registerPopups(app);
+  await registerUserRoles(app);
+  await registerTopbar(app);
 
   registerErrorHandlers(app);
   return app;

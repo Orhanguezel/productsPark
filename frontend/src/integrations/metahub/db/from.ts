@@ -1,4 +1,12 @@
-// src/integrations/metahub/db/from.ts
+// =============================================================
+// FILE: src/integrations/metahub/db/from.ts
+// (lean: tipler ve normalize ayrı dosyalarda)
+// =============================================================
+
+import { normalizeTableRows } from "./normalizeTables";
+import type { KnownTables, TableRow, UnknownRow } from "./types";
+export type { KnownTables, TableRow, UnknownRow } from "./types";
+export type { ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow, PopupRow, UserRoleRow, TopbarSettingRow } from "./types";
 
 /** BASE URL'ler */
 const RAW_EDGE_URL =
@@ -19,31 +27,6 @@ const BASE_OF = {
 export type ResultError = { message: string; status?: number; raw?: unknown };
 export type FetchResult<T> = { data: T | null; error: ResultError | null; count?: number };
 
-type UnknownRow = Record<string, unknown>;
-
-export type CategoryRow = {
-  id: string;
-  name: string;
-  slug: string;
-  image_url: string | null;
-  icon: string | null;
-  description?: string | null;
-  is_featured?: boolean | 0 | 1;
-};
-
-export type SiteSettingRow = {
-  id: string;
-  key: string;
-  value: unknown;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type TableRow<TName extends string> =
-  TName extends "categories" ? CategoryRow :
-  TName extends "site_settings" ? SiteSettingRow :
-  UnknownRow;
-
 /** Query parçaları */
 type Filter =
   | { type: "eq"; col: string; val: unknown }
@@ -52,14 +35,13 @@ type Filter =
 
 type Order = { col: string; ascending?: boolean };
 type SelectOpts = { count?: "exact" | "planned" | "estimated"; head?: boolean };
-
 type Op = "select" | "insert" | "update" | "delete";
 
 /** Hangi tablo hangi BASE'e gidecek? */
 type BaseKind = "edge" | "app";
 type TableCfg = { path: string; base: BaseKind };
 
-const TABLES: Record<string, TableCfg> = {
+const TABLES: Record<KnownTables, TableCfg> = {
   // EDGE
   products: { path: "/products", base: "edge" },
   categories: { path: "/categories", base: "edge" },
@@ -78,7 +60,7 @@ const TABLES: Record<string, TableCfg> = {
   product_options: { path: "/product_options", base: "edge" },
   product_option_values: { path: "/product_option_values", base: "edge" },
 
-  // APP (yalnızca VITE_API_URL — boşsa edge’e düşer)
+  // APP
   site_settings: { path: "/site_settings", base: "app" },
   topbar_settings: { path: "/topbar_settings", base: "app" },
   popups: { path: "/popups", base: "app" },
@@ -94,7 +76,6 @@ const TABLES: Record<string, TableCfg> = {
   audit_events: { path: "/audit_events", base: "app" },
   telemetry_events: { path: "/telemetry/events", base: "app" },
   user_roles: { path: "/user_roles", base: "app" },
-  // gerekirse ekleriz…
 };
 
 function joinUrl(base: string, path: string): string {
@@ -183,7 +164,7 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
 
   private async execute(): Promise<FetchResult<TRow[]>> {
     try {
-      const cfg = TABLES[this.table];
+      const cfg = TABLES[this.table as KnownTables];
       if (!cfg) return { data: null, error: { message: `unknown_table_${this.table}` } };
 
       const primaryBase = BASE_OF[cfg.base]; // ← app boşsa edge’e düşer
@@ -207,7 +188,7 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
         let lastErr: ResultError | null = null;
 
         for (let i = 0; i < bases.length; i++) {
-          const base = bases[i];
+          const base = bases[i]!;
           const url = `${joinUrl(base, cfg.path)}?${toQS(params)}`;
           const res = await fetch(url, { credentials: "include" });
 
@@ -232,15 +213,9 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
 
           let data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
 
-          // site_settings.value JSON-string ise parse etmeye çalış
-          if (data && cfg.path === "/site_settings") {
-            data = (data as UnknownRow[]).map((r) => {
-              const clone: UnknownRow = { ...r };
-              if (typeof clone.value === "string") {
-                try { clone.value = JSON.parse(clone.value); } catch { /* ignore */ }
-              }
-              return clone as TRow;
-            });
+          // 🔹 Tabloya özel normalizasyonlar (site_settings, products, vb.)
+          if (data) {
+            data = normalizeTableRows(cfg.path, data as unknown as UnknownRow[]) as unknown as TRow[];
           }
 
           return { data, error: null, count };
@@ -303,12 +278,15 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
 export type FromPromise<TRow extends UnknownRow = UnknownRow> =
   PromiseLike<FetchResult<TRow[]>> & QB<TRow>;
 
-/** OVERLOADS — geri uyum + tablo adına göre tip çıkarımı */
-// 1) Explicit row tipi vermek isteyenler için (ör: from<SiteSettingRow>("site_settings"))
-export function from<TRow extends UnknownRow = UnknownRow>(table: string): FromPromise<TRow>;
-// 2) Tablo adına göre otomatik çıkarım (ör: from("categories") -> CategoryRow)
+/** OVERLOADS — spesifik overload ÖNCE, genel overload SONRA */
 export function from<TName extends keyof typeof TABLES>(table: TName): FromPromise<TableRow<TName>>;
-// 3) Implementasyon — explicit any YOK
+export function from<TRow extends UnknownRow = UnknownRow>(table: string): FromPromise<TRow>;
 export function from(table: string): FromPromise<UnknownRow> {
   return new QB<UnknownRow>(table) as unknown as FromPromise<UnknownRow>;
 }
+// overload’lı tip tanımı (export’la)
+export type FromFn =
+  (<TName extends keyof typeof TABLES>(table: TName) => FromPromise<TableRow<TName>>) &
+  (<TRow extends UnknownRow = UnknownRow>(table: string) => FromPromise<TRow>);
+
+

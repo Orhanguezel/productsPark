@@ -40,6 +40,9 @@ export * from "./endpoints/audit_events.endpoints";
 export * from "./endpoints/payment_providers.endpoints";
 export * from "./endpoints/payment_sessions.endpoints";
 export * from "./endpoints/uploads.endpoints";
+export * from "./endpoints/user_roles.endpoints";
+export * from "./endpoints/topbar_settings.endpoints";
+
 // ADMIN ENDPOINTS
 export * as adminCategories     from "./endpoints/admin/categories_admin.endpoints";
 export * as adminProducts       from "./endpoints/admin/products_admin.endpoints";

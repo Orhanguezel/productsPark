@@ -8,21 +8,17 @@ module.exports = {
       interpreter: 'node',
       node_args: '--experimental-specifier-resolution=node',
 
-      // pm2 start için varsayılan env
       env: {
         NODE_ENV: 'development',
         PORT: '8081'
-        // Diğer değişkenler .env'den (dotenv/config) okunur
       },
-
-      // pm2 start --env production için
       env_production: {
         NODE_ENV: 'production',
         PORT: '8081'
       },
 
-      instances: 1,          // istersen 'max'
-      exec_mode: 'fork',     // istersen 'cluster'
+      instances: 1,
+      exec_mode: 'fork',
       watch: false,
       time: true,
 

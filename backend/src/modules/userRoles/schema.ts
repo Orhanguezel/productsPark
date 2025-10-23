@@ -1,19 +1,18 @@
 import {
-  mysqlTable, varchar, text, timestamp, uniqueIndex,
-} from 'drizzle-orm/mysql-core';
+  mysqlTable, char, mysqlEnum, datetime, index, varchar
+} from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
 
-/**
- * app_role enum'unu MariaDB'de TEXT ile temsil ediyoruz (minimum şart).
- * İstersen ENUM tanımlayıp strict'e çekebiliriz.
- */
-export const userRoles = mysqlTable('user_roles', {
-  id: varchar('id', { length: 36 }).primaryKey().notNull(),
-  user_id: varchar('user_id', { length: 36 }).notNull(), // FK: auth.users(id)
-  role: text('role').notNull().default('user'),
-  created_at: timestamp('created_at').defaultNow(),
-}, (t) => ({
-  uxUserRole: uniqueIndex('ux_user_roles_user_id_role').on(t.user_id, t.role),
-}));
-
-
-
+export const userRoles = mysqlTable(
+  "user_roles",
+  {
+    id: char("id", { length: 36 }).primaryKey().notNull(),
+    user_id: char("user_id", { length: 36 }).notNull(),
+    role: mysqlEnum("role", ["admin", "moderator", "user"]).notNull().default("user"),
+    created_at: datetime("created_at", { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  },
+  (t) => [
+    index("user_roles_user_id_idx").on(t.user_id),
+    index("user_roles_role_idx").on(t.role),
+  ]
+);
