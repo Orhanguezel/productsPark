@@ -1,9 +1,13 @@
-// src/db/seed/index.ts
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
 import { env } from '@/core/env';
 import { cleanSql, splitStatements, logStep } from './utils';
+
+// ESM için __dirname/__filename
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 type Flags = {
   noDrop?: boolean;
@@ -27,8 +31,6 @@ function assertSafeToDrop(dbName: string) {
   const isSystem = ['mysql','information_schema','performance_schema','sys'].includes(dbName.toLowerCase());
   if (isSystem) throw new Error(`Sistem DB'si drop edilemez: ${dbName}`);
   if (isProd && !allowDrop) throw new Error('Prod ortamda DROP için ALLOW_DROP=true bekleniyor.');
-  // İstersen ek güvenlik: yalnızca *_dev, *_local gibi isimlere izin ver
-  // if (!dbName.endsWith('_dev') && !allowDrop) throw new Error('DB adı *_dev değilken drop yasak. ALLOW_DROP=true ver.');
 }
 
 async function dropAndCreate(root: mysql.Connection) {
@@ -63,7 +65,6 @@ async function createConnToDb(): Promise<mysql.Connection> {
 
 function shouldRun(file: string, flags: Flags) {
   if (!flags.only?.length) return true;
-  // dosya adı başındaki numara ile filtre
   const m = path.basename(file).match(/^(\d+)/);
   const prefix = m?.[1];
   return prefix ? flags.only.includes(prefix) : false;
@@ -73,9 +74,8 @@ async function runSqlFile(conn: mysql.Connection, absPath: string) {
   const name = path.basename(absPath);
   logStep(`⏳ ${name} çalışıyor...`);
   const raw = fs.readFileSync(absPath, 'utf8');
-  const sql = cleanSql(raw);                  // yorumları temizle
-  const statements = splitStatements(sql);    // ; ile ayrıştır
-  // İsteğe bağlı: tek transaction içinde çalıştırmak istersen (DDL’ler için gerekmez)
+  const sql = cleanSql(raw);
+  const statements = splitStatements(sql);
   await conn.query('SET NAMES utf8mb4;');
   await conn.query("SET time_zone = '+00:00';");
   for (const stmt of statements) {
@@ -106,8 +106,12 @@ async function main() {
   const conn = await createConnToDb();
 
   try {
-    // 3) sql dizinindeki dosyaları sırayla çalıştır
-    const sqlDir = path.resolve(__dirname, 'sql');
+    // 3) SQL klasörünü bul (öncelik env, sonra dist/sql, yoksa src/sql)
+    const envDir = process.env.SEED_SQL_DIR && process.env.SEED_SQL_DIR.trim();
+    const distSql = path.resolve(__dirname, 'sql');
+    const srcSql  = path.resolve(__dirname, '../../../src/db/seed/sql');
+    const sqlDir  = envDir ? path.resolve(envDir) : (fs.existsSync(distSql) ? distSql : srcSql);
+
     const files = fs.readdirSync(sqlDir)
       .filter(f => f.endsWith('.sql'))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));

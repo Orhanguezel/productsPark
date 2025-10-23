@@ -7,9 +7,9 @@
     "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "start": "node --experimental-specifier-resolution=node dist/index.js",
     "start:bun": "bun dist/index.js",
-    "db:seed": "node dist/db/seed/index.js",
-    "db:seed:nodrop": "node dist/db/seed/index.js --no-drop",
-    "db:seed:only": "node dist/db/seed/index.js --only="
+    "db:seed": "node --experimental-specifier-resolution=node dist/db/seed/index.js",
+    "db:seed:nodrop": "node --experimental-specifier-resolution=node dist/db/seed/index.js --no-drop",
+    "db:seed:only": "node --experimental-specifier-resolution=node dist/db/seed/index.js --only="
   },
   "dependencies": {
     "@fastify/cookie": "^11",
