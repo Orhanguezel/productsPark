@@ -23,7 +23,7 @@ import { cartItems } from '@/modules/cart/schema';
 import { orders, order_items } from '@/modules/orders/schema';
 import { productOptions } from '@/modules/productOptions/schema';
 import { blog_posts } from '@/modules/blog/schema';
-import { custom_pages } from '@/modules/custom-pages/schema';
+import { customPages } from '@/modules/customPages/schema';
 import { popups } from '@/modules/popups/schema';
 import { topbarSettings } from '@/modules/topbarSettings/schema';
 import { userRoles } from '@/modules/userRoles/schema';
@@ -48,7 +48,7 @@ const TABLES: Record<string, any> = {
   order_items: order_items,
   product_options: productOptions,
   blog_posts: blog_posts,
-  custom_pages: custom_pages,
+  custom_pages: customPages,
   popups,
   topbar_settings: topbarSettings,
   user_roles: userRoles,

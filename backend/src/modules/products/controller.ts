@@ -8,8 +8,8 @@ import {
   productOptions,
   productReviews,
   productStock,
-  categories,
 } from './schema';
+import { categories } from '../categories/schema';
 import {
   productCreateSchema,
   productUpdateSchema,

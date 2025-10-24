@@ -1,3 +1,4 @@
+// src/modules/categories/schema.ts
 import {
   mysqlTable,
   char,

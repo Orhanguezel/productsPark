@@ -114,11 +114,11 @@ export type PopupRow = {
 
   /** FE doğrudan kullanıyor */
   image_url: string | null;
-  content?: string | null;          // varsa düz metin
-  content_html?: string | null;     // HTML içerik tutuyorsanız
+  content?: string | null;
+  content_html?: string | null;
 
   /** görünürlük & davranış */
-  is_active: boolean;               // normalize ile kesin boolean
+  is_active: boolean;
   display_pages: 'all' | 'home' | 'products' | 'categories' | string;
   display_frequency: 'always' | 'once' | 'daily' | 'weekly' | string;
   delay_seconds: number | null;
@@ -169,7 +169,108 @@ export type TopbarSettingRow = {
   updated_at?: string;
 };
 
+/** ✅ Yeni: Kupon satırı (normalize edilmiş) */
+export type CouponRow = {
+  id: string;
+  code: string;
+  title?: string | null;
 
+  discount_type: "percentage" | "fixed";
+  discount_value: number;
+
+  min_purchase: number;
+  max_discount?: number | null;
+
+  is_active: boolean;
+  max_uses?: number | null;
+  used_count?: number | null;
+
+  valid_from?: string | null;
+  valid_until?: string | null;
+
+  applicable_to?: "all" | "category" | "product";
+  category_ids?: string[] | null;
+  product_ids?: string[] | null;
+
+  created_at?: string;
+  updated_at?: string;
+};
+
+/** ✅ Yeni: Sepet öğesi (normalize edilmiş) */
+export type CartItemRow = {
+  id: string;
+  user_id?: string | null;
+  product_id: string;
+  quantity: number;
+  options?: Record<string, unknown> | null;
+  created_at?: string;
+  updated_at?: string;
+  products?: {
+    id: string;
+    name: string;
+    slug: string;
+    price: number;
+    image_url: string | null;
+    delivery_type?: string | null;
+    stock_quantity?: number | null;
+    custom_fields?: ReadonlyArray<Record<string, unknown>> | null;
+    quantity_options?: { quantity: number; price: number }[] | null;
+    api_provider_id?: string | null;
+    api_product_id?: string | null;
+    api_quantity?: number | null;
+    category_id?: string | null;
+    categories?: { id: string; name: string } | null;
+  } | null;
+};
+
+export type BlogPostRow = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;           // HTML
+  category: string;          // normalize: "Genel"
+  author_name: string;       // DB: author
+  created_at: string;
+  image_url: string;         // DB: featured_image
+  read_time: string;         // "X dk"
+  is_published: boolean;     // tinyint(1) normalize
+  is_featured: boolean;      // normalize: false
+  published_at?: string | null;
+  updated_at?: string;
+};
+
+
+export type FooterLink = {
+  label: string;
+  href: string;
+  external?: boolean;
+};
+
+export type FooterSectionView = {
+  id: string;
+  title: string;
+  display_order: number;   // UI bekliyor
+  is_active: boolean;      // kesin boolean
+  locale?: string | null;
+  links: FooterLink[];     // her zaman dizi (boş da olabilir)
+  // opsiyoneller
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CustomPageView = {
+  id: string;
+  title: string;
+  slug: string;
+  /** UI'nin beklediği düz HTML string */
+  content: string;
+  meta_title?: string | null;
+  meta_description?: string | null;
+  is_published: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
 
 /** Bu projede bildiğimiz tüm tablo adları */
 export type KnownTables =
@@ -204,8 +305,7 @@ export type KnownTables =
   | "audit_events"
   | "telemetry_events"
   | "user_roles";
-
-
+  
 
 // TableRow eşlemesini güncelle:
 export type TableRow<TName extends string> =
@@ -219,4 +319,8 @@ export type TableRow<TName extends string> =
   TName extends "popups" ? PopupRow :
   TName extends "user_roles" ? UserRoleRow :
   TName extends "topbar_settings" ? TopbarSettingRow :
+  TName extends "coupons" ? CouponRow :
+  TName extends "cart_items" ? CartItemRow :
+  TName extends "blog_posts" ? BlogPostRow :
+  TName extends "custom_pages" ? CustomPageView :
   UnknownRow;

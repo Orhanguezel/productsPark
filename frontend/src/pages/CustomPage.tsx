@@ -8,7 +8,7 @@ import Footer from "@/components/layout/Footer";
 interface PageData {
   title: string;
   content: string;
-  meta_description: string;
+  meta_description?: string | null; 
 }
 
 export default function CustomPage() {

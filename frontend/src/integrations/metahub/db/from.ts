@@ -6,7 +6,9 @@
 import { normalizeTableRows } from "./normalizeTables";
 import type { KnownTables, TableRow, UnknownRow } from "./types";
 export type { KnownTables, TableRow, UnknownRow } from "./types";
-export type { ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow, PopupRow, UserRoleRow, TopbarSettingRow } from "./types";
+export type { ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow, 
+  PopupRow, UserRoleRow, TopbarSettingRow, BlogPostRow, CouponRow, CartItemRow,
+  CustomPageView } from "./types";
 
 /** BASE URL'ler */
 const RAW_EDGE_URL =

@@ -52,6 +52,10 @@ import { uploader } from "./client/uploader/client";
 import { menu_items } from "./client/menu_items/client";
 import { popups } from "./client/popup/client";
 import { topbar_settings } from "./client/topbar_settings/client";
+import { footer_sections } from "./client/footerSections/client";
+import { custom_pages } from "./client/customPages/client";
+
+
 
 
 import { siteSettingsAdmin } from "./client/admin/siteSettings";
@@ -138,6 +142,8 @@ export const metahub = {
   popups,
   user_roles,
   topbar_settings,
+  footer_sections,
+  custom_pages,
 
 
 

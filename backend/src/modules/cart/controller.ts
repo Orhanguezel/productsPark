@@ -1,168 +1,182 @@
-import type { RouteHandler } from 'fastify';
-import { randomUUID } from 'crypto';
-import { db } from '@/db/client';
-import { and, eq } from 'drizzle-orm';
-import { cartItems, type CartItemRow, type CartItemInsert } from './schema';
-import { cartItemCreateSchema, cartItemUpdateSchema } from './validation';
+import type { RouteHandler } from "fastify";
+import { randomUUID } from "crypto";
+import { and, asc, desc, eq } from "drizzle-orm";
+import { db } from "@/db/client";
+import { cartItems } from "./schema";
+import { products } from "../products/schema";     // ✅
+import { categories } from "../categories/schema";
+import {
+  cartItemListQuerySchema,
+  cartItemCreateSchema,
+  cartItemUpdateSchema,
+  type CartItemListQuery,
+  type CartItemCreateInput,
+  type CartItemUpdateInput,
+} from "./validation";
 
-const now = () => new Date();
-
-function getAuthUserId(req: any): string {
-  const sub = req.user?.sub ?? req.user?.id ?? null;
-  if (!sub) throw new Error('unauthorized');
-  return String(sub);
+function toNum(x: unknown): number {
+  if (typeof x === "number") return Number.isFinite(x) ? x : 0;
+  const n = Number(x as unknown);
+  return Number.isFinite(n) ? n : 0;
+}
+function parseJson<T>(s?: string | null): T | null {
+  if (!s) return null;
+  try { return JSON.parse(s) as T; } catch { return null; }
+}
+function iso(d?: Date | string | null): string | undefined {
+  if (!d) return undefined;
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
 }
 
-/** GET /cart_items → kendi sepetin */
-export const listMyCart: RouteHandler = async (req, reply) => {
-  try {
-    const userId = getAuthUserId(req);
-    const rows = await db
-      .select()
-      .from(cartItems)
-      .where(eq(cartItems.user_id, userId));
-    return reply.send(rows);
-  } catch (e: any) {
-    if (e?.message === 'unauthorized') {
-      return reply.code(401).send({ error: { message: 'unauthorized' } });
-    }
-    req.log.error(e);
-    return reply.code(500).send({ error: { message: 'cart_list_failed' } });
-  }
+function mapRow(row: {
+  cart: typeof cartItems.$inferSelect;
+  prod: typeof products.$inferSelect | null;
+  cat: typeof categories.$inferSelect | null;
+}) {
+  const p = row.prod;
+  return {
+    id: row.cart.id,
+    user_id: row.cart.user_id,
+    product_id: row.cart.product_id,
+    quantity: toNum(row.cart.quantity),
+    options: parseJson<Record<string, unknown>>(row.cart.options),
+    created_at: iso(row.cart.created_at as unknown as string),
+    updated_at: iso(row.cart.updated_at as unknown as string),
+    products: p
+      ? {
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          price: toNum(p.price),
+          image_url: p.image_url ?? null,
+          delivery_type: p.delivery_type ?? null,
+          stock_quantity: p.stock_quantity == null ? null : toNum(p.stock_quantity),
+          custom_fields: parseJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields as any) ??
+            (Array.isArray(p.custom_fields) ? (p.custom_fields as unknown as ReadonlyArray<Record<string, unknown>>) : null),
+          quantity_options: parseJson<{ quantity: number; price: number }[]>(p.quantity_options as any) ?? null,
+          
+          api_provider_id: p.api_provider_id ?? null,
+          api_product_id: p.api_product_id ?? null,
+          api_quantity: p.api_quantity == null ? null : toNum(p.api_quantity),
+          category_id: p.category_id ?? null,
+          categories: row.cat ? { id: row.cat.id, name: row.cat.name } : null,
+        }
+      : null,
+  };
+}
+
+/** GET /cart_items */
+export const listCartItems: RouteHandler = async (req, reply) => {
+  const q = cartItemListQuerySchema.parse(req.query || {}) as CartItemListQuery;
+
+  let qb = db
+    .select({
+      cart: cartItems,
+      prod: products,
+      cat: categories,
+    })
+    .from(cartItems)
+    .leftJoin(products, eq(cartItems.product_id, products.id))
+    .leftJoin(categories, eq(products.category_id, categories.id))
+    .$dynamic();
+
+  const conditions: unknown[] = [];
+  if (q.user_id) conditions.push(eq(cartItems.user_id, q.user_id));
+  if (conditions.length === 1) qb = qb.where(conditions[0] as any);
+  else if (conditions.length > 1) qb = qb.where(and(...(conditions as any)));
+
+  qb = qb.orderBy(q.order === "asc" ? asc((cartItems as any)[q.sort]) : desc((cartItems as any)[q.sort]));
+
+  if (q.limit && q.limit > 0) qb = qb.limit(q.limit);
+  if (q.offset && q.offset >= 0) qb = qb.offset(q.offset);
+
+  const rows = await qb;
+  return reply.send(rows.map(mapRow));
 };
 
-/** POST /cart_items → ekle / merge (aynı product_id + options = tek satır) */
-export const addToCart: RouteHandler = async (req, reply) => {
+/** GET /cart_items/:id */
+export const getCartItemById: RouteHandler = async (req, reply) => {
+  const { id } = req.params as { id: string };
+
+  const rows = await db
+    .select({
+      cart: cartItems,
+      prod: products,
+      cat: categories,
+    })
+    .from(cartItems)
+    .leftJoin(products, eq(cartItems.product_id, products.id))
+    .leftJoin(categories, eq(products.category_id, categories.id))
+    .where(eq(cartItems.id, id))
+    .limit(1);
+
+  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+  return reply.send(mapRow(rows[0]!));
+};
+
+/** POST /cart_items */
+export const createCartItem: RouteHandler = async (req, reply) => {
   try {
-    const userId = getAuthUserId(req);
-    const input = cartItemCreateSchema.parse(req.body || {});
-    const id = input.id ?? randomUUID();
-
-    // Aynı ürün-id + aynı options varsa qty artır
-    const existing = await db
-      .select()
-      .from(cartItems)
-      .where(and(eq(cartItems.user_id, userId), eq(cartItems.product_id, input.product_id)));
-
-    const same = existing.find(
-      (r: CartItemRow) =>
-        JSON.stringify(r.options ?? null) === JSON.stringify(input.options ?? null),
-    );
-
-    if (same) {
-      await db
-        .update(cartItems)
-        .set({ quantity: Number(same.quantity) + Number(input.quantity ?? 1), updated_at: now() })
-        .where(eq(cartItems.id, same.id));
-
-      const [row] = await db.select().from(cartItems).where(eq(cartItems.id, same.id)).limit(1);
-      return reply.code(200).send(row);
-    }
-
-    const toInsert: CartItemInsert = {
-      id,
-      user_id: userId,
-      product_id: input.product_id,
-      quantity: input.quantity ?? 1,
-      options: input.options ?? null,
-      updated_at: now(),
-      created_at: undefined as any, // default CURRENT_TIMESTAMP (omit at runtime)
-    };
-    // Drizzle default'ı kullanmak için created_at'ı geçmeyebiliriz;
-    // fakat type açısından 'any' ile atıyoruz — runtime'da field gönderilmiyor.
-
+    const body = cartItemCreateSchema.parse(req.body || {}) as CartItemCreateInput;
+    const now = new Date();
     await db.insert(cartItems).values({
-      id: toInsert.id,
-      user_id: toInsert.user_id,
-      product_id: toInsert.product_id,
-      quantity: toInsert.quantity,
-      options: toInsert.options,
-      updated_at: toInsert.updated_at,
+      id: randomUUID(),
+      user_id: body.user_id,
+      product_id: body.product_id,
+      quantity: body.quantity,
+      options: body.options ? JSON.stringify(body.options) : null,
+      created_at: now,
+      updated_at: now,
     });
 
-    const [row] = await db.select().from(cartItems).where(eq(cartItems.id, id)).limit(1);
-    return reply.code(201).send(row);
-  } catch (e: any) {
-    if (e?.name === 'ZodError') {
-      return reply.code(400).send({ error: { message: 'validation_error', details: e.issues } });
-    }
-    if (e?.message === 'unauthorized') {
-      return reply.code(401).send({ error: { message: 'unauthorized' } });
-    }
-    req.log.error(e);
-    return reply.code(500).send({ error: { message: 'cart_add_failed' } });
-  }
-};
-
-/** PATCH /cart_items/:id → miktar/opsiyon güncelle */
-export const updateCartItem: RouteHandler = async (req, reply) => {
-  const { id } = req.params as { id: string };
-  try {
-    const userId = getAuthUserId(req);
-    const patch = cartItemUpdateSchema.parse(req.body || {});
-
-    // Yetki + varlık kontrolü
-    const [rowBefore] = await db
-      .select()
-      .from(cartItems)
-      .where(and(eq(cartItems.id, id), eq(cartItems.user_id, userId)))
-      .limit(1);
-    if (!rowBefore) return reply.code(404).send({ error: { message: 'not_found' } });
-
-    await db
-      .update(cartItems)
-      .set({ ...patch, updated_at: now() })
-      .where(eq(cartItems.id, id));
-
-    const [row] = await db.select().from(cartItems).where(eq(cartItems.id, id)).limit(1);
-    return reply.send(row);
-  } catch (e: any) {
-    if (e?.name === 'ZodError') {
-      return reply.code(400).send({ error: { message: 'validation_error', details: e.issues } });
-    }
-    if (e?.message === 'unauthorized') {
-      return reply.code(401).send({ error: { message: 'unauthorized' } });
-    }
-    req.log.error(e);
-    return reply.code(500).send({ error: { message: 'cart_update_failed' } });
-  }
-};
-
-/** DELETE /cart_items/:id → satırı sil */
-export const deleteCartItem: RouteHandler = async (req, reply) => {
-  const { id } = req.params as { id: string };
-  try {
-    const userId = getAuthUserId(req);
-    // yetki kontrolü için seç
     const [row] = await db
-      .select()
+      .select({ cart: cartItems, prod: products, cat: categories })
       .from(cartItems)
-      .where(and(eq(cartItems.id, id), eq(cartItems.user_id, userId)))
+      .leftJoin(products, eq(cartItems.product_id, products.id))
+      .leftJoin(categories, eq(products.category_id, categories.id))
+      .orderBy(desc(cartItems.created_at))
       .limit(1);
-    if (!row) return reply.code(404).send({ error: { message: 'not_found' } });
 
-    await db.delete(cartItems).where(eq(cartItems.id, id));
-    return reply.code(204).send();
-  } catch (e: any) {
-    if (e?.message === 'unauthorized') {
-      return reply.code(401).send({ error: { message: 'unauthorized' } });
-    }
+    return reply.code(201).send(mapRow(row));
+  } catch (e) {
     req.log.error(e);
-    return reply.code(500).send({ error: { message: 'cart_delete_failed' } });
+    return reply.code(400).send({ error: { message: "validation_error" } });
   }
 };
 
-/** DELETE /cart_items → tamamını temizle */
-export const clearMyCart: RouteHandler = async (req, reply) => {
+/** PATCH /cart_items/:id */
+export const updateCartItem: RouteHandler = async (req, reply) => {
   try {
-    const userId = getAuthUserId(req);
-    await db.delete(cartItems).where(eq(cartItems.user_id, userId));
-    return reply.code(204).send();
-  } catch (e: any) {
-    if (e?.message === 'unauthorized') {
-      return reply.code(401).send({ error: { message: 'unauthorized' } });
-    }
+    const { id } = req.params as { id: string };
+    const patch = cartItemUpdateSchema.parse(req.body || {}) as CartItemUpdateInput;
+    const now = new Date();
+
+    const set: Partial<typeof cartItems.$inferInsert> = { updated_at: now };
+    if (patch.quantity != null) set.quantity = patch.quantity;
+    if (patch.options !== undefined) set.options = patch.options ? JSON.stringify(patch.options) : null;
+
+    await db.update(cartItems).set(set).where(eq(cartItems.id, id));
+
+    const [row] = await db
+      .select({ cart: cartItems, prod: products, cat: categories })
+      .from(cartItems)
+      .leftJoin(products, eq(cartItems.product_id, products.id))
+      .leftJoin(categories, eq(products.category_id, categories.id))
+      .where(eq(cartItems.id, id))
+      .limit(1);
+
+    if (!row) return reply.code(404).send({ error: { message: "not_found" } });
+    return reply.send(mapRow(row));
+  } catch (e) {
     req.log.error(e);
-    return reply.code(500).send({ error: { message: 'cart_clear_failed' } });
+    return reply.code(400).send({ error: { message: "validation_error" } });
   }
+};
+
+/** DELETE /cart_items/:id */
+export const deleteCartItem: RouteHandler = async (_req, reply) => {
+  const { id } = _req.params as { id: string };
+  await db.delete(cartItems).where(eq(cartItems.id, id));
+  return reply.code(204).send();
 };

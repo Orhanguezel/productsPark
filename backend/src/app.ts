@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
+import authPlugin from "./plugins/authPlugin";
 
 import { env } from '@/core/env';
 import { registerErrorHandlers } from '@/core/error';
@@ -16,16 +17,17 @@ import { registerRpc } from '@/modules/rpc/router';
 import { registerProfiles } from '@/modules/profiles/router';
 import { registerCategories } from '@/modules/categories/router';
 import { registerProducts } from '@/modules/products/router';
-import { registerCart } from '@/modules/cart/router';
+import { registerCartItems } from "@/modules/cart/router";
+import { registerCoupons } from "@/modules/coupons/router";
 import { registerOrders } from '@/modules/orders/router';
-import { registerCoupons } from '@/modules/coupons/router';
-import { registerCustomPages } from '@/modules/custom-pages/router';
+import { registerCustomPages } from '@/modules/customPages/router';
 import { registerBlog } from '@/modules/blog/router';
 import { registerMenuItems } from '@/modules/menuItems/router';
 import { registerSiteSettings } from '@/modules/siteSettings/router';
 import { registerPopups } from '@/modules/popups/router';
 import { registerUserRoles } from "@/modules/userRoles/router";
 import { registerTopbar } from '@/modules/topbarSettings/router';
+import { registerFooterSections } from "@/modules/footerSections/router";
 
 export async function createApp() {
   // Dinamik import + gevşek tip: TS2349 kökten biter
@@ -67,12 +69,12 @@ export async function createApp() {
     cookie: { cookieName: 'access_token', signed: false },
   });
 
-  app.get('/health', async () => ({ ok: true }));
+  // ✅ AUTH PLUGIN BURADA (route’lardan önce)
+  await app.register(authPlugin);
 
-  await app.register(multipart, {
-    throwFileSizeLimit: true,
-    limits: { fileSize: 20 * 1024 * 1024 },
-  });
+  app.get('/health', async () => ({ ok: true }));
+  await app.register(multipart, { throwFileSizeLimit: true, limits: { fileSize: 20 * 1024 * 1024 } });
+
 
   // Modüller
   await registerAuth(app);
@@ -83,9 +85,8 @@ export async function createApp() {
   await registerProfiles(app);
   await registerCategories(app);
   await registerProducts(app);
-  await registerCart(app);
+  await registerCartItems(app);
   await registerOrders(app);
-  await registerCoupons(app);
   await registerCustomPages(app);
   await registerBlog(app);
   await registerMenuItems(app);
@@ -93,6 +94,8 @@ export async function createApp() {
   await registerPopups(app);
   await registerUserRoles(app);
   await registerTopbar(app);
+  await registerCoupons(app);
+  await registerFooterSections(app);
 
   registerErrorHandlers(app);
   return app;
