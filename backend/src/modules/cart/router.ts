@@ -1,17 +1,20 @@
-import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '@/common/middleware/auth';
+import type { FastifyInstance } from "fastify";
 import {
-  listMyCart,
-  addToCart,
+  listCartItems,
+  getCartItemById,
+  createCartItem,
   updateCartItem,
   deleteCartItem,
-  clearMyCart,
-} from './controller';
+} from "./controller";
+// auth gerekiyorsa ekleyin:
+// import { requireAuth } from "@/common/middleware/auth";
 
-export async function registerCart(app: FastifyInstance) {
-  app.get('/cart_items', { preHandler: [requireAuth] }, listMyCart);
-  app.post('/cart_items', { preHandler: [requireAuth] }, addToCart);
-  app.patch('/cart_items/:id', { preHandler: [requireAuth] }, updateCartItem);
-  app.delete('/cart_items/:id', { preHandler: [requireAuth] }, deleteCartItem);
-  app.delete('/cart_items', { preHandler: [requireAuth] }, clearMyCart);
+export async function registerCartItems(app: FastifyInstance) {
+  app.get("/cart_items", listCartItems);
+  app.get("/cart_items/:id", getCartItemById);
+
+  // public mi, auth mu? İhtiyacınıza göre açın:
+  app.post("/cart_items", /* { preHandler: [requireAuth] }, */ createCartItem);
+  app.patch("/cart_items/:id", /* { preHandler: [requireAuth] }, */ updateCartItem);
+  app.delete("/cart_items/:id", /* { preHandler: [requireAuth] }, */ deleteCartItem);
 }

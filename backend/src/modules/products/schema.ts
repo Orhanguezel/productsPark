@@ -1,18 +1,11 @@
+// src/modules/products/schema.ts
 import {
   mysqlTable, char, varchar, text, int, tinyint, decimal, datetime, json,
   index, uniqueIndex, foreignKey,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
-export const categories = mysqlTable(
-  'categories',
-  {
-    id: char('id', { length: 36 }).primaryKey().notNull(),
-    name: varchar('name', { length: 255 }).notNull(),
-    slug: varchar('slug', { length: 255 }).notNull(),
-  },
-  (t) => [ uniqueIndex('categories_slug_uq').on(t.slug) ]
-);
+import { categories } from "../categories/schema";
 
 export const products = mysqlTable(
   'products',
@@ -122,4 +115,6 @@ export const productStock = mysqlTable('product_stock', {
 
 
 export { productOptions } from '../productOptions/schema';
+export type Product = typeof products.$inferSelect;
+export type NewProduct = typeof products.$inferInsert;
 

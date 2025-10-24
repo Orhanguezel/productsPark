@@ -1,21 +1,53 @@
-import { mysqlTable, char, int, json, datetime } from 'drizzle-orm/mysql-core';
-import { sql } from 'drizzle-orm';
+// src/modules/cart/schema.ts
+import { mysqlTable, char, int, text, datetime, index, foreignKey } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
+import { products } from "../products/schema";     // ✅ tek kaynak
+import { users } from "../auth/schema";            // ✅ tek kaynak
+// Eğer join'lerde lazım olacaksa:
+// import { categories } from "../categories/schema"; // (sadece kullanacağın dosyalarda import et)
 
-export const cartItems = mysqlTable('cart_items', {
-  id: char('id', { length: 36 }).primaryKey().notNull(),
-  user_id: char('user_id', { length: 36 }).notNull(),
-  product_id: char('product_id', { length: 36 }).notNull(),
-  quantity: int('quantity').notNull().default(1),
+/** CART ITEMS */
+export const cartItems = mysqlTable(
+  "cart_items",
+  {
+    id: char("id", { length: 36 }).primaryKey().notNull(),
+    user_id: char("user_id", { length: 36 }).notNull(),
+    product_id: char("product_id", { length: 36 }).notNull(),
+    quantity: int("quantity").notNull().default(1),
+    // DB'de LONGTEXT + JSON_VALID CHECK; burada text olarak tutuyoruz.
+    options: text("options"),
+    created_at: datetime("created_at", { fsp: 3 })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`),
+    updated_at: datetime("updated_at", { fsp: 3 })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdateFn(() => new Date()),
+  },
+  (t) => [
+    index("cart_items_user_idx").on(t.user_id),
+    index("cart_items_product_idx").on(t.product_id),
 
-  // dump: LONGTEXT + CHECK JSON_VALID(`options`) — app tarafında JSON
-  options: json('options'),
+    // FK: product_id → products.id
+    foreignKey({
+      columns: [t.product_id],
+      foreignColumns: [products.id],
+      name: "fk_cart_items_product_id_products_id",
+    })
+      .onDelete("cascade")
+      .onUpdate("cascade"),
 
-  created_at: datetime('created_at', { fsp: 0 })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  // NOT NULL & default yok → controller set edecek
-  updated_at: datetime('updated_at', { fsp: 0 }).notNull(),
-});
+    // FK: user_id → users.id
+    foreignKey({
+      columns: [t.user_id],
+      foreignColumns: [users.id],
+      name: "fk_cart_items_user_id_users_id",
+    })
+      .onDelete("cascade")
+      .onUpdate("cascade"),
+  ],
+);
 
-export type CartItemRow = typeof cartItems.$inferSelect;
-export type CartItemInsert = typeof cartItems.$inferInsert;
+// Tipler
+export type CartItem = typeof cartItems.$inferSelect;
+export type NewCartItem = typeof cartItems.$inferInsert;
