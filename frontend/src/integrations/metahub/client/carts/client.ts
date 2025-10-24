@@ -1,5 +1,3 @@
-
-
 // =============================================================
 // FILE: src/integrations/metahub/client/carts/client.ts
 // =============================================================
@@ -12,7 +10,8 @@ export type { CartItem };
 export const carts = {
   async list(params?: Parameters<typeof cartItemsApi.endpoints.listCartItems.initiate>[0]) {
     try {
-      const data = await store2.dispatch(cartItemsApi.endpoints.listCartItems.initiate(params ?? {})).unwrap();
+      const p = params ?? {};
+      const data = await store2.dispatch(cartItemsApi.endpoints.listCartItems.initiate(p)).unwrap();
       return { data: data as CartItem[], error: null as null };
     } catch (e) {
       const { message } = normalizeError2(e);

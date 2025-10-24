@@ -4,7 +4,8 @@ import '@fastify/jwt';
 
 import { randomUUID, createHash } from 'crypto';
 import { db } from '@/db/client';
-import { users, user_roles, refresh_tokens } from './schema';
+import { users, refresh_tokens } from './schema';
+import { userRoles } from '@/modules/userRoles/schema';
 import { desc, eq } from 'drizzle-orm';
 import { hash as argonHash, verify as argonVerify } from 'argon2';
 import bcrypt from 'bcryptjs';
@@ -154,10 +155,10 @@ async function verifyPasswordSmart(storedHash: string, plain: string): Promise<b
 
 async function getUserRole(userId: string): Promise<Role> {
   const rows = await db
-    .select({ role: user_roles.role })
-    .from(user_roles)
-    .where(eq(user_roles.user_id, userId))
-    .orderBy(desc(user_roles.created_at))
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(eq(userRoles.user_id, userId))
+    .orderBy(desc(userRoles.created_at))
     .limit(1);
   return (rows[0]?.role ?? 'user') as Role;
 }
@@ -236,7 +237,7 @@ export function makeAuthController(app: FastifyInstance) {
         email_verified: 0,
       });
 
-      await db.insert(user_roles).values({
+      await db.insert(userRoles).values({
         id: randomUUID(),
         user_id: id,
         role: 'user',
@@ -381,7 +382,7 @@ export function makeAuthController(app: FastifyInstance) {
           is_active: 1,
         });
 
-        await db.insert(user_roles).values({
+        await db.insert(userRoles).values({
           id: randomUUID(),
           user_id: id,
           role: 'user',
@@ -537,7 +538,7 @@ export function makeAuthController(app: FastifyInstance) {
           is_active: 1,
         });
 
-        await db.insert(user_roles).values({
+        await db.insert(userRoles).values({
           id: randomUUID(),
           user_id: id,
           role: 'user',

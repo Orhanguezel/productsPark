@@ -1,6 +1,3 @@
-
-
-
 // =============================================================
 // FILE: src/integrations/metahub/client/blog/client.ts
 // =============================================================
@@ -13,7 +10,9 @@ export type { BlogPost };
 export const blog = {
   async list(params?: Parameters<typeof blogPostsApi.endpoints.listBlogPosts.initiate>[0]) {
     try {
-      const data = await store4.dispatch(blogPostsApi.endpoints.listBlogPosts.initiate(params ?? {})).unwrap();
+      const data = await store4.dispatch(
+        blogPostsApi.endpoints.listBlogPosts.initiate(params ?? {})
+      ).unwrap();
       return { data: data as BlogPost[], error: null as null };
     } catch (e) {
       const { message } = normalizeError4(e);
@@ -23,8 +22,10 @@ export const blog = {
 
   async getBySlug(slug: string) {
     try {
-      const data = await store4.dispatch(blogPostsApi.endpoints.getBlogPostBySlug.initiate(slug)).unwrap();
-      return { data: data as BlogPost, error: null as null };
+      const data = await store4.dispatch(
+        blogPostsApi.endpoints.getBlogPostBySlug.initiate(slug)
+      ).unwrap();
+      return { data: data as BlogPost | null, error: null as null };
     } catch (e) {
       const { message } = normalizeError4(e);
       return { data: null as BlogPost | null, error: { message } };
@@ -33,7 +34,9 @@ export const blog = {
 
   async getById(id: string) {
     try {
-      const data = await store4.dispatch(blogPostsApi.endpoints.getBlogPostById.initiate(id)).unwrap();
+      const data = await store4.dispatch(
+        blogPostsApi.endpoints.getBlogPostById.initiate(id)
+      ).unwrap();
       return { data: data as BlogPost, error: null as null };
     } catch (e) {
       const { message } = normalizeError4(e);
