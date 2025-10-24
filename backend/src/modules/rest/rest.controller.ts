@@ -28,7 +28,6 @@ import { popups } from '@/modules/popups/schema';
 import { topbarSettings } from '@/modules/topbarSettings/schema';
 import { userRoles } from '@/modules/userRoles/schema';
 import { fakeOrderNotifications } from '@/modules/fakeOrderNotifications/schema';
-import { walletDepositRequests } from '@/modules/wallet/depositRequests.schema';
 
 /** Public tipler (router’da da kullanacağız) */
 export type RestParams = { table: string };
@@ -53,7 +52,6 @@ const TABLES: Record<string, any> = {
   topbar_settings: topbarSettings,
   user_roles: userRoles,
   fake_order_notifications: fakeOrderNotifications,
-  wallet_deposit_requests: walletDepositRequests,
 };
 
 function getColumn(table: any, key: string) {

@@ -59,7 +59,7 @@ interface Ticket {
   message: string;
   status: string;
   priority: string;
-  category: string | null;
+  category?: string | null;
   created_at: string;
   updated_at: string;
 }

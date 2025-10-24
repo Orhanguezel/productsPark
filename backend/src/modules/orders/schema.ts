@@ -1,12 +1,5 @@
 import {
-  mysqlTable,
-  char,
-  varchar,
-  mysqlEnum,
-  decimal,
-  int,
-  text,
-  datetime,
+  mysqlTable, char, varchar, mysqlEnum, decimal, int, text, datetime,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
@@ -15,43 +8,19 @@ import { relations } from 'drizzle-orm';
 export const orders = mysqlTable('orders', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   order_number: varchar('order_number', { length: 50 }).notNull(),
-
   user_id: char('user_id', { length: 36 }).notNull(),
 
-  status: mysqlEnum('status', [
-    'pending',
-    'processing',
-    'completed',
-    'cancelled',
-    'refunded',
-  ])
-    .notNull()
-    .default('pending'),
+  status: mysqlEnum('status', ['pending', 'processing', 'completed', 'cancelled', 'refunded'])
+    .notNull().default('pending'),
 
-  payment_method: mysqlEnum('payment_method', [
-    'credit_card',
-    'bank_transfer',
-    'wallet',
-    'paytr',
-    'shopier',
-  ]).notNull(),
+  payment_method: mysqlEnum('payment_method', ['credit_card', 'bank_transfer', 'wallet', 'paytr', 'shopier'])
+    .notNull(),
 
-  payment_status: varchar('payment_status', { length: 50 })
-    .notNull()
-    .default('pending'),
+  payment_status: varchar('payment_status', { length: 50 }).notNull().default('pending'),
 
   subtotal: decimal('subtotal', { precision: 10, scale: 2 }).notNull(),
-
-  // toplam indirim (kupon + diğer kampanya vb. hepsi)
-  discount: decimal('discount', { precision: 10, scale: 2 })
-    .notNull()
-    .default('0.00'),
-
-  // sadece kupondan gelen indirim (raporlama için)
-  coupon_discount: decimal('coupon_discount', { precision: 10, scale: 2 })
-    .notNull()
-    .default('0.00'),
-
+  discount: decimal('discount', { precision: 10, scale: 2 }).notNull().default('0.00'),
+  coupon_discount: decimal('coupon_discount', { precision: 10, scale: 2 }).notNull().default('0.00'),
   total: decimal('total', { precision: 10, scale: 2 }).notNull(),
 
   coupon_code: varchar('coupon_code', { length: 50 }),
@@ -61,10 +30,9 @@ export const orders = mysqlTable('orders', {
   payment_provider: varchar('payment_provider', { length: 50 }),
   payment_id: varchar('payment_id', { length: 255 }),
 
-  created_at: datetime('created_at', { fsp: 0 })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  updated_at: datetime('updated_at', { fsp: 0 }).notNull(),
+  created_at: datetime('created_at', { fsp: 0 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  // <<< ek: otomatik güncelle
+  updated_at: datetime('updated_at', { fsp: 0 }).notNull().$onUpdateFn(() => new Date()),
 });
 
 // -------------------- ORDER ITEMS --------------------
@@ -78,28 +46,20 @@ export const order_items = mysqlTable('order_items', {
   price: decimal('price', { precision: 10, scale: 2 }).notNull(),
   total: decimal('total', { precision: 10, scale: 2 }).notNull(),
 
-  // LONGTEXT + JSON_VALID (controller tarafında JSON.stringify ile string saklıyoruz)
-  // length parametresi bazı sürümlerde yok → sade text kullan.
+  // LONGTEXT + JSON_VALID → text içinde stringify
   options: text('options').$type<any | null>(),
 
-  delivery_status: mysqlEnum('delivery_status', [
-    'pending',
-    'processing',
-    'delivered',
-    'failed',
-  ])
-    .notNull()
-    .default('pending'),
+  delivery_status: mysqlEnum('delivery_status', ['pending', 'processing', 'delivered', 'failed'])
+    .notNull().default('pending'),
 
   activation_code: varchar('activation_code', { length: 255 }),
   stock_code: varchar('stock_code', { length: 255 }),
   api_order_id: varchar('api_order_id', { length: 255 }),
   delivered_at: datetime('delivered_at', { fsp: 0 }),
 
-  created_at: datetime('created_at', { fsp: 0 })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  updated_at: datetime('updated_at', { fsp: 0 }).notNull(),
+  created_at: datetime('created_at', { fsp: 0 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  // <<< ek: otomatik güncelle
+  updated_at: datetime('updated_at', { fsp: 0 }).notNull().$onUpdateFn(() => new Date()),
 });
 
 // -------------------- RELATIONS --------------------
