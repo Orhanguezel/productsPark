@@ -1,9 +1,10 @@
+// src/modules/cart/controller.ts
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { cartItems } from "./schema";
-import { products } from "../products/schema";     // ✅
+import { cartItems, type CartItemInsert } from "./schema";
+import { products } from "../products/schema";
 import { categories } from "../categories/schema";
 import {
   cartItemListQuerySchema,
@@ -40,7 +41,8 @@ function mapRow(row: {
     user_id: row.cart.user_id,
     product_id: row.cart.product_id,
     quantity: toNum(row.cart.quantity),
-    options: parseJson<Record<string, unknown>>(row.cart.options),
+    // FE'nin beklediği isim:
+    selected_options: parseJson<Record<string, unknown>>(row.cart.options),
     created_at: iso(row.cart.created_at as unknown as string),
     updated_at: iso(row.cart.updated_at as unknown as string),
     products: p
@@ -52,10 +54,10 @@ function mapRow(row: {
           image_url: p.image_url ?? null,
           delivery_type: p.delivery_type ?? null,
           stock_quantity: p.stock_quantity == null ? null : toNum(p.stock_quantity),
-          custom_fields: parseJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields as any) ??
-            (Array.isArray(p.custom_fields) ? (p.custom_fields as unknown as ReadonlyArray<Record<string, unknown>>) : null),
+          custom_fields: parseJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields as any)
+            ?? (Array.isArray(p.custom_fields) ? (p.custom_fields as any) : null),
           quantity_options: parseJson<{ quantity: number; price: number }[]>(p.quantity_options as any) ?? null,
-          
+
           api_provider_id: p.api_provider_id ?? null,
           api_product_id: p.api_product_id ?? null,
           api_quantity: p.api_quantity == null ? null : toNum(p.api_quantity),
@@ -87,7 +89,6 @@ export const listCartItems: RouteHandler = async (req, reply) => {
   else if (conditions.length > 1) qb = qb.where(and(...(conditions as any)));
 
   qb = qb.orderBy(q.order === "asc" ? asc((cartItems as any)[q.sort]) : desc((cartItems as any)[q.sort]));
-
   if (q.limit && q.limit > 0) qb = qb.limit(q.limit);
   if (q.offset && q.offset >= 0) qb = qb.offset(q.offset);
 
@@ -100,11 +101,7 @@ export const getCartItemById: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
 
   const rows = await db
-    .select({
-      cart: cartItems,
-      prod: products,
-      cat: categories,
-    })
+    .select({ cart: cartItems, prod: products, cat: categories })
     .from(cartItems)
     .leftJoin(products, eq(cartItems.product_id, products.id))
     .leftJoin(categories, eq(products.category_id, categories.id))
@@ -119,16 +116,24 @@ export const getCartItemById: RouteHandler = async (req, reply) => {
 export const createCartItem: RouteHandler = async (req, reply) => {
   try {
     const body = cartItemCreateSchema.parse(req.body || {}) as CartItemCreateInput;
+
     const now = new Date();
-    await db.insert(cartItems).values({
+    const toInsert: CartItemInsert = {
       id: randomUUID(),
       user_id: body.user_id,
       product_id: body.product_id,
       quantity: body.quantity,
-      options: body.options ? JSON.stringify(body.options) : null,
+      // DB: options (string), API: selected_options
+      options: body.selected_options
+        ? JSON.stringify(body.selected_options)
+        : body.options
+        ? JSON.stringify(body.options)
+        : null,
       created_at: now,
       updated_at: now,
-    });
+    };
+
+    await db.insert(cartItems).values(toInsert);
 
     const [row] = await db
       .select({ cart: cartItems, prod: products, cat: categories })
@@ -140,7 +145,7 @@ export const createCartItem: RouteHandler = async (req, reply) => {
 
     return reply.code(201).send(mapRow(row));
   } catch (e) {
-    req.log.error(e);
+    (req as any).log?.error?.(e);
     return reply.code(400).send({ error: { message: "validation_error" } });
   }
 };
@@ -152,9 +157,15 @@ export const updateCartItem: RouteHandler = async (req, reply) => {
     const patch = cartItemUpdateSchema.parse(req.body || {}) as CartItemUpdateInput;
     const now = new Date();
 
-    const set: Partial<typeof cartItems.$inferInsert> = { updated_at: now };
+    const set: Partial<CartItemInsert> = { updated_at: now };
     if (patch.quantity != null) set.quantity = patch.quantity;
-    if (patch.options !== undefined) set.options = patch.options ? JSON.stringify(patch.options) : null;
+
+    // Hem selected_options hem options kabul edilir, DB'de options'a yazılır
+    if (patch.selected_options !== undefined) {
+      set.options = patch.selected_options ? JSON.stringify(patch.selected_options) : null;
+    } else if (patch.options !== undefined) {
+      set.options = patch.options ? JSON.stringify(patch.options) : null;
+    }
 
     await db.update(cartItems).set(set).where(eq(cartItems.id, id));
 
@@ -169,7 +180,7 @@ export const updateCartItem: RouteHandler = async (req, reply) => {
     if (!row) return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(mapRow(row));
   } catch (e) {
-    req.log.error(e);
+    (req as any).log?.error?.(e);
     return reply.code(400).send({ error: { message: "validation_error" } });
   }
 };

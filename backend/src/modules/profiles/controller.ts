@@ -1,4 +1,3 @@
-// src/modules/profiles/controller.ts
 import type { RouteHandler, FastifyRequest } from 'fastify';
 import '@fastify/jwt';
 import { db } from '@/db/client';
@@ -7,7 +6,6 @@ import { profiles, type ProfileRow, type ProfileInsert } from '@/modules/profile
 import { profileUpsertSchema, type ProfileUpsertInput } from '@/modules/profiles/validation';
 import { ZodError } from 'zod';
 
-// Router Body tipi
 export type ProfileUpsertRequest = { profile: ProfileUpsertInput };
 
 type JwtUser = { sub?: unknown };
@@ -21,14 +19,13 @@ function getUserId(req: FastifyRequest): string {
   return subVal; // UUID
 }
 
-/** GET /profiles/me */
+/** GET /profiles/v1/me */
 export const getMyProfile: RouteHandler = async (req, reply) => {
   try {
     const userId = getUserId(req);
     const rows = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
     const row: ProfileRow | undefined = rows[0];
-    if (!row) return reply.send(null);
-    return reply.send(row); // snake_case aynen dönüyoruz
+    return reply.send(row ?? null);
   } catch (e: unknown) {
     req.log.error(e);
     if (e instanceof Error && e.message === 'unauthorized') {
@@ -38,13 +35,12 @@ export const getMyProfile: RouteHandler = async (req, reply) => {
   }
 };
 
-/** PUT /profiles/me (upsert) */
+/** PUT /profiles/v1/me (upsert) */
 export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = async (req, reply) => {
   try {
     const userId = getUserId(req);
     const input = profileUpsertSchema.parse(req.body?.profile ?? {});
 
-    // Drizzle insert/update tiplerine uygun set objesi (updated_at'ı ayrı set edeceğiz)
     const set: Partial<ProfileInsert> = {
       ...(input.full_name !== undefined ? { full_name: input.full_name } : {}),
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
@@ -54,6 +50,7 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
       ...(input.city !== undefined ? { city: input.city } : {}),
       ...(input.country !== undefined ? { country: input.country } : {}),
       ...(input.postal_code !== undefined ? { postal_code: input.postal_code } : {}),
+      // wallet_balance burada bilinçli olarak güncellenmiyor
     };
 
     const existing = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
@@ -61,13 +58,13 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
     if (existing.length > 0) {
       await db
         .update(profiles)
-        .set({ ...set, updated_at: new Date() }) // ✅ Date veriyoruz
+        .set({ ...set, updated_at: new Date() })
         .where(eq(profiles.id, userId));
     } else {
       const insertValues: ProfileInsert = {
         id: userId,
         ...set,
-        // created_at & updated_at şema default + $onUpdateFn ile yönetiliyor
+        // wallet_balance DB default ile 0.00 kalır
       };
       await db.insert(profiles).values(insertValues);
     }

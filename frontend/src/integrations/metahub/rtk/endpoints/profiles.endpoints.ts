@@ -1,6 +1,5 @@
 import { baseApi } from "../baseApi";
 
-/** DB’den gelen JSON’da tarih alanlarını string kabul ediyoruz */
 export type Profile = {
   id: string;
   full_name: string | null;
@@ -11,8 +10,9 @@ export type Profile = {
   city: string | null;
   country: string | null;
   postal_code: string | null;
-  created_at: string; // ISO
-  updated_at: string; // ISO
+  wallet_balance: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ProfileUpsertInput = Partial<Pick<
@@ -47,28 +47,10 @@ export const profilesApi = baseApi.injectEndpoints({
       invalidatesTags: ["Profile"],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {
   useGetMyProfileQuery,
   useUpsertMyProfileMutation,
 } = profilesApi;
-
-
-
-
-/*
-
-FE
-import { useStatusQuery } from "@/integrations/metahub/rtk";
-
-const { data: st } = useStatusQuery();
-const isAdmin = !!st?.authenticated && st.is_admin;
-
-const { data: myProfile } = useGetMyProfileQuery();
-const [upsertMyProfile] = useUpsertMyProfileMutation();
-
-await upsertMyProfile({ profile: { full_name: "Yeni Ad", city: "İzmir" } });
-
-
-*/

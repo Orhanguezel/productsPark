@@ -4,14 +4,15 @@ import {
   varchar,
   text,
   datetime,
+  decimal,           // ✅ eklendi
   foreignKey,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
-import { users } from '@/modules/auth/schema'; // FK için
+import { users } from '@/modules/auth/schema';
 
 /**
  * profiles.id = users.id (UUID)
- * Adres alanları isteğe bağlı (NOT NULL yok)
+ * Adres alanları opsiyonel; wallet_balance zorunlu (default 0.00)
  */
 export const profiles = mysqlTable(
   'profiles',
@@ -26,11 +27,16 @@ export const profiles = mysqlTable(
     country: varchar('country', { length: 128 }),
     postal_code: varchar('postal_code', { length: 32 }),
 
+    // ✅ cüzdan bakiyesi — DB ile eşleşsin
+    wallet_balance: decimal('wallet_balance', { precision: 10, scale: 2 })
+      .notNull()
+      .default('0.00')
+      .$type<number>(),        // TS seviyesinde number (driver string döndürse de tip güvenliği)
+
     created_at: datetime('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
 
-    // Drizzle'da .onUpdateNow yok → $onUpdateFn kullan
     updated_at: datetime('updated_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`)
@@ -41,7 +47,9 @@ export const profiles = mysqlTable(
       columns: [t.id],
       foreignColumns: [users.id],
       name: 'fk_profiles_id_users_id',
-    }).onDelete('cascade').onUpdate('cascade'),
+    })
+      .onDelete('cascade')
+      .onUpdate('cascade'),
   ],
 );
 

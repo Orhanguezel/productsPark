@@ -6,9 +6,12 @@
 import { normalizeTableRows } from "./normalizeTables";
 import type { KnownTables, TableRow, UnknownRow } from "./types";
 export type { KnownTables, TableRow, UnknownRow } from "./types";
-export type { ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow, 
+export type {
+  ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow,
   PopupRow, UserRoleRow, TopbarSettingRow, BlogPostRow, CouponRow, CartItemRow,
-  CustomPageView } from "./types";
+  CustomPageView, SupportTicketView, TicketReplyView,ProfileRow,WalletTransactionRow,WalletDepositRequestRow,
+  OrderRow, OrderItemRow
+} from "./types";
 
 /** BASE URL'ler */
 const RAW_EDGE_URL =
@@ -56,7 +59,7 @@ const TABLES: Record<KnownTables, TableCfg> = {
   product_reviews: { path: "/product_reviews", base: "edge" },
   product_faqs: { path: "/product_faqs", base: "edge" },
   profiles: { path: "/profiles", base: "edge" },
-  wallet_transactions: { path: "/wallet_transactions", base: "edge" },
+  wallet_deposit_requests: { path: "/wallet_deposit_requests", base: "app" },
   payment_requests: { path: "/payment_requests", base: "edge" },
   product_variants: { path: "/product_variants", base: "edge" },
   product_options: { path: "/product_options", base: "edge" },
@@ -78,6 +81,8 @@ const TABLES: Record<KnownTables, TableCfg> = {
   audit_events: { path: "/audit_events", base: "app" },
   telemetry_events: { path: "/telemetry/events", base: "app" },
   user_roles: { path: "/user_roles", base: "app" },
+  support_tickets: { path: "/support_tickets", base: "app" },
+  ticket_replies: { path: "/ticket_replies", base: "app" },
 };
 
 function joinUrl(base: string, path: string): string {
@@ -127,17 +132,25 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
   private _op: Op = "select";
   private _insertPayload?: UnknownRow | UnknownRow[];
   private _updatePayload?: Partial<UnknownRow>;
+  private _preferReturn?: "representation" | "minimal"; // ← yeni
 
   constructor(table: string) {
     this.table = table;
   }
 
-  // "a, b ,c" -> "a,b,c"
-  select(cols: string, opts?: SelectOpts) {
-    this._select = cols.split(",").map(s => s.trim()).filter(Boolean).join(",");
+  // OVERLOADS: argümansız veya string ile
+  select(): this;
+  select(cols: string, opts?: SelectOpts): this;
+  select(cols?: string, opts?: SelectOpts): this {
+    const given = (typeof cols === "string" ? cols : "").trim();
+    this._select = given.length > 0 ? given.split(",").map(s => s.trim()).filter(Boolean).join(",") : "*";
     if (opts) this._selectOpts = opts;
+
+    // insert/update sonrası .select() çağrılırsa oluşturulan kaydı istemek için
+    this._preferReturn = "representation";
     return this;
   }
+
   eq(col: string, val: unknown) { this._filters.push({ type: "eq", col, val }); return this; }
   neq(col: string, val: unknown) { this._filters.push({ type: "neq", col, val }); return this; }
   in(col: string, val: unknown[]) { this._filters.push({ type: "in", col, val }); return this; }
@@ -183,7 +196,6 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
 
       // SELECT
       if (this._op === "select") {
-        // app tablolarda alternatif olarak edge'i de dene; edge tablolarda primary zaten edge
         const altBase = cfg.base === "app" ? EDGE_URL : (APP_URL || EDGE_URL);
         const bases = [primaryBase, altBase].filter(Boolean).filter((b, i, a) => a.indexOf(b) === i);
 
@@ -194,13 +206,11 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
           const url = `${joinUrl(base, cfg.path)}?${toQS(params)}`;
           const res = await fetch(url, { credentials: "include" });
 
-          // 404 → endpoint yok/opsiyonel: varsa diğer base'i dene; yoksa boş başarı dön.
           if (res.status === 404) {
             if (i < bases.length - 1) continue;
             return { data: [] as unknown as TRow[], error: null, count: 0 };
           }
 
-          // Diğer hatalar → bir sonraki base'i dene; yoksa hata döndür
           if (!res.ok) {
             lastErr = { message: `request_failed_${res.status}`, status: res.status };
             if (i < bases.length - 1) continue;
@@ -208,14 +218,20 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
           }
 
           const count = this._selectOpts.head ? readCountFromHeaders(res) : undefined;
-          const json: unknown = await res.json();
+
+          let json: unknown = null;
+          try {
+            json = await res.json();
+          } catch {
+            json = null;
+          }
+
           const rowsUnknown: unknown =
             Array.isArray(json) ? json :
             json && typeof json === "object" ? (json as { data?: unknown }).data : null;
 
           let data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
 
-          // 🔹 Tabloya özel normalizasyonlar (site_settings, products, vb.)
           if (data) {
             data = normalizeTableRows(cfg.path, data as unknown as UnknownRow[]) as unknown as TRow[];
           }
@@ -223,41 +239,57 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
           return { data, error: null, count };
         }
 
-        // Teorik olarak buraya düşmez
         return { data: null, error: lastErr ?? { message: "request_failed" } };
       }
 
-      // INSERT
+      // Ortak URL
       const url = `${joinUrl(primaryBase, cfg.path)}?${toQS(params)}`;
+
+      // INSERT
       if (this._op === "insert") {
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (this._preferReturn) headers["Prefer"] = `return=${this._preferReturn}`;
+
         const res = await fetch(url, {
           method: "POST",
           credentials: "include",
-          headers: { "content-type": "application/json" },
+          headers,
           body: JSON.stringify(this._insertPayload ?? {}),
         });
         if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
-        const json: unknown = await res.json();
+
+        // 204 veya boş gövde güvenli parse
+        let json: unknown = null;
+        try { json = await res.json(); } catch { json = null; }
+
         const rowsUnknown: unknown =
           Array.isArray(json) ? json :
           json && typeof json === "object" ? (json as { data?: unknown }).data : null;
+
         const data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
         return { data, error: null };
       }
 
       // UPDATE
       if (this._op === "update") {
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (this._preferReturn) headers["Prefer"] = `return=${this._preferReturn}`;
+
         const res = await fetch(url, {
           method: "PATCH",
           credentials: "include",
-          headers: { "content-type": "application/json" },
+          headers,
           body: JSON.stringify(this._updatePayload ?? {}),
         });
         if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
-        const json: unknown = await res.json();
+
+        let json: unknown = null;
+        try { json = await res.json(); } catch { json = null; }
+
         const rowsUnknown: unknown =
           Array.isArray(json) ? json :
           json && typeof json === "object" ? (json as { data?: unknown }).data : null;
+
         const data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
         return { data, error: null };
       }
@@ -281,14 +313,14 @@ export type FromPromise<TRow extends UnknownRow = UnknownRow> =
   PromiseLike<FetchResult<TRow[]>> & QB<TRow>;
 
 /** OVERLOADS — spesifik overload ÖNCE, genel overload SONRA */
-export function from<TName extends keyof typeof TABLES>(table: TName): FromPromise<TableRow<TName>>;
+export function from<TName extends keyof typeof TABLES>(
+  table: TName
+): FromPromise<TableRow<TName> & UnknownRow>;
 export function from<TRow extends UnknownRow = UnknownRow>(table: string): FromPromise<TRow>;
 export function from(table: string): FromPromise<UnknownRow> {
   return new QB<UnknownRow>(table) as unknown as FromPromise<UnknownRow>;
 }
 // overload’lı tip tanımı (export’la)
 export type FromFn =
-  (<TName extends keyof typeof TABLES>(table: TName) => FromPromise<TableRow<TName>>) &
+  (<TName extends keyof typeof TABLES>(table: TName) => FromPromise<TableRow<TName> & UnknownRow>) &
   (<TRow extends UnknownRow = UnknownRow>(table: string) => FromPromise<TRow>);
-
-

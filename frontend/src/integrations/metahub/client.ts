@@ -14,7 +14,6 @@ import { orders } from "./client/orders/client";
 import { carts } from "./client/carts/client";
 import { coupons } from "./client/coupons/client";
 import { blog } from "./client/blog/client";
-import { support } from "./client/support/client";
 
 import { navigation } from "./client/navigation/client";
 import { catalogExtras } from "./client/catalog-extras/client";
@@ -54,6 +53,8 @@ import { popups } from "./client/popup/client";
 import { topbar_settings } from "./client/topbar_settings/client";
 import { footer_sections } from "./client/footerSections/client";
 import { custom_pages } from "./client/customPages/client";
+import { support_tickets } from "./client/support/client";
+import { profilesClient } from "./client/profiles/client";
 
 
 
@@ -107,7 +108,6 @@ export const metahub = {
   carts,
   coupons,
   blog,
-  support,
   navigation,
   catalogExtras,
   walletsPayments,
@@ -144,6 +144,8 @@ export const metahub = {
   topbar_settings,
   footer_sections,
   custom_pages,
+  support_tickets,
+  profiles: profilesClient,
 
 
 
