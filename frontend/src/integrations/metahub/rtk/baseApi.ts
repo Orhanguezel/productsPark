@@ -110,6 +110,10 @@ export const baseApi = createApi({
     "Invoices","Invoice",
     "UserRoles","UserRole",
     "TopbarSettings","TopbarSetting",
+    "SupportTickets","SupportTicket",
+    "TicketReplies","TicketReply",
+    "WalletDepositRequests","WalletDepositRequest",
+
 
   ] as const,
 });

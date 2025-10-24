@@ -360,11 +360,90 @@ if (path === "/custom_pages") {
   });
 }
 
+// support_tickets — camel→snake alanları da karşıla
+  if (path === "/support_tickets") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
 
+      // camel → snake alias
+      if (c.user_id === undefined && typeof c.userId === "string") c.user_id = c.userId;
+      if (c.created_at === undefined && typeof c.createdAt === "string") c.created_at = c.createdAt;
+      if (c.updated_at === undefined && typeof c.updatedAt === "string") c.updated_at = c.updatedAt;
 
+      // boş status/priority normalize
+      const s = (c.status as string) ?? "";
+      const p = (c.priority as string) ?? "";
+      c.status = (s && s.trim()) || "open";
+      c.priority = (p && p.trim()) || "medium";
 
+      // category her zaman mevcut olsun (UI bekliyor)
+      if (typeof c.category === "undefined") c.category = null;
 
+      return c as UnknownRow;
+    });
+  }
 
+  // ticket_replies — camel→snake + boolean normalize
+  if (path === "/ticket_replies") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+
+      // camel → snake alias
+      if (c.ticket_id === undefined && typeof c.ticketId === "string") c.ticket_id = c.ticketId;
+      if (c.user_id === undefined && (typeof c.userId === "string" || c.userId === null)) c.user_id = c.userId;
+      if (c.created_at === undefined && typeof c.createdAt === "string") c.created_at = c.createdAt;
+
+      // boolean normalize
+      const v = c.is_admin ?? c.isAdmin;
+      c.is_admin = v === true || v === 1 || v === "1" || v === "true";
+
+      return c as UnknownRow;
+    });
+  }
+
+// WALLET TRANSACTIONS
+if (path === "/wallet_transactions") {
+  return rows.map((r) => {
+    const c: Record<string, unknown> = { ...r };
+    if ("amount" in c) c.amount = Number(c.amount);
+    if (!("description" in c) || typeof c.description !== "string") c.description = c.description ?? null;
+    if ("order_id" in c && typeof c.order_id !== "string") c.order_id = c.order_id ? String(c.order_id) : null;
+    return c as UnknownRow;
+  });
+}
+
+// WALLET DEPOSIT REQUESTS
+if (path === "/wallet_deposit_requests") {
+  return rows.map((r) => {
+    const c: Record<string, unknown> = { ...r };
+    if ("amount" in c) c.amount = Number(c.amount);
+    if (typeof c.payment_proof !== "string") c.payment_proof = c.payment_proof ?? null;
+    if (typeof c.admin_notes  !== "string") c.admin_notes  = c.admin_notes  ?? null;
+    if (typeof c.processed_at !== "string") c.processed_at = c.processed_at ?? null;
+    if (typeof c.updated_at   !== "string") c.updated_at   = c.updated_at   ?? c.created_at;
+    return c as UnknownRow;
+  });
+}
+
+// ✅ PROFILES: string sayı → number, tip güvenliği
+  if (path === "/profiles") {
+    const toNum = (v: unknown): number => {
+      if (typeof v === "number") return v;
+      if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+      return 0;
+    };
+
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+
+      // normalize fields (varsa)
+      if ("wallet_balance" in c) c.wallet_balance = toNum(c.wallet_balance);
+      if (c.full_name != null) c.full_name = String(c.full_name);
+      if (c.phone != null) c.phone = String(c.phone);
+
+      return c as UnknownRow;
+    });
+  }
 
 
 

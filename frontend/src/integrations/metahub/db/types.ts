@@ -272,6 +272,106 @@ export type CustomPageView = {
   updated_at?: string;
 };
 
+
+export type SupportTicketView = {
+  id: string;
+  user_id: string;
+  subject: string;
+  message: string;
+  status: "open" | "in_progress" | "waiting_response" | "closed";
+  priority: "low" | "medium" | "high" | "urgent";
+  /** UI burada zorunlu görüyor → null olabilir ama undefined olamaz */
+  category: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TicketReplyView = {
+  id: string;
+  ticket_id: string;
+  user_id: string | null;
+  message: string;
+  is_admin: boolean;
+  created_at: string;
+};
+
+export type WalletTransactionRow = {
+  id: string;
+  user_id: string;
+  amount: number; // normalize
+  type: "deposit" | "withdrawal" | "purchase" | "refund";
+  description: string | null;
+  order_id?: string | null;
+  created_at: string;
+};
+
+export type WalletDepositRequestRow = {
+  id: string;
+  user_id: string;
+  amount: number; // normalize
+  payment_method: string; // "havale" vb.
+  payment_proof?: string | null;
+  status: "pending" | "approved" | "rejected" | string;
+  admin_notes?: string | null;
+  processed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProfileRow = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  country: string | null;
+  postal_code: string | null;
+  wallet_balance: number;     // ← FE bu alanı number bekliyor
+  created_at: string;         // ISO
+  updated_at: string;         // ISO
+};
+
+// DB alan adları ile birebir
+export interface OrderRow{
+  id: string;
+  order_number: string;
+  customer_name?: string;      // DB’de yok; eğer orders tablosunda yoksa opsiyonel bırak
+  customer_email?: string;     // DB’de yok; opsiyonel
+  customer_phone?: string | null; // DB’de yok; opsiyonel
+  subtotal: number;
+  discount: number;
+  total: number;
+  status: string;
+  payment_status: string;
+  payment_method: string | null;
+  notes: string | null;
+  created_at: string;
+  user_id: string;
+}
+
+export interface OrderItemRow {
+  id: string;
+  product_name: string;
+  quantity: number;
+  price: number;
+  total: number;
+  activation_code: string | null;
+  // delivery_content DB’de yok → kaldır/opsiyonel
+  delivery_status: string | null;
+  options?: Record<string, string> | null;
+  product_id: string | null;
+  products?: {
+    file_url: string | null;
+    delivery_type: string | null;
+  };
+}
+
+
+
+
+
 /** Bu projede bildiğimiz tüm tablo adları */
 export type KnownTables =
   | "products"
@@ -285,7 +385,7 @@ export type KnownTables =
   | "product_reviews"
   | "product_faqs"
   | "profiles"
-  | "wallet_transactions"
+  | "wallet_deposit_requests"
   | "payment_requests"
   | "product_variants"
   | "product_options"
@@ -304,7 +404,11 @@ export type KnownTables =
   | "activity_logs"
   | "audit_events"
   | "telemetry_events"
-  | "user_roles";
+  | "user_roles"
+  | "support_tickets"
+  | "ticket_replies"
+  ;
+
   
 
 // TableRow eşlemesini güncelle:
@@ -323,4 +427,11 @@ export type TableRow<TName extends string> =
   TName extends "cart_items" ? CartItemRow :
   TName extends "blog_posts" ? BlogPostRow :
   TName extends "custom_pages" ? CustomPageView :
+  TName extends "support_tickets" ? SupportTicketView :
+  TName extends "ticket_replies" ? TicketReplyView :
+  TName extends "wallet_transactions" ? WalletTransactionRow :
+  TName extends "wallet_deposit_requests" ? WalletDepositRequestRow :
+  TName extends "profiles" ? ProfileRow :
+  TName extends "orders" ? OrderRow :
+  TName extends "order_items" ? OrderItemRow :
   UnknownRow;
