@@ -1,4 +1,3 @@
-
 // =============================================================
 // FILE: src/integrations/metahub/rtk/endpoints/product_faqs.endpoints.ts
 // =============================================================
@@ -10,19 +9,38 @@ export type ProductFaq = {
   id: string;
   product_id: string;
   question: string;
-  answer?: string | null;
-  is_published?: BoolLike7;
+  answer: string;
+  display_order: number;
+  is_active?: BoolLike7;
   created_at?: string;
+  updated_at?: string;
 };
 
 export const productFaqsApi = baseApi_m7.injectEndpoints({
   endpoints: (b) => ({
-    listProductFaqs: b.query<ProductFaq[], { product_id?: string; is_published?: BoolLike7 }>({
-      query: (params) => ({ url: "/product_faqs", params }),
-      transformResponse: (res: unknown): ProductFaq[] => Array.isArray(res) ? (res as ProductFaq[]) : [],
-      providesTags: (result) => result
-        ? [...result.map((i) => ({ type: "Faqs" as const, id: i.id })), { type: "Faqs" as const, id: "LIST" }]
-        : [{ type: "Faqs" as const, id: "LIST" }],
+    listProductFaqs: b.query<
+      ProductFaq[],
+      { product_id?: string; only_active?: BoolLike7 }
+    >({
+      query: (params) => {
+        const { product_id, only_active = 1 } = params ?? {};
+        return {
+          url: "/product_faqs",
+          params: {
+            product_id,
+            only_active: only_active ? 1 : 0,
+          },
+        };
+      },
+      transformResponse: (res: unknown): ProductFaq[] =>
+        Array.isArray(res) ? (res as ProductFaq[]) : [],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((i) => ({ type: "Faqs" as const, id: i.id })),
+              { type: "Faqs" as const, id: "LIST" },
+            ]
+          : [{ type: "Faqs" as const, id: "LIST" }],
     }),
   }),
   overrideExisting: true,
