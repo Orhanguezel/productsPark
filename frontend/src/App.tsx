@@ -104,7 +104,7 @@ const AppContent = () => {
             <Route path="/sitemap.xml" element={<Sitemap />} />
             <Route path="/urunler" element={<Products />} />
             <Route path="/kategoriler/:slug" element={<Products />} />
-            <Route path="/urun/:id" element={<ProductDetail />} />
+            <Route path="/urun/:slug" element={<ProductDetail />} />
             <Route path="/kategoriler" element={<Categories />} />
             <Route path="/sepet" element={<Cart />} />
             <Route path="/odeme" element={<Checkout />} />

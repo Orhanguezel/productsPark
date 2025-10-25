@@ -69,7 +69,7 @@ export type Metahub = {
   functions: FunctionsFacade;
   api: typeof import("../rtk");
   baseApi: typeof import("../rtk/baseApi").baseApi;
-  from: <T = unknown>(table: string) => FromPromise<T>;
+  from: <T = unknown>(table: string) => FromPromise<T extends User ? T : never>;
   channel: (
     name: string
   ) => {

@@ -98,7 +98,7 @@ const isSameCustomFields = (fields1: Record<string, string> | null | undefined,
 };
 
 const ProductDetail = () => {
-  const { id } = useParams();
+  const { slug } = useParams<{ slug: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -119,11 +119,11 @@ const ProductDetail = () => {
   const [showDemoModal, setShowDemoModal] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      fetchProduct(id);
+    if (slug) {
+      fetchProduct(slug);
     }
     fetchWhatsappNumber();
-  }, [id]);
+  }, [slug]);
 
   const fetchWhatsappNumber = async () => {
     try {
@@ -149,7 +149,7 @@ const ProductDetail = () => {
         .select("*, categories(id, name)")
         .eq("slug", slug)
         .eq("is_active", true)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -1359,7 +1359,7 @@ const ProductDetail = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open(product?.demo_url!, '_blank')}
+              onClick={() => window.open(product?.demo_url || '', '_blank')}
             >
               <ExternalLink className="w-4 h-4 mr-2" />
               Yeni Sekmede Aç
