@@ -5,10 +5,9 @@ import {
   categoriesApi,
   type Category as ApiCategory,
 } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
-import {
-  setSelectedId as setCategorySelectedId,
-  reset as resetCategoriesState,
-} from "@/integrations/metahub/rtk/slices/categories/slice";
+
+// ❌ Eski slice bağımlılıkları kaldırıldı
+// import { setSelectedId as setCategorySelectedId, reset as resetCategoriesState } from ".../slices/categories/slice";
 
 export type Category = ApiCategory;
 
@@ -27,9 +26,9 @@ export const categories = {
 
   async getById(id: string) {
     try {
-      store.dispatch(setCategorySelectedId(id));
+      // ❌ setSelectedId kaldırıldı (UI state gerekiyorsa ayrı bir UI slice'ta tut)
       const data = await store
-        .dispatch(categoriesApi.endpoints.getCategoryById.initiate(id)) // <-- string
+        .dispatch(categoriesApi.endpoints.getCategoryById.initiate(id))
         .unwrap();
       return { data: data as ApiCategory, error: null as null };
     } catch (e) {
@@ -39,6 +38,7 @@ export const categories = {
   },
 
   reset() {
-    store.dispatch(resetCategoriesState());
+    // RTK Query state’ini temizler (baseApi kapsamındaki cache’i resetler)
+    store.dispatch(categoriesApi.util.resetApiState());
   },
 };

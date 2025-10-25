@@ -1,10 +1,8 @@
-// src/modules/products/schema.ts
 import {
   mysqlTable, char, varchar, text, int, tinyint, decimal, datetime, json,
   index, uniqueIndex, foreignKey,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
-
 import { categories } from "../categories/schema";
 
 export const products = mysqlTable(
@@ -17,23 +15,16 @@ export const products = mysqlTable(
     description: text('description'),
     short_description: varchar('short_description', { length: 500 }),
 
-    category_id: char('category_id', { length: 36 }), // NULL allowed
+    category_id: char('category_id', { length: 36 }),
 
+    // DECIMAL -> Drizzle tarafında string döner (normalize'da number'a çeviriyoruz)
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
-
-    // 🔧 ESKİ: decimal('compare_at_price'...)
-    // DB'deki kolonla birebir eşleştir:
     original_price: decimal('original_price', { precision: 10, scale: 2 }),
-
     cost: decimal('cost', { precision: 10, scale: 2 }),
 
     image_url: varchar('image_url', { length: 500 }),
 
-    // 🔧 ESKİ: json('images')
-    // DB'de 'gallery_urls' kolonu var:
     gallery_urls: json('gallery_urls'),
-
-    // DB'de 'features' kolonu LONGTEXT + JSON_VALID; Drizzle tarafında json kullanmaya devam edebiliriz
     features: json('features'),
 
     rating: decimal('rating', { precision: 3, scale: 2 }).notNull().default('5.00'),
@@ -78,7 +69,6 @@ export const products = mysqlTable(
   ]
 );
 
-
 export const productFaqs = mysqlTable('product_faqs', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   product_id: char('product_id', { length: 36 }).notNull(),
@@ -113,8 +103,6 @@ export const productStock = mysqlTable('product_stock', {
   order_item_id: char('order_item_id', { length: 36 }),
 });
 
-
 export { productOptions } from '../productOptions/schema';
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
-

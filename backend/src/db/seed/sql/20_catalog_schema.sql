@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS categories (
   created_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
-  KEY categories_slug_idx (slug),
+
+  -- tekillik + arama
+  UNIQUE KEY categories_slug_uq (slug),
   KEY categories_parent_id_idx (parent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -75,23 +77,27 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (id),
-  KEY products_slug_idx (slug),
+
+  -- tekillik + arama
+  UNIQUE KEY products_slug_uq (slug),
   KEY products_category_id_idx (category_id),
   KEY products_sku_idx (sku),
   KEY products_active_idx (is_active),
+
+  -- listeleme pattern'leri
+  KEY products_cat_active_created_idx (category_id, is_active, created_at),
+  KEY products_slug_active_idx (slug, is_active),
 
   CHECK (gallery_urls IS NULL OR JSON_VALID(gallery_urls)),
   CHECK (features IS NULL OR JSON_VALID(features)),
   CHECK (custom_fields IS NULL OR JSON_VALID(custom_fields)),
   CHECK (quantity_options IS NULL OR JSON_VALID(quantity_options)),
-  CHECK (badges IS NULL OR JSON_VALID(badges))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CHECK (badges IS NULL OR JSON_VALID(badges)),
 
--- (Opsiyonel FK — dump/seed’in garantili olduğu durumda aç)
--- ALTER TABLE products
---   ADD CONSTRAINT fk_products_category
---   FOREIGN KEY (category_id) REFERENCES categories(id)
---   ON DELETE SET NULL ON UPDATE CASCADE;
+  CONSTRAINT fk_products_category
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+    ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
 -- PRODUCT FAQS

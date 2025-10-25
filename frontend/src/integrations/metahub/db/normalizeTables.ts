@@ -1,8 +1,56 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/normalizeTables.ts
 // =============================================================
-import type { UnknownRow, FooterSectionView, FooterLink } from "./types";
+import type { UnknownRow, FooterSectionView, FooterLink, ProductRow } from "./types";
 import { toNumber, numOrNullish, toBool } from "../core/normalize";
+
+/**
+ * path yardımcıları
+ */
+const stripQuery = (p: string) => p.split("?")[0] || p;
+const isProductsPath = (p: string) => {
+  const s = stripQuery(p);
+  // /products           -> liste
+  // /products/xxx       -> tekil (id ya da slug)
+  // /products/by-slug   -> liste/tekil için legacy
+  // /products/by-slug/xxx -> tekil legacy
+  return (
+    s === "/products" ||
+    s.startsWith("/products/") ||
+    s === "/products/by-slug" ||
+    s.startsWith("/products/by-slug/")
+  );
+};
+
+const asNumber = (v: unknown, fallback = 0): number => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return fallback;
+};
+const asNumberOrNull = (v: unknown): number | null => {
+  if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return null;
+};
+const parseStringArray = (v: unknown): string[] | null => {
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      // CSV fallback
+    }
+    const arr = s.split(",").map((x) => x.trim()).filter(Boolean);
+    return arr.length ? arr : null;
+  }
+  return null;
+};
+const boolLike = (v: unknown): boolean =>
+  v === true || v === 1 || v === "1" || v === "true";
 
 /**
  * Farklı tablolar için gelen ham satırları normalize eder.
@@ -23,38 +71,38 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
   }
 
   if (path === "/menu_items") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
 
-    // title → string
-    if (typeof c.title !== "string") c.title = String(c.title ?? "");
+      // title → string
+      if (typeof c.title !== "string") c.title = String(c.title ?? "");
 
-    // url/href alias
-    const rawUrl  = typeof c.url  === "string" ? c.url  : undefined;
-    const rawHref = typeof c.href === "string" ? c.href : undefined;
-    c.url = rawUrl ?? rawHref ?? "#";
+      // url/href alias
+      const rawUrl  = typeof c.url  === "string" ? c.url  : undefined;
+      const rawHref = typeof c.href === "string" ? c.href : undefined;
+      c.url = rawUrl ?? rawHref ?? "#";
 
-    // 🔧 icon → string | null (undefined bırakma)
-    c.icon = typeof c.icon === "string" ? c.icon : null;
+      // icon → string | null (undefined bırakma)
+      c.icon = typeof c.icon === "string" ? c.icon : null;
 
-    // section_id → string | null
-    c.section_id = typeof c.section_id === "string" ? c.section_id : null;
+      // section_id → string | null
+      c.section_id = typeof c.section_id === "string" ? c.section_id : null;
 
-    // position → number | null
-    if (c.position != null) {
-      const n = Number(c.position as unknown);
-      c.position = Number.isFinite(n) ? n : null;
-    }
+      // position → number | null
+      if (c.position != null) {
+        const n = Number(c.position as unknown);
+        c.position = Number.isFinite(n) ? n : null;
+      }
 
-    // is_active → boolean
-    const b = toBool(c.is_active);
-    c.is_active = b === undefined ? false : b;
+      // is_active → boolean
+      const b = toBool(c.is_active);
+      c.is_active = b === undefined ? false : b;
 
-    return c as UnknownRow;
-  });
-}
+      return c as UnknownRow;
+    });
+  }
 
-// 🔸 POPUPS
+  // 🔸 POPUPS
   if (path === "/popups") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -92,54 +140,100 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // /products: sayılar ve booleanlar normalize edilir
-  if (path === "/products") {
-    return rows.map((r) => {
-      const c: Record<string, unknown> = { ...r };
+  // ---------- PRODUCTS (liste + tekil tüm rotalar) ----------
+  if (isProductsPath(path)) {
+    return rows.map((r: ProductRow | UnknownRow) => {
+      const c: Record<string, unknown> = { ...(r as Record<string, unknown>) };
 
-      // boolean
-      if ("is_active" in c) {
-        const b = toBool(c.is_active);
-        if (b !== undefined) c.is_active = b;
+      // sayısallar
+      c.price = asNumber(c.price, 0);
+
+      const hasOriginal = Object.prototype.hasOwnProperty.call(c, "original_price");
+      const hasCompare  = Object.prototype.hasOwnProperty.call(c, "compare_at_price");
+      const origVal = hasOriginal ? c["original_price"] : (hasCompare ? c["compare_at_price"] : null);
+      c.original_price = origVal != null ? asNumber(origVal, 0) : null;
+
+      c.cost = asNumberOrNull(c.cost);
+      c.rating = c.rating != null ? asNumber(c.rating, 5) : 5;
+      c.review_count = c.review_count != null
+        ? Math.max(0, Math.floor(asNumber(c.review_count, 0)))
+        : 0;
+
+      // stok (varsa int'e indir)
+      if ("stock_quantity" in c) {
+        const sq = asNumber(c.stock_quantity, 0);
+        c.stock_quantity = Math.max(0, Math.floor(sq));
       }
 
-      // sayılar
-      if ("price" in c) c.price = toNumber(c.price);
-      if ("original_price" in c) c.original_price = (numOrNullish(c.original_price) ?? null);
-      if ("rating" in c) c.rating = toNumber(c.rating);
+      // galeriler (boş diziye de fallback uygula)
+      const galleryA = parseStringArray(c.gallery_urls);
+      const galleryB = parseStringArray(c.images);
+      let gallery = galleryA ?? galleryB ?? null;
+      if ((!gallery || gallery.length === 0) && typeof c.image_url === "string" && c.image_url.trim()) {
+        gallery = [c.image_url as string];
+      }
+      c.gallery_urls = gallery;
 
-      return c as UnknownRow;
+      // boole’ler
+      c.is_active = boolLike(c.is_active);
+      c.is_featured = boolLike(c.is_featured);
+      c.requires_shipping = boolLike(c.requires_shipping);
+      c.article_enabled = boolLike(c.article_enabled);
+      c.demo_embed_enabled = boolLike(c.demo_embed_enabled);
+
+      // JSON-string alanlar
+      const tryParse = <T>(x: unknown): T | null => {
+        if (x == null) return null;
+        if (typeof x === "string") {
+          try { return JSON.parse(x) as T; } catch { return null; }
+        }
+        return x as T;
+      };
+      c.quantity_options = tryParse<Array<{ quantity: number; price: number }>>(c.quantity_options);
+      c.badges = tryParse<Array<{ text: string; icon?: string | null; active: boolean }>>(c.badges);
+      c.custom_fields = tryParse<Array<{ id: string; label: string; type: string; placeholder?: string | null; required: boolean }>>(c.custom_fields);
+
+      // kategori objesi (join edilmişse)
+      if (c.categories && typeof c.categories === "object") {
+        const k = c.categories as Record<string, unknown>;
+        c.categories = {
+          id: typeof k.id === "string" ? k.id : String(k.id ?? ""),
+          name: typeof k.name === "string" ? k.name : "",
+          slug: typeof k.slug === "string" ? k.slug : "", // undefined bırakmayalım
+        };
+      }
+
+      return c as unknown as import("./types").UnknownRow;
     });
   }
 
   // product_reviews: rating → number, is_active → boolean
-if (path === "/product_reviews") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-    if ("rating" in c) c.rating = toNumber(c.rating);
-    if ("is_active" in c) {
-      const b = toBool(c.is_active);
-      if (b !== undefined) c.is_active = b;
-    }
-    return c as UnknownRow;
-  });
-}
+  if (path === "/product_reviews") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+      if ("rating" in c) c.rating = toNumber(c.rating);
+      if ("is_active" in c) {
+        const b = toBool(c.is_active);
+        if (b !== undefined) c.is_active = b;
+      }
+      return c as UnknownRow;
+    });
+  }
 
-// product_faqs: display_order → number, is_active → boolean
-if (path === "/product_faqs") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-    if ("display_order" in c) c.display_order = toNumber(c.display_order);
-    if ("is_active" in c) {
-      const b = toBool(c.is_active);
-      if (b !== undefined) c.is_active = b;
-    }
-    return c as UnknownRow;
-  });
-}
+  // product_faqs: display_order → number, is_active → boolean
+  if (path === "/product_faqs") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+      if ("display_order" in c) c.display_order = toNumber(c.display_order);
+      if ("is_active" in c) {
+        const b = toBool(c.is_active);
+        if (b !== undefined) c.is_active = b;
+      }
+      return c as UnknownRow;
+    });
+  }
 
-
-// 🔹 FOOTER SECTIONS
+  // 🔹 FOOTER SECTIONS
   if (path === "/footer_sections") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -158,7 +252,6 @@ if (path === "/product_faqs") {
       return c as UnknownRow;
     });
   }
-
 
   // 🔹 CART ITEMS
   if (path === "/cart_items") {
@@ -207,8 +300,6 @@ if (path === "/product_faqs") {
         c.min_purchase = toNumber(c.min_order_total);
       }
 
-      // tarih alanları string kalır (backend ISO veriyorsa FE direkt kullanır)
-
       // dizi alanları JSON-string gelebilir
       if ("category_ids" in c && typeof c.category_ids === "string") {
         try { c.category_ids = JSON.parse(c.category_ids as string); } catch { /* ignore */ }
@@ -227,148 +318,145 @@ if (path === "/product_faqs") {
     });
   }
 
-if (path === "/topbar_settings") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
+  if (path === "/topbar_settings") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
 
-    // BE -> FE alan adları
-    c.message = typeof c.text === "string" ? c.text : (c.message ?? "");
-    c.link_url = typeof c.link === "string" ? c.link : (c.link_url ?? null);
-    if (c.link_url && typeof c.link_text !== "string") {
-      c.link_text = "Detaylar"; // isterseniz null bırakın
-    }
-
-    // boolean normalizasyonu
-    if ("is_active" in c) {
-      const v = c.is_active;
-      c.is_active = (v === true || v === 1 || v === "1" || v === "true");
-    }
-    if ("show_ticker" in c) {
-      const v = c.show_ticker;
-      c.show_ticker = (v === true || v === 1 || v === "1" || v === "true");
-    }
-
-    // gereksiz kaynak alanları temiz (opsiyonel)
-    delete c.text;
-    delete c.link;
-
-    // opsiyoneller
-    if (!("coupon_code" in c)) c.coupon_code = null;
-
-    return c as unknown as UnknownRow;
-  });
-}
-
-
-
-
-if (path === "/blog_posts") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-
-    // BE -> FE alan adları
-    const title = typeof c.title === "string" ? c.title : "";
-    const slug = typeof c.slug === "string" ? c.slug : "";
-    const excerpt = typeof c.excerpt === "string" ? c.excerpt : "";
-    const content = typeof c.content === "string" ? c.content : "";
-
-    const author = typeof c.author === "string" ? c.author : "Admin";
-    const featured = typeof c.featured_image === "string" ? c.featured_image : "";
-
-    // boolean normalizasyonu
-    const ip = c.is_published;
-    const is_published =
-      ip === true || ip === 1 || ip === "1" || ip === "true" ? true : false;
-
-    // kategori yoksa "Genel"
-    const category =
-      typeof c.category === "string" && c.category.trim() ? c.category : "Genel";
-
-    // okuma süresi
-    const read_time = (() => {
-      const stripped = (content as string).replace(/<[^>]*>/g, " ");
-      const words = stripped.trim().split(/\s+/).filter(Boolean).length;
-      const minutes = Math.max(1, Math.ceil(words / 220));
-      return `${minutes} dk`;
-    })();
-
-    // FE alanlarına ata
-    c.title = title;
-    c.slug = slug;
-    c.excerpt = excerpt;
-    c.content = content;
-    c.author_name = author;
-    c.image_url = featured;
-    c.is_published = is_published;
-    c.category = category;
-    c.read_time = read_time;
-
-    // FE bekliyor ama DB’de yok → default false
-    if (typeof c.is_featured !== "boolean") c.is_featured = false;
-
-    // temizlik
-    delete c.author;
-    delete c.featured_image;
-
-    return c as UnknownRow;
-  });
-}
-
-if (path === "/custom_pages") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-
-    // zorunlu alanlar
-    const title = typeof c.title === "string" ? c.title : "";
-    const slug  = typeof c.slug  === "string" ? c.slug  : "";
-
-    // content: JSON {"html": "..."} | düz string | content_html fallback
-    const raw = c.content;
-    const isObj = (x: unknown): x is Record<string, unknown> =>
-      typeof x === "object" && x !== null;
-
-    let html = "";
-    if (typeof raw === "string") {
-      try {
-        const parsed = JSON.parse(raw) as unknown;
-        html = isObj(parsed) && typeof parsed["html"] === "string" ? parsed["html"] : raw;
-      } catch {
-        html = raw;
+      // BE -> FE alan adları
+      c.message = typeof c.text === "string" ? c.text : (c.message ?? "");
+      c.link_url = typeof c.link === "string" ? c.link : (c.link_url ?? null);
+      if (c.link_url && typeof c.link_text !== "string") {
+        c.link_text = "Detaylar";
       }
-    } else if (isObj(raw) && typeof raw["html"] === "string") {
-      html = raw["html"] as string;
-    } else if (typeof c["content_html"] === "string") {
-      html = c["content_html"] as string;
-    }
 
-    // boolean normalize
-    const ip = c.is_published;
-    const is_published = (ip === true || ip === 1 || ip === "1" || ip === "true");
+      // boolean normalizasyonu
+      if ("is_active" in c) {
+        const v = c.is_active;
+        c.is_active = (v === true || v === 1 || v === "1" || v === "true");
+      }
+      if ("show_ticker" in c) {
+        const v = c.show_ticker;
+        c.show_ticker = (v === true || v === 1 || v === "1" || v === "true");
+      }
 
-    // meta alanları güvenceye al
-    const metaTitle = typeof c.meta_title === "string" ? c.meta_title : null;
-    const metaDesc  = typeof c.meta_description === "string" ? c.meta_description : null;
+      // gereksiz kaynak alanları temiz (opsiyonel)
+      delete c.text;
+      delete c.link;
 
-    c.title = title;
-    c.slug  = slug;
-    c.content = html;           // FE düz HTML bekliyor
-    c.is_published = is_published;
-    c.meta_title = metaTitle;
-    c.meta_description = metaDesc;
+      // opsiyoneller
+      if (!("coupon_code" in c)) c.coupon_code = null;
 
-    return c as import("./types").UnknownRow;
-  });
-}
+      return c as unknown as UnknownRow;
+    });
+  }
 
-// support_tickets — camel→snake alanları da karşıla
+  if (path === "/blog_posts") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+
+      // BE -> FE alan adları
+      const title = typeof c.title === "string" ? c.title : "";
+      const slug = typeof c.slug === "string" ? c.slug : "";
+      const excerpt = typeof c.excerpt === "string" ? c.excerpt : "";
+      const content = typeof c.content === "string" ? c.content : "";
+
+      const author = typeof c.author === "string" ? c.author : "Admin";
+      const featured = typeof c.featured_image === "string" ? c.featured_image : "";
+
+      // boolean normalizasyonu
+      const ip = c.is_published;
+      const is_published =
+        ip === true || ip === 1 || ip === "1" || ip === "true" ? true : false;
+
+      // kategori yoksa "Genel"
+      const category =
+        typeof c.category === "string" && c.category.trim() ? c.category : "Genel";
+
+      // okuma süresi
+      const read_time = (() => {
+        const stripped = (content as string).replace(/<[^>]*>/g, " ");
+        const words = stripped.trim().split(/\s+/).filter(Boolean).length;
+        const minutes = Math.max(1, Math.ceil(words / 220));
+        return `${minutes} dk`;
+      })();
+
+      // FE alanlarına ata
+      c.title = title;
+      c.slug = slug;
+      c.excerpt = excerpt;
+      c.content = content;
+      c.author_name = author;
+      c.image_url = featured;
+      c.is_published = is_published;
+      c.category = category;
+      c.read_time = read_time;
+
+      // FE bekliyor ama DB’de yok → default false
+      if (typeof c.is_featured !== "boolean") c.is_featured = false;
+
+      // temizlik
+      delete c.author;
+      delete c.featured_image;
+
+      return c as UnknownRow;
+    });
+  }
+
+  if (path === "/custom_pages") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+
+      // zorunlu alanlar
+      const title = typeof c.title === "string" ? c.title : "";
+      const slug  = typeof c.slug  === "string" ? c.slug  : "";
+
+      // content: JSON {"html": "..."} | düz string | content_html fallback
+      const raw = c.content;
+      const isObj = (x: unknown): x is Record<string, unknown> =>
+        typeof x === "object" && x !== null;
+
+      let html = "";
+      if (typeof raw === "string") {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          html = isObj(parsed) && typeof parsed["html"] === "string" ? parsed["html"] : raw;
+        } catch {
+          html = raw;
+        }
+      } else if (isObj(raw) && typeof raw["html"] === "string") {
+        html = raw["html"] as string;
+      } else if (typeof c["content_html"] === "string") {
+        html = c["content_html"] as string;
+      }
+
+      // boolean normalize
+      const ip = c.is_published;
+      const is_published = (ip === true || ip === 1 || ip === "1" || ip === "true");
+
+      // meta alanları güvenceye al
+      const metaTitle = typeof c.meta_title === "string" ? c.meta_title : null;
+      const metaDesc  = typeof c.meta_description === "string" ? c.meta_description : null;
+
+      c.title = title;
+      c.slug  = slug;
+      c.content = html;           // FE düz HTML bekliyor
+      c.is_published = is_published;
+      c.meta_title = metaTitle;
+      c.meta_description = metaDesc;
+
+      return c as import("./types").UnknownRow;
+    });
+  }
+
+  // support_tickets — camel→snake alanları da karşıla
   if (path === "/support_tickets") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
 
       // camel → snake alias
-      if (c.user_id === undefined && typeof c.userId === "string") c.user_id = c.userId;
-      if (c.created_at === undefined && typeof c.createdAt === "string") c.created_at = c.createdAt;
-      if (c.updated_at === undefined && typeof c.updatedAt === "string") c.updated_at = c.updatedAt;
+      if (c.user_id === undefined && typeof (c as Record<string, unknown>).userId === "string") c.user_id = (c as Record<string, unknown>).userId;
+      if (c.created_at === undefined && typeof (c as Record<string, unknown>).createdAt === "string") c.created_at = (c as Record<string, unknown>).createdAt;
+      if (c.updated_at === undefined && typeof (c as Record<string, unknown>).updatedAt === "string") c.updated_at = (c as Record<string, unknown>).updatedAt;
 
       // boş status/priority normalize
       const s = (c.status as string) ?? "";
@@ -389,43 +477,43 @@ if (path === "/custom_pages") {
       const c: Record<string, unknown> = { ...r };
 
       // camel → snake alias
-      if (c.ticket_id === undefined && typeof c.ticketId === "string") c.ticket_id = c.ticketId;
-      if (c.user_id === undefined && (typeof c.userId === "string" || c.userId === null)) c.user_id = c.userId;
-      if (c.created_at === undefined && typeof c.createdAt === "string") c.created_at = c.createdAt;
+      if (c.ticket_id === undefined && typeof (c as Record<string, unknown>).ticketId === "string") c.ticket_id = (c as Record<string, unknown>).ticketId;
+      if (c.user_id === undefined && (typeof (c as Record<string, unknown>).userId === "string" || (c as Record<string, unknown>).userId === null)) c.user_id = (c as Record<string, unknown>).userId;
+      if (c.created_at === undefined && typeof (c as Record<string, unknown>).createdAt === "string") c.created_at = (c as Record<string, unknown>).createdAt;
 
       // boolean normalize
-      const v = c.is_admin ?? c.isAdmin;
+      const v = (c as Record<string, unknown>).is_admin ?? (c as Record<string, unknown>).isAdmin;
       c.is_admin = v === true || v === 1 || v === "1" || v === "true";
 
       return c as UnknownRow;
     });
   }
 
-// WALLET TRANSACTIONS
-if (path === "/wallet_transactions") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-    if ("amount" in c) c.amount = Number(c.amount);
-    if (!("description" in c) || typeof c.description !== "string") c.description = c.description ?? null;
-    if ("order_id" in c && typeof c.order_id !== "string") c.order_id = c.order_id ? String(c.order_id) : null;
-    return c as UnknownRow;
-  });
-}
+  // WALLET TRANSACTIONS
+  if (path === "/wallet_transactions") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+      if ("amount" in c) c.amount = Number(c.amount);
+      if (!("description" in c) || typeof c.description !== "string") c.description = c.description ?? null;
+      if ("order_id" in c && typeof c.order_id !== "string") c.order_id = c.order_id ? String(c.order_id) : null;
+      return c as UnknownRow;
+    });
+  }
 
-// WALLET DEPOSIT REQUESTS
-if (path === "/wallet_deposit_requests") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-    if ("amount" in c) c.amount = Number(c.amount);
-    if (typeof c.payment_proof !== "string") c.payment_proof = c.payment_proof ?? null;
-    if (typeof c.admin_notes  !== "string") c.admin_notes  = c.admin_notes  ?? null;
-    if (typeof c.processed_at !== "string") c.processed_at = c.processed_at ?? null;
-    if (typeof c.updated_at   !== "string") c.updated_at   = c.updated_at   ?? c.created_at;
-    return c as UnknownRow;
-  });
-}
+  // WALLET DEPOSIT REQUESTS
+  if (path === "/wallet_deposit_requests") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+      if ("amount" in c) c.amount = Number(c.amount);
+      if (typeof c.payment_proof !== "string") c.payment_proof = c.payment_proof ?? null;
+      if (typeof c.admin_notes  !== "string") c.admin_notes  = c.admin_notes  ?? null;
+      if (typeof c.processed_at !== "string") c.processed_at = c.processed_at ?? null;
+      if (typeof c.updated_at   !== "string") c.updated_at   = c.updated_at   ?? c.created_at;
+      return c as UnknownRow;
+    });
+  }
 
-// ✅ PROFILES: string sayı → number, tip güvenliği
+  // ✅ PROFILES
   if (path === "/profiles") {
     const toNum = (v: unknown): number => {
       if (typeof v === "number") return v;
@@ -435,28 +523,12 @@ if (path === "/wallet_deposit_requests") {
 
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
-
-      // normalize fields (varsa)
       if ("wallet_balance" in c) c.wallet_balance = toNum(c.wallet_balance);
       if (c.full_name != null) c.full_name = String(c.full_name);
       if (c.phone != null) c.phone = String(c.phone);
-
       return c as UnknownRow;
     });
   }
 
-
-
-
-
-
-
-
-
-
-
-
   return rows;
 }
-
-

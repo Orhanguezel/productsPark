@@ -1,4 +1,3 @@
-// src/app.ts
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
@@ -8,7 +7,7 @@ import authPlugin from "./plugins/authPlugin";
 import { env } from '@/core/env';
 import { registerErrorHandlers } from '@/core/error';
 
-// Modül router’ların importları
+// Modüller
 import { registerAuth } from '@/modules/auth/router';
 import { registerRest } from '@/modules/rest/router';
 import { registerStorage } from '@/modules/storage/router';
@@ -33,11 +32,8 @@ import { registerWalletTransactions } from "@/modules/wallet_transactions/router
 import { registerWalletDeposits } from "@/modules/wallet_deposit_requests/router";
 
 export async function createApp() {
-  // Dinamik import + gevşek tip: TS2349 kökten biter
   const { default: buildFastify } =
-    (await import('fastify')) as unknown as {
-      default: (opts?: any) => any;
-    };
+    (await import('fastify')) as unknown as { default: (opts?: any) => any };
 
   const app = buildFastify({
     logger: env.NODE_ENV !== 'production',
@@ -66,18 +62,23 @@ export async function createApp() {
     },
   });
 
-  // JWT (cookie'den token)
+  // JWT (Authorization header + cookie)
   await app.register(jwt, {
     secret: env.JWT_SECRET,
     cookie: { cookieName: 'access_token', signed: false },
   });
 
-  // ✅ AUTH PLUGIN BURADA (route’lardan önce)
+  // 🔒 Guard: artık sadece config.auth === true olan rotaları korur
   await app.register(authPlugin);
 
+  // Public health
   app.get('/health', async () => ({ ok: true }));
-  await app.register(multipart, { throwFileSizeLimit: true, limits: { fileSize: 20 * 1024 * 1024 } });
 
+  // Multipart
+  await app.register(multipart, {
+    throwFileSizeLimit: true,
+    limits: { fileSize: 20 * 1024 * 1024 },
+  });
 
   // Modüller
   await registerAuth(app);

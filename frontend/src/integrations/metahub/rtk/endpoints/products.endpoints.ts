@@ -1,11 +1,8 @@
-// src/integrations/metahub/rtk/endpoints/products.endpoints.ts
 import { baseApi } from "../baseApi";
 
-// --- Tipler (backend yanıtıyla uyumlu) ---
+// --- Tipler (FE beklentisi) ---
 export type CategoryBrief = { id: string; name: string; slug: string };
-
 export type QuantityOption = { quantity: number; price: number };
-
 export type Badge = { text: string; icon?: string | null; active: boolean };
 
 export type Product = {
@@ -54,106 +51,102 @@ export type Product = {
   categories?: CategoryBrief;
 };
 
-export type Review = {
-  id: string;
-  product_id: string;
-  user_id?: string | null;
-  rating: number;
-  comment?: string | null;
-  is_active: 0 | 1 | boolean;
-  customer_name?: string | null;
-  review_date: string;
-  created_at: string;
-  updated_at: string;
-};
-
-export type Faq = {
-  id: string;
-  product_id: string;
-  question: string;
-  answer: string;
-  display_order: number;
-  is_active: 0 | 1 | boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type ProductOption = {
-  id: string;
-  product_id: string;
-  option_name: string;
-  option_values: string[];
-  created_at: string;
-  updated_at: string;
-};
-
-export type Stock = {
-  id: string;
-  product_id: string;
-  code: string;
-  is_used: 0 | 1 | boolean;
-  used_at?: string | null;
-  created_at: string;
-  order_item_id?: string | null;
-};
-
-// --- Ham API tipi (bazı alanlar string/JSON-string gelebilir) ---
+// --- Ham API tipi (BE alan adları + geriye dönük uyum) ---
 type ApiProduct = Omit<
   Product,
-  | "price"
-  | "original_price"
-  | "cost"
-  | "rating"
-  | "gallery_urls"
-  | "features"
-  | "custom_fields"
-  | "quantity_options"
-  | "badges"
+  "price" | "original_price" | "gallery_urls" | "cost" | "rating" | "review_count"
 > & {
   price: number | string;
-  original_price: number | string | null;
-  cost: number | string | null;
-  rating: number | string;
-  gallery_urls: string[] | string | null;
-  features: string[] | string | null;
-  custom_fields: Product["custom_fields"] | string | null;
-  quantity_options: QuantityOption[] | string | null;
-  badges: Badge[] | string | null;
+  /** Yeni isimler */
+  original_price?: number | string | null;
+  gallery_urls?: string[] | string | null;
+  /** Eski isimlerle geriye dönük uyum */
+  compare_at_price?: number | string | null;
+  images?: string[] | string | null;
+  /** Opsiyonel sayısal alanlar string gelebilir */
+  cost?: number | string | null;
+  rating?: number | string | null;
+  review_count?: number | string | null;
 };
 
-// küçük yardımcılar
-type NullableNumber = number | null | undefined;
-const toNumber = (x: unknown): number =>
-  typeof x === "number" ? x : Number(x as unknown);
+// ---------- helpers (typed) ----------
+type NumericLike = number | string | null | undefined;
 
-const numOrNullish = (x: unknown): NullableNumber =>
-  x == null ? (x as null | undefined) : toNumber(x);
-
-const tryParse = <T>(x: unknown): T => {
-  if (typeof x === "string") {
-    try {
-      return JSON.parse(x) as T;
-    } catch {
-      // JSON değilse geleni olduğu gibi döndür (çağıran T'yi doğru seçecek)
-      return x as unknown as T;
-    }
+const asNumber = (v: NumericLike, fallback = 0): number => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
+    return Number(v);
   }
-  return x as T;
+  return fallback;
 };
 
-const normalizeProduct = (p: ApiProduct): Product => ({
-  ...p,
-  price: toNumber(p.price),
-  original_price: numOrNullish(p.original_price) ?? null,
-  cost: numOrNullish(p.cost) ?? null,
-  rating: toNumber(p.rating),
-  gallery_urls: tryParse<string[] | null>(p.gallery_urls),
-  features: tryParse<string[] | null>(p.features),
-  custom_fields: tryParse<Product["custom_fields"]>(p.custom_fields),
-  quantity_options: tryParse<QuantityOption[] | null>(p.quantity_options),
-  badges: tryParse<Badge[] | null>(p.badges),
-});
+const toNumOptional = (v: NumericLike): number | null => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
+    return Number(v);
+  }
+  return null;
+};
 
+const parseArr = (v: unknown): string[] | null => {
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      /* fall through to CSV split */
+    }
+    return s.split(",").map((x) => x.trim()).filter(Boolean);
+  }
+  return null;
+};
+
+// ---------- normalize ----------
+const normalizeProduct = (p: ApiProduct): Product => {
+  // price
+  const price = asNumber(p.price, 0);
+
+  // original_price: yeni isim öncelikli, yoksa eski 'compare_at_price'
+  const originalPrice =
+    p.original_price !== undefined && p.original_price !== null
+      ? asNumber(p.original_price, 0)
+      : p.compare_at_price !== undefined && p.compare_at_price !== null
+      ? asNumber(p.compare_at_price, 0)
+      : null;
+
+  // cost (opsiyonel)
+  const cost = toNumOptional(p.cost);
+
+  // gallery: yeni → eski → image_url fallback
+  const gallery =
+    parseArr(p.gallery_urls) ??
+    parseArr(p.images) ??
+    (typeof p.image_url === "string" && p.image_url.trim() ? [p.image_url] : null);
+
+  // rating / review_count (defaults)
+  const rating = p.rating === undefined || p.rating === null ? 5 : asNumber(p.rating, 5);
+  const reviewCount =
+    p.review_count === undefined || p.review_count === null
+      ? 0
+      : Math.max(0, Math.floor(asNumber(p.review_count, 0)));
+
+  return {
+    ...p,
+    price,
+    original_price: originalPrice,
+    cost,
+    gallery_urls: gallery,
+    rating,
+    review_count: reviewCount,
+    delivery_type: p.delivery_type ?? "manual",
+  };
+};
+
+// ---------- RTK endpoints ----------
 export const productsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // GET /products (liste)
@@ -167,22 +160,37 @@ export const productsApi = baseApi.injectEndpoints({
         offset?: number;
         sort?: "price" | "rating" | "created_at";
         order?: "asc" | "desc";
-        slug?: string;
+        slug?: string; // opsiyonel; backend slug ile tekil ürün döndürürse aşağıda ele aldık
       }
     >({
       query: (params) => ({
         url: "/products",
         params: {
           ...params,
+          // bool -> 0/1 coercion
           is_active:
-            params?.is_active === undefined
-              ? undefined
-              : (params.is_active ? 1 : 0),
+            params?.is_active === undefined ? undefined : params.is_active ? 1 : 0,
         },
       }),
       transformResponse: (res: unknown): Product[] => {
-        if (!Array.isArray(res)) return [];
-        return (res as ApiProduct[]).map(normalizeProduct);
+        // BE bazı durumlarda slug ile tekil obje döndürebilir
+        if (Array.isArray(res)) {
+          return (res as ApiProduct[]).map(normalizeProduct).map((p) => {
+            if ((!p.gallery_urls || p.gallery_urls.length === 0) && p.image_url) {
+              return { ...p, gallery_urls: [p.image_url] };
+            }
+            return p;
+          });
+        }
+        if (res && typeof res === "object") {
+          const n = normalizeProduct(res as ApiProduct);
+          return [
+            (!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url
+              ? { ...n, gallery_urls: [n.image_url] }
+              : n,
+          ];
+        }
+        return [];
       },
       providesTags: (result) =>
         result
@@ -193,19 +201,44 @@ export const productsApi = baseApi.injectEndpoints({
           : [{ type: "Products" as const, id: "LIST" }],
     }),
 
-    // GET /products/:id
+    // ✅ Birleşik detay: GET /products/:idOrSlug
+    getProduct: builder.query<Product, string>({
+      query: (idOrSlug) => ({ url: `/products/${encodeURIComponent(idOrSlug)}` }),
+      transformResponse: (res: unknown): Product => {
+        const n = normalizeProduct(res as ApiProduct);
+        if ((!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url) {
+          return { ...n, gallery_urls: [n.image_url] };
+        }
+        return n;
+      },
+      providesTags: (r) =>
+        r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
+    }),
+
+    // (Geri uyum) GET /products/:id
     getProductById: builder.query<Product, string>({
-      query: (id) => ({ url: `/products/${id}` }),
-      transformResponse: (res: unknown): Product =>
-        normalizeProduct(res as ApiProduct),
+      query: (id) => ({ url: `/products/${encodeURIComponent(id)}` }),
+      transformResponse: (res: unknown): Product => {
+        const n = normalizeProduct(res as ApiProduct);
+        if ((!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url) {
+          return { ...n, gallery_urls: [n.image_url] };
+        }
+        return n;
+      },
       providesTags: (_r, _e, id) => [{ type: "Product", id }],
     }),
 
-    // GET /products/by-slug/:slug
+    // (Geri uyum) GET /products/by-slug/:slug  → tek ürün döner
     getProductBySlug: builder.query<Product, string>({
-      query: (slug) => ({ url: `/products/by-slug/${slug}` }),
-      transformResponse: (res: unknown): Product =>
-        normalizeProduct(res as ApiProduct),
+      // İstersen unified rota da kullanabilirsin: `/products/${slug}`
+      query: (slug) => ({ url: `/products/by-slug/${encodeURIComponent(slug)}` }),
+      transformResponse: (res: unknown): Product => {
+        const n = normalizeProduct(res as ApiProduct);
+        if ((!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url) {
+          return { ...n, gallery_urls: [n.image_url] };
+        }
+        return n;
+      },
       providesTags: (r) =>
         r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
     }),
@@ -261,10 +294,57 @@ export const productsApi = baseApi.injectEndpoints({
   overrideExisting: true,
 });
 
+// --- Alt tipler ---
+export type Review = {
+  id: string;
+  product_id: string;
+  user_id?: string | null;
+  rating: number;
+  comment?: string | null;
+  is_active?: 0 | 1 | boolean;
+  customer_name?: string | null;
+  review_count?: never; // sadece type ayrımı için
+  review_date: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Faq = {
+  id: string;
+  product_id: string;
+  question: string;
+  answer: string;
+  display_order: number;
+  is_active: 0 | 1 | boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProductOption = {
+  id: string;
+  product_id: string;
+  option_name: string;
+  option_values: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type Stock = {
+  id: string;
+  product_id: string;
+  code: string;
+  is_used: 0 | 1 | boolean;
+  used_at?: string | null;
+  created_at: string;
+  order_item_id?: string | null;
+};
+
+// Hooks
 export const {
   useListProductsQuery,
-  useGetProductByIdQuery,
-  useGetProductBySlugQuery,
+  useGetProductQuery,        // ✅ birleşik (id veya slug)
+  useGetProductByIdQuery,    // backward-compat
+  useGetProductBySlugQuery,  // backward-compat
   useListProductFaqsQuery,
   useListProductReviewsQuery,
   useListProductOptionsQuery,

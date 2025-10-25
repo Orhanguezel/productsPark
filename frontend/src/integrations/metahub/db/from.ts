@@ -1,5 +1,6 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/from.ts
+// Tek origin: tüm tablolar aynı BASE_URL üzerinden istenir.
 // (lean: tipler ve normalize ayrı dosyalarda)
 // =============================================================
 
@@ -9,25 +10,22 @@ export type { KnownTables, TableRow, UnknownRow } from "./types";
 export type {
   ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow,
   PopupRow, UserRoleRow, TopbarSettingRow, BlogPostRow, CouponRow, CartItemRow,
-  CustomPageView, SupportTicketView, TicketReplyView,ProfileRow,WalletTransactionRow,WalletDepositRequestRow,
+  CustomPageView, SupportTicketView, TicketReplyView, ProfileRow, WalletTransactionRow, WalletDepositRequestRow,
   OrderRow, OrderItemRow
 } from "./types";
 
-/** BASE URL'ler */
-const RAW_EDGE_URL =
-  (import.meta.env.VITE_METAHUB_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
-const RAW_APP_URL =
-  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+/** BASE URL — tek merkez */
+const RAW_BASE_URL =
+  ((import.meta.env.VITE_API_URL as string | undefined) ||
+   (import.meta.env.VITE_METAHUB_URL as string | undefined) ||
+   ""
+  ).replace(/\/+$/, "");
 
-// /api fallback YOK.
-export const EDGE_URL = RAW_EDGE_URL;
-export const APP_URL = RAW_APP_URL;
+export const BASE_URL = RAW_BASE_URL;
 
-// “app” base boşsa edge’e düş (tek origin senaryosu için)
-const BASE_OF = {
-  edge: EDGE_URL,
-  app: APP_URL || EDGE_URL,
-} as const;
+// Eski isimlerle uyumluluk (dışarıdan import varsa kırılmasın)
+export const EDGE_URL = BASE_URL;
+export const APP_URL  = BASE_URL;
 
 export type ResultError = { message: string; status?: number; raw?: unknown };
 export type FetchResult<T> = { data: T | null; error: ResultError | null; count?: number };
@@ -42,47 +40,51 @@ type Order = { col: string; ascending?: boolean };
 type SelectOpts = { count?: "exact" | "planned" | "estimated"; head?: boolean };
 type Op = "select" | "insert" | "update" | "delete";
 
-/** Hangi tablo hangi BASE'e gidecek? */
-type BaseKind = "edge" | "app";
-type TableCfg = { path: string; base: BaseKind };
+/** Tabloların yol map'i (hepsi aynı BASE_URL’e gider) */
+const TABLES: Record<KnownTables, string> = {
+  // products & relatives
+  products: "/products",
+  product_stock: "/product_stock",
+  product_reviews: "/product_reviews",
+  product_faqs: "/product_faqs",
+  product_variants: "/product_variants",
+  product_options: "/product_options",
+  product_option_values: "/product_option_values",
 
-const TABLES: Record<KnownTables, TableCfg> = {
-  // EDGE
-  products: { path: "/products", base: "edge" },
-  categories: { path: "/categories", base: "edge" },
-  orders: { path: "/orders", base: "edge" },
-  order_items: { path: "/order_items", base: "edge" },
-  cart_items: { path: "/cart_items", base: "edge" },
-  coupons: { path: "/coupons", base: "edge" },
-  blog_posts: { path: "/blog_posts", base: "edge" },
-  product_stock: { path: "/product_stock", base: "edge" },
-  product_reviews: { path: "/product_reviews", base: "edge" },
-  product_faqs: { path: "/product_faqs", base: "edge" },
-  profiles: { path: "/profiles", base: "edge" },
-  wallet_deposit_requests: { path: "/wallet_deposit_requests", base: "app" },
-  payment_requests: { path: "/payment_requests", base: "edge" },
-  product_variants: { path: "/product_variants", base: "edge" },
-  product_options: { path: "/product_options", base: "edge" },
-  product_option_values: { path: "/product_option_values", base: "edge" },
+  // content
+  categories: "/categories",
+  blog_posts: "/blog_posts",
+  custom_pages: "/custom_pages",
 
-  // APP
-  site_settings: { path: "/site_settings", base: "app" },
-  topbar_settings: { path: "/topbar_settings", base: "app" },
-  popups: { path: "/popups", base: "app" },
-  email_templates: { path: "/email_templates", base: "app" },
-  menu_items: { path: "/menu_items", base: "app" },
-  footer_sections: { path: "/footer_sections", base: "app" },
-  custom_pages: { path: "/custom_pages", base: "app" },
-  payment_providers: { path: "/payment_providers", base: "app" },
-  payment_sessions: { path: "/payment_sessions", base: "app" },
-  uploads: { path: "/storage/uploads", base: "app" },
-  notifications: { path: "/notifications", base: "app" },
-  activity_logs: { path: "/activity_logs", base: "app" },
-  audit_events: { path: "/audit_events", base: "app" },
-  telemetry_events: { path: "/telemetry/events", base: "app" },
-  user_roles: { path: "/user_roles", base: "app" },
-  support_tickets: { path: "/support_tickets", base: "app" },
-  ticket_replies: { path: "/ticket_replies", base: "app" },
+  // commerce
+  orders: "/orders",
+  order_items: "/order_items",
+  cart_items: "/cart_items",
+  coupons: "/coupons",
+  wallet_deposit_requests: "/wallet_deposit_requests",
+  payment_requests: "/payment_requests",
+  payment_providers: "/payment_providers",
+  payment_sessions: "/payment_sessions",
+  wallet_transactions: "/wallet_transactions",
+
+  // site config
+  site_settings: "/site_settings",
+  topbar_settings: "/topbar_settings",
+  popups: "/popups",
+  email_templates: "/email_templates",
+  menu_items: "/menu_items",
+  footer_sections: "/footer_sections",
+  uploads: "/storage/uploads",
+
+  // user & ops
+  profiles: "/profiles",
+  notifications: "/notifications",
+  activity_logs: "/activity_logs",
+  audit_events: "/audit_events",
+  telemetry_events: "/telemetry/events",
+  user_roles: "/user_roles",
+  support_tickets: "/support_tickets",
+  ticket_replies: "/ticket_replies",
 };
 
 function joinUrl(base: string, path: string): string {
@@ -97,17 +99,6 @@ function toQS(params: Record<string, unknown>): string {
     usp.set(k, String(v));
   });
   return usp.toString();
-}
-
-function boolTo01(v: unknown): 0 | 1 | undefined {
-  if (typeof v === "boolean") return v ? 1 : 0;
-  if (typeof v === "number") return v ? 1 : 0;
-  if (typeof v === "string") {
-    const s = v.trim().toLowerCase();
-    if (["1", "true", "yes", "on"].includes(s)) return 1;
-    if (["0", "false", "no", "off"].includes(s)) return 0;
-  }
-  return undefined;
 }
 
 function readCountFromHeaders(res: Response): number | undefined {
@@ -132,7 +123,7 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
   private _op: Op = "select";
   private _insertPayload?: UnknownRow | UnknownRow[];
   private _updatePayload?: Partial<UnknownRow>;
-  private _preferReturn?: "representation" | "minimal"; // ← yeni
+  private _preferReturn?: "representation" | "minimal"; // insert/update dönüş tercih
 
   constructor(table: string) {
     this.table = table;
@@ -143,7 +134,9 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
   select(cols: string, opts?: SelectOpts): this;
   select(cols?: string, opts?: SelectOpts): this {
     const given = (typeof cols === "string" ? cols : "").trim();
-    this._select = given.length > 0 ? given.split(",").map(s => s.trim()).filter(Boolean).join(",") : "*";
+    this._select = given.length > 0
+      ? given.split(",").map(s => s.trim()).filter(Boolean).join(",")
+      : "*";
     if (opts) this._selectOpts = opts;
 
     // insert/update sonrası .select() çağrılırsa oluşturulan kaydı istemek için
@@ -151,7 +144,7 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
     return this;
   }
 
-  eq(col: string, val: unknown) { this._filters.push({ type: "eq", col, val }); return this; }
+  eq(col: string, val: unknown)  { this._filters.push({ type: "eq",  col, val }); return this; }
   neq(col: string, val: unknown) { this._filters.push({ type: "neq", col, val }); return this; }
   in(col: string, val: unknown[]) { this._filters.push({ type: "in", col, val }); return this; }
   order(col: string, o?: { ascending?: boolean }) { this._order = { col, ascending: o?.ascending }; return this; }
@@ -177,73 +170,81 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
     );
   }
 
+  private buildUrl(): { url: string; path: string } | null {
+    const path = TABLES[this.table as KnownTables];
+    if (!path) return null;
+
+    const params: Record<string, unknown> = { select: this._select };
+
+    // 🔹 SADE (legacy) FİLTRE FORMAT
+    //  - eq   → col=value
+    //  - neq  → col! (veya backend'e göre col!=) = value
+    //  - in   → col_in=a,b,c
+    //
+    // Not: boolean’ları 0/1’e çevirmiyoruz; true/false olarak gönderiyoruz.
+    for (const f of this._filters) {
+      if (f.type === "eq")  params[f.col] = f.val;               // ör: is_active=true
+      if (f.type === "neq") params[`${f.col}!`] = f.val;         // ör: status!=cancelled (BE eşlemesine göre)
+      if (f.type === "in")  params[`${f.col}_in`] = (Array.isArray(f.val) ? f.val : []).map(String).join(",");
+    }
+
+    if (this._order) params.order = this._order.ascending === false ? `${this._order.col}.desc` : `${this._order.col}.asc`;
+    if (this._limit != null) params.limit = this._limit;
+    if (this._range) { params.offset = this._range[0]; params.limit = (this._range[1] - this._range[0]) + 1; }
+
+    const url = `${joinUrl(BASE_URL, path)}?${toQS(params)}`;
+    return { url, path };
+  }
+
+  private getHeadersForSelect(): HeadersInit {
+    const headers: Record<string, string> = {};
+    if (this._selectOpts.count) headers["Prefer"] = `count=${this._selectOpts.count}`;
+    return headers;
+  }
+
+  private parseBodyToRows(json: unknown): UnknownRow[] | null {
+    if (Array.isArray(json)) return json as UnknownRow[];
+    if (json && typeof json === "object") {
+      const obj = json as Record<string, unknown>;
+      // data varsa onu, yoksa objenin kendisini tekil kayıt olarak al
+      const payload = (Object.prototype.hasOwnProperty.call(obj, "data") ? obj["data"] : json) as unknown;
+      if (Array.isArray(payload)) return payload as UnknownRow[];
+      if (payload && typeof payload === "object") return [payload as UnknownRow];
+      return null;
+    }
+    return null;
+  }
+
   private async execute(): Promise<FetchResult<TRow[]>> {
     try {
-      const cfg = TABLES[this.table as KnownTables];
-      if (!cfg) return { data: null, error: { message: `unknown_table_${this.table}` } };
+      const built = this.buildUrl();
+      if (!built) return { data: null, error: { message: `unknown_table_${this.table}` } };
+      const { url, path } = built;
 
-      const primaryBase = BASE_OF[cfg.base]; // ← app boşsa edge’e düşer
-      const params: Record<string, unknown> = { select: this._select };
-
-      for (const f of this._filters) {
-        if (f.type === "eq") params[f.col] = f.col.startsWith("is_") ? (boolTo01(f.val) ?? f.val) : f.val;
-        if (f.type === "neq") params[`${f.col}!`] = f.col.startsWith("is_") ? (boolTo01(f.val) ?? f.val) : f.val;
-        if (f.type === "in") params[`${f.col}_in`] = (Array.isArray(f.val) ? f.val : []).map(String).join(",");
-      }
-      if (this._order) params.order = this._order.ascending === false ? `${this._order.col}.desc` : `${this._order.col}.asc`;
-      if (this._limit != null) params.limit = this._limit;
-      if (this._range) { params.offset = this._range[0]; params.limit = (this._range[1] - this._range[0]) + 1; }
-
-      // SELECT
       if (this._op === "select") {
-        const altBase = cfg.base === "app" ? EDGE_URL : (APP_URL || EDGE_URL);
-        const bases = [primaryBase, altBase].filter(Boolean).filter((b, i, a) => a.indexOf(b) === i);
+        const res = await fetch(url, { credentials: "include", headers: this.getHeadersForSelect() });
 
-        let lastErr: ResultError | null = null;
-
-        for (let i = 0; i < bases.length; i++) {
-          const base = bases[i]!;
-          const url = `${joinUrl(base, cfg.path)}?${toQS(params)}`;
-          const res = await fetch(url, { credentials: "include" });
-
-          if (res.status === 404) {
-            if (i < bases.length - 1) continue;
-            return { data: [] as unknown as TRow[], error: null, count: 0 };
-          }
-
-          if (!res.ok) {
-            lastErr = { message: `request_failed_${res.status}`, status: res.status };
-            if (i < bases.length - 1) continue;
-            return { data: null, error: lastErr };
-          }
-
-          const count = this._selectOpts.head ? readCountFromHeaders(res) : undefined;
-
-          let json: unknown = null;
-          try {
-            json = await res.json();
-          } catch {
-            json = null;
-          }
-
-          const rowsUnknown: unknown =
-            Array.isArray(json) ? json :
-            json && typeof json === "object" ? (json as { data?: unknown }).data : null;
-
-          let data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
-
-          if (data) {
-            data = normalizeTableRows(cfg.path, data as unknown as UnknownRow[]) as unknown as TRow[];
-          }
-
-          return { data, error: null, count };
+        if (res.status === 404) {
+          // Tek backend: 404'te boş data döndürüyoruz (eski davranış)
+          return { data: [] as unknown as TRow[], error: null, count: 0 };
+        }
+        if (!res.ok) {
+          return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
         }
 
-        return { data: null, error: lastErr ?? { message: "request_failed" } };
-      }
+        const count = this._selectOpts.head ? readCountFromHeaders(res) : readCountFromHeaders(res);
 
-      // Ortak URL
-      const url = `${joinUrl(primaryBase, cfg.path)}?${toQS(params)}`;
+        let json: unknown = null;
+        try { json = await res.json(); } catch { json = null; }
+
+        let data = this.parseBodyToRows(json) as (TRow[] | null);
+
+        if (data) {
+          data = normalizeTableRows(path, data as unknown as UnknownRow[]) as unknown as TRow[];
+        }
+
+        return { data, error: null, count };
+      }
 
       // INSERT
       if (this._op === "insert") {
@@ -258,15 +259,11 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
         });
         if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
 
-        // 204 veya boş gövde güvenli parse
         let json: unknown = null;
         try { json = await res.json(); } catch { json = null; }
 
-        const rowsUnknown: unknown =
-          Array.isArray(json) ? json :
-          json && typeof json === "object" ? (json as { data?: unknown }).data : null;
-
-        const data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
+        let data = this.parseBodyToRows(json) as (TRow[] | null);
+        if (data) data = normalizeTableRows(path, data as unknown as UnknownRow[]) as unknown as TRow[];
         return { data, error: null };
       }
 
@@ -286,11 +283,8 @@ class QB<TRow extends UnknownRow = UnknownRow> implements PromiseLike<FetchResul
         let json: unknown = null;
         try { json = await res.json(); } catch { json = null; }
 
-        const rowsUnknown: unknown =
-          Array.isArray(json) ? json :
-          json && typeof json === "object" ? (json as { data?: unknown }).data : null;
-
-        const data = (Array.isArray(rowsUnknown) ? rowsUnknown : rowsUnknown ? [rowsUnknown] : null) as TRow[] | null;
+        let data = this.parseBodyToRows(json) as (TRow[] | null);
+        if (data) data = normalizeTableRows(path, data as unknown as UnknownRow[]) as unknown as TRow[];
         return { data, error: null };
       }
 
@@ -320,6 +314,7 @@ export function from<TRow extends UnknownRow = UnknownRow>(table: string): FromP
 export function from(table: string): FromPromise<UnknownRow> {
   return new QB<UnknownRow>(table) as unknown as FromPromise<UnknownRow>;
 }
+
 // overload’lı tip tanımı (export’la)
 export type FromFn =
   (<TName extends keyof typeof TABLES>(table: TName) => FromPromise<TableRow<TName> & UnknownRow>) &

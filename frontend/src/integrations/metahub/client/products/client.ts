@@ -1,4 +1,3 @@
-// src/integrations/metahub/client/products/client.ts
 import { store } from "@/store";
 import { normalizeError } from "@/integrations/metahub/core/errors";
 import {
@@ -9,15 +8,20 @@ import {
   type ProductOption,
   type Stock,
 } from "@/integrations/metahub/rtk/endpoints/products.endpoints";
-import {
-  setLastQuery as setProductsLastQuery,
-  setSelectedId as setProductSelectedId,
-  reset as resetProductsState,
-  type ListProductsParams,
-} from "@/integrations/metahub/rtk/slices/products/slice";
 
-export type Product = ApiProduct;
+// ✅ lokal param tipi (UI'de ihtiyaç varsa buradan re-export edebilirsin)
+export type ListProductsParams = {
+  category_id?: string;
+  is_active?: boolean | 0 | 1;
+  q?: string;
+  limit?: number;
+  offset?: number;
+  sort?: "price" | "rating" | "created_at";
+  order?: "asc" | "desc";
+  slug?: string;
+};
 
+/* ---------------- helpers ---------------- */
 type EndpointListParams = {
   category_id?: string;
   is_active?: boolean | 0 | 1;
@@ -29,7 +33,17 @@ type EndpointListParams = {
   slug?: string;
 };
 
-function coerceIsActive(v: unknown): boolean | 0 | 1 | undefined {
+const coerceSort = (
+  sort?: EndpointListParams["sort"]
+): "price" | "created_at" | undefined => {
+  if (sort === "price") return "price";
+  if (sort === "created_at") return "created_at";
+  // backend rating desteklemiyorsa created_at'e düş
+  if (sort === "rating") return "created_at";
+  return undefined;
+};
+
+const coerceIsActive = (v: unknown): boolean | 0 | 1 | undefined => {
   if (v == null) return undefined;
   if (typeof v === "boolean") return v;
   if (typeof v === "number") return v ? 1 : 0;
@@ -39,33 +53,35 @@ function coerceIsActive(v: unknown): boolean | 0 | 1 | undefined {
     if (["0", "false", "no", "off"].includes(s)) return 0;
   }
   return undefined;
-}
+};
 
-function toNumberOrUndefined(v: unknown): number | undefined {
+const toNumberOrUndefined = (v: unknown): number | undefined => {
   if (v == null) return undefined;
   if (typeof v === "number") return v;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
+    return Number(v);
+  }
   return undefined;
-}
+};
 
-function toEndpointListParams(p?: ListProductsParams | null): EndpointListParams {
-  if (!p) return {};
-  return {
-    category_id: typeof p.category_id === "string" ? p.category_id : undefined,
-    is_active: coerceIsActive(p.is_active),
-    q: typeof p.q === "string" ? p.q : undefined,
-    limit: toNumberOrUndefined(p.limit),
-    offset: toNumberOrUndefined(p.offset),
-    sort: p.sort === "price" || p.sort === "rating" || p.sort === "created_at" ? p.sort : undefined,
-    order: p.order === "asc" || p.order === "desc" ? p.order : undefined,
-    slug: typeof p.slug === "string" ? p.slug : undefined,
-  };
-}
+const toEndpointListParams = (p?: ListProductsParams | null): EndpointListParams =>
+  !p
+    ? {}
+    : {
+        category_id: typeof p.category_id === "string" ? p.category_id : undefined,
+        is_active: coerceIsActive(p.is_active),
+        q: typeof p.q === "string" ? p.q : undefined,
+        limit: toNumberOrUndefined(p.limit),
+        offset: toNumberOrUndefined(p.offset),
+        sort: coerceSort(p.sort as EndpointListParams["sort"]),
+        order: p.order === "asc" || p.order === "desc" ? p.order : undefined,
+        slug: typeof p.slug === "string" ? p.slug : undefined,
+      };
 
+/* ---------------- client ---------------- */
 export const products = {
   async list(params?: ListProductsParams) {
     try {
-      store.dispatch(setProductsLastQuery(params ?? null));
       const safe = toEndpointListParams(params ?? null);
       const data = await store
         .dispatch(productsApi.endpoints.listProducts.initiate(safe))
@@ -77,11 +93,11 @@ export const products = {
     }
   },
 
-  async getById(id: string) {
+  // ✅ birleşik detay (id veya slug)
+  async get(idOrSlug: string) {
     try {
-      store.dispatch(setProductSelectedId(id));
       const data = await store
-        .dispatch(productsApi.endpoints.getProductById.initiate(id)) // <-- string
+        .dispatch(productsApi.endpoints.getProduct.initiate(idOrSlug))
         .unwrap();
       return { data: data as ApiProduct, error: null as null };
     } catch (e) {
@@ -90,10 +106,25 @@ export const products = {
     }
   },
 
-  async getBySlug(slug: string) {
+  // (geri uyum) — içerde birleşik rotayı kullanmak istersen bunu da aynı şekilde yönlendirebilirsin
+  async getById(id: string) {
     try {
       const data = await store
-        .dispatch(productsApi.endpoints.getProductBySlug.initiate(slug)) // <-- string
+        .dispatch(productsApi.endpoints.getProduct.initiate(id))
+        .unwrap();
+      return { data: data as ApiProduct, error: null as null };
+    } catch (e) {
+      const { message } = normalizeError(e);
+      return { data: null as ApiProduct | null, error: { message } };
+    }
+  },
+
+  // (geri uyum)
+  async getBySlug(slug: string) {
+    try {
+      // Unified rota ile de çalışır:
+      const data = await store
+        .dispatch(productsApi.endpoints.getProduct.initiate(slug))
         .unwrap();
       return { data: data as ApiProduct, error: null as null };
     } catch (e) {
@@ -106,7 +137,9 @@ export const products = {
     async list(product_id: string, only_active = true) {
       try {
         const data = await store
-          .dispatch(productsApi.endpoints.listProductFaqs.initiate({ product_id, only_active }))
+          .dispatch(
+            productsApi.endpoints.listProductFaqs.initiate({ product_id, only_active })
+          )
           .unwrap();
         return { data: data as Faq[], error: null as null };
       } catch (e) {
@@ -120,7 +153,9 @@ export const products = {
     async list(product_id: string, only_active = true) {
       try {
         const data = await store
-          .dispatch(productsApi.endpoints.listProductReviews.initiate({ product_id, only_active }))
+          .dispatch(
+            productsApi.endpoints.listProductReviews.initiate({ product_id, only_active })
+          )
           .unwrap();
         return { data: data as Review[], error: null as null };
       } catch (e) {
@@ -159,6 +194,6 @@ export const products = {
   },
 
   reset() {
-    store.dispatch(resetProductsState());
+    store.dispatch(productsApi.util.resetApiState());
   },
 };
