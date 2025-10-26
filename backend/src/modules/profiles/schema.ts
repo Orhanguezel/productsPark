@@ -4,7 +4,6 @@ import {
   varchar,
   text,
   datetime,
-  decimal,           // ✅ eklendi
   foreignKey,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
@@ -12,7 +11,8 @@ import { users } from '@/modules/auth/schema';
 
 /**
  * profiles.id = users.id (UUID)
- * Adres alanları opsiyonel; wallet_balance zorunlu (default 0.00)
+ * Adres alanları opsiyonel.
+ * NOT: wallet_balance BU TABLODA YOK (users tablosunda).
  */
 export const profiles = mysqlTable(
   'profiles',
@@ -27,19 +27,13 @@ export const profiles = mysqlTable(
     country: varchar('country', { length: 128 }),
     postal_code: varchar('postal_code', { length: 32 }),
 
-    // ✅ cüzdan bakiyesi — DB ile eşleşsin
-    wallet_balance: decimal('wallet_balance', { precision: 10, scale: 2 })
+    created_at: datetime('created_at', { fsp: 3 })
       .notNull()
-      .default('0.00')
-      .$type<number>(),        // TS seviyesinde number (driver string döndürse de tip güvenliği)
+      .default(sql`CURRENT_TIMESTAMP(3)`),
 
-    created_at: datetime('created_at')
+    updated_at: datetime('updated_at', { fsp: 3 })
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-
-    updated_at: datetime('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`)
+      .default(sql`CURRENT_TIMESTAMP(3)`)
       .$onUpdateFn(() => new Date()),
   },
   (t) => [

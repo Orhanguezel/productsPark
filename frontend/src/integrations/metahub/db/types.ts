@@ -181,7 +181,8 @@ export type CartItemRow = {
   user_id?: string | null;
   product_id: string;
   quantity: number;
-  options?: Record<string, unknown> | null;
+  /** FE’nin okuduğu isim */
+  selected_options?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string;
   products?: {
@@ -201,6 +202,8 @@ export type CartItemRow = {
     categories?: { id: string; name: string } | null;
   } | null;
 };
+
+
 
 export type BlogPostRow = {
   id: string;
@@ -310,13 +313,45 @@ export type ProfileRow = {
   updated_at: string; // ISO
 };
 
-// DB alan adları ile birebir
+/** ---- VIEW tipleri (UI’nin beklediği) ---- */
+export interface OrderView {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string | null;
+  total_amount: number;
+  discount_amount: number;
+  final_amount: number;
+  status: string;
+  payment_status: string;
+  payment_method: string | null;
+  notes: string | null;
+  created_at: string;
+  user_id: string;
+}
+
+export interface OrderItemView {
+  id: string;
+  product_name: string;
+  quantity: number;
+  product_price: number;
+  total_price: number;
+  activation_code: string | null;
+  delivery_status: string | null;
+  selected_options?: Record<string, string> | null;
+  product_id: string | null;
+  products?: { file_url: string | null; delivery_type: string | null };
+  delivery_content?: string | null; // DB’de olmayabilir
+}
+
+/** ---- DB satır tipleri (opsiyonel, istiyorsan tut) ---- */
 export interface OrderRow {
   id: string;
   order_number: string;
-  customer_name?: string; // DB’de yok; eğer orders tablosunda yoksa opsiyonel bırak
-  customer_email?: string; // DB’de yok; opsiyonel
-  customer_phone?: string | null; // DB’de yok; opsiyonel
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string | null;
   subtotal: number;
   discount: number;
   total: number;
@@ -335,14 +370,10 @@ export interface OrderItemRow {
   price: number;
   total: number;
   activation_code: string | null;
-  // delivery_content DB’de yok → kaldır/opsiyonel
   delivery_status: string | null;
   options?: Record<string, string> | null;
   product_id: string | null;
-  products?: {
-    file_url: string | null;
-    delivery_type: string | null;
-  };
+  products?: { file_url: string | null; delivery_type: string | null };
 }
 
 /** Ürün satırı (UI'nın beklediği normalize edilmiş tip) */
@@ -543,8 +574,6 @@ export type TableRow<TName extends string> = TName extends "categories"
   ? WalletDepositRequestRow
   : TName extends "profiles"
   ? ProfileRow
-  : TName extends "orders"
-  ? OrderRow
-  : TName extends "order_items"
-  ? OrderItemRow
+  : TName extends "orders" ? OrderView
+  : TName extends "order_items" ? OrderItemView
   : UnknownRow;

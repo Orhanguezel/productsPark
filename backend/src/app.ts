@@ -30,6 +30,8 @@ import { registerFooterSections } from "@/modules/footerSections/router";
 import { registerSupport } from "@/modules/support/router";
 import { registerWalletTransactions } from "@/modules/wallet_transactions/router";
 import { registerWalletDeposits } from "@/modules/wallet_deposit_requests/router";
+import { registerPayments } from '@/modules/payments/router';
+
 
 export async function createApp() {
   const { default: buildFastify } =
@@ -62,11 +64,13 @@ export async function createApp() {
     },
   });
 
-  // JWT (Authorization header + cookie)
-  await app.register(jwt, {
-    secret: env.JWT_SECRET,
-    cookie: { cookieName: 'access_token', signed: false },
-  });
+// JWT (Authorization header + cookie)
+await app.register(jwt, {
+  secret: env.JWT_SECRET,
+  cookie: { cookieName: 'access_token', signed: false },
+});
+
+
 
   // 🔒 Guard: artık sadece config.auth === true olan rotaları korur
   await app.register(authPlugin);
@@ -103,6 +107,7 @@ export async function createApp() {
   await registerSupport(app);
   await registerWalletTransactions(app);
   await registerWalletDeposits(app);
+  await registerPayments(app);
 
   registerErrorHandlers(app);
   return app;

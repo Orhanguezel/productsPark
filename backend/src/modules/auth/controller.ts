@@ -59,11 +59,13 @@ function getHost(req: FastifyRequest): string {
 }
 
 function bearerFrom(req: FastifyRequest): string | null {
-  const auth = getHeader(req, 'authorization');
-  if (auth && auth.startsWith('Bearer ')) return auth.slice(7);
-  const cookieToken = (req.cookies as Record<string, string | undefined> | undefined)?.access_token;
-  return cookieToken && cookieToken.length > 10 ? cookieToken : null;
+  const auth = (req.headers.authorization ?? '') as string;
+  if (auth.startsWith('Bearer ')) return auth.slice(7);
+  const cookies = (req.cookies ?? {}) as Record<string, string | undefined>;
+  const token = cookies.access_token ?? cookies.accessToken;
+  return token && token.length > 10 ? token : null;
 }
+
 
 function baseUrlFrom(req: FastifyRequest): string {
   const pub = (env as unknown as Record<string, string | undefined>).PUBLIC_URL;
@@ -119,29 +121,32 @@ async function ensureProfileRow(
 const ACCESS_MAX_AGE = 60 * 15; // 15 dk
 const REFRESH_MAX_AGE = 60 * 60 * 24 * 7; // 7 gün
 
-function setAccessCookie(reply: FastifyReply, token: string) {
-  reply.setCookie('access_token', token, {
+function cookieBase(devSecure = false) {
+  return {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: ACCESS_MAX_AGE,
-  });
+  };
+}
+
+function setAccessCookie(reply: FastifyReply, token: string) {
+  const base = { ...cookieBase(), maxAge: ACCESS_MAX_AGE };
+  // iki isim de yazılsın (geçiş dönemi uyumu)
+  reply.setCookie('access_token', token, base);
+  reply.setCookie('accessToken', token, base);
 }
 
 function setRefreshCookie(reply: FastifyReply, token: string) {
-  reply.setCookie('refresh_token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: REFRESH_MAX_AGE,
-  });
+  const base = { ...cookieBase(), maxAge: REFRESH_MAX_AGE };
+  reply.setCookie('refresh_token', token, base);
 }
 
 function clearAuthCookies(reply: FastifyReply) {
-  reply.clearCookie('access_token', { path: '/' });
-  reply.clearCookie('refresh_token', { path: '/' });
+  const base = { path: '/' };
+  reply.clearCookie('access_token', base);
+  reply.clearCookie('accessToken', base);
+  reply.clearCookie('refresh_token', base);
 }
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
