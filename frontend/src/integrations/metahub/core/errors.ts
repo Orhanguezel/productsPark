@@ -1,5 +1,3 @@
-// src/integrations/metahub/core/errors.ts
-
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { SerializedError } from "@reduxjs/toolkit";
 
@@ -15,24 +13,47 @@ export function normalizeError(err: unknown): { message: string; status?: number
     const status = typeof statusRaw === "number" ? statusRaw : undefined;
 
     const data = (err as MaybeData).data;
-    if (isObject(data) && "message" in data) {
-      const m = (data as MaybeMessage).message;
-      if (typeof m === "string") return { message: m, status };
+
+    // data string ise (Fastify/plain) → direkt göster
+    if (typeof data === "string" && data.trim()) {
+      return { message: trimMsg(data), status };
     }
 
-    const e = (err as MaybeError).error;
-    if (typeof e === "string") return { message: e, status };
+    // data object ise yaygın alanları sırayla dene
+    if (isObject(data)) {
+      const cand =
+        pickStr(data, "message") ??
+        pickStr(data, "error") ??
+        pickStr(data, "detail") ??
+        pickStr(data, "hint") ??
+        pickStr(data, "description") ??
+        pickStr(data, "msg");
+      if (cand) return { message: trimMsg(cand), status };
 
-    return { message: "request_failed", status };
+      // mesaj alanı yoksa objeyi kısaltıp döndür
+      try {
+        return { message: trimMsg(JSON.stringify(data)), status };
+      } catch {
+        /* noop */
+      }
+    }
+
+    // RTK bazen `error` alanına string koyabilir
+    const e = (err as MaybeError).error;
+    if (typeof e === "string" && e.trim()) {
+      return { message: trimMsg(e), status };
+    }
+
+    return { message: status ? `request_failed_${status}` : "request_failed", status };
   }
 
   // SerializedError: { message?, name?, stack? }
   if (isObject(err) && "message" in err) {
     const m = (err as MaybeMessage).message;
-    if (typeof m === "string") return { message: m };
+    if (typeof m === "string") return { message: trimMsg(m) };
   }
 
-  if (err instanceof Error) return { message: err.message };
+  if (err instanceof Error) return { message: trimMsg(err.message) };
   return { message: "unknown_error" };
 }
 
@@ -40,5 +61,20 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-// Yardımcı tip (istersen dışa açabilirsin)
+function pickStr(obj: Record<string, unknown>, key: string): string | null {
+  const v = obj[key];
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
+function trimMsg(s: string, max = 280): string {
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+// 🔹 RTK helper'larının beklediği ortak sonuç tipi
+export type FetchResult<T> = {
+  data: T | null;
+  error: { message: string; status?: number } | null;
+};
+
+// RTK union tipi (gerekirse)
 export type RTKError = FetchBaseQueryError | SerializedError | Record<string, unknown>;

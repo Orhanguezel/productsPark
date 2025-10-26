@@ -1,3 +1,5 @@
+// src/integrations/metahub/realtime/channel.ts
+
 const BASE_URL = (import.meta.env.VITE_API_URL as string) ?? "/api";
 const POLL_MS = Number(import.meta.env.VITE_METAHUB_REALTIME_POLL_MS ?? 0); // 0 => kapalı
 

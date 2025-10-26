@@ -55,6 +55,7 @@ import { footer_sections } from "./client/footerSections/client";
 import { custom_pages } from "./client/customPages/client";
 import { support_tickets } from "./client/support/client";
 import { profilesClient } from "./client/profiles/client";
+import { rpc } from "./client/rpc/client";
 
 
 
@@ -100,6 +101,7 @@ export const metahub = {
   // facades
   auth,
   functions,
+  rpc,
   products,
   categories,
   settings,

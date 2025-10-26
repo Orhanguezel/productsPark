@@ -1,8 +1,14 @@
-// src/integrations/metahub/core/public-api.ts
+// =============================================================
+// FILE: src/integrations/metahub/core/public-api.ts
+// =============================================================
+
 import type { Session, User } from "./types";
 export type { Session, User } from "./types";
-import type { FromPromise } from "../db/from";
+
+import type { FromFn } from "../db/from";
 import type { ChannelStatus } from "../realtime/channel";
+
+/* ========================= Auth Facade ========================= */
 
 export type AuthFacade = {
   signInWithPassword(input: {
@@ -27,25 +33,17 @@ export type AuthFacade = {
     options?: { idToken?: string; redirectTo?: string };
   }): Promise<{ error: { message: string } | null }>;
 
-  /** Aktif oturumu döner (cookie ya da mevcut store’a göre). */
   getSession(): Promise<{ data: { session: Session | null } }>;
 
-  /** Store değişimini dinlemek için. */
   onAuthStateChange(
     cb: (event: "SIGNED_IN" | "SIGNED_OUT" | "TOKEN_REFRESHED", session: Session | null) => void
   ): { data: { subscription: { unsubscribe(): void } } };
 
-  /** Çıkış yap. */
   signOut(): Promise<void>;
 
-  // ---- UI’de kullanılan ekler ----
-  /** Kullanıcı bilgisini döner (gerekirse getSession üzerinden). */
   getUser(): Promise<{ data: { user: User | null } }>;
-
-  /** Basit durum: { authenticated, is_admin } */
   getStatus(): Promise<{ data: { authenticated: boolean; is_admin: boolean } }>;
 
-  // ---- Supabase uyumlu ilaveler ----
   resetPasswordForEmail(
     email: string,
     opts?: { redirectTo?: string }
@@ -56,20 +54,59 @@ export type AuthFacade = {
   ): Promise<{ data?: { user: User | null }; error: { message: string } | null }>;
 };
 
-export type FunctionsFacade = {
-  invoke<T = unknown>(
-    name: string,
-    args?: { body?: unknown }   // <- opsiyonel
-  ): Promise<{ data: T | null; error: { message: string; status?: number } | null }>;
+/* ========================= Functions Facade ========================= */
+
+export type InvokeOkErr<T> = {
+  data: T | null;
+  error: { message: string; status?: number } | null;
 };
 
+export type InvokeResult<T> = Promise<InvokeOkErr<T>>;
+
+export type PaytrTokenResult = {
+  success: boolean;
+  token?: string;
+  error?: string;
+};
+
+export type ShopierPaymentFormResult = {
+  success: boolean;
+  form_action?: string;
+  form_data?: Record<string, string>;
+  error?: string;
+};
+
+export interface FunctionsFacade {
+  invoke(
+    name: "paytr-get-token",
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<PaytrTokenResult>;
+
+  invoke(
+    name: "paytr-havale-get-token" | "paytr_havale_get_token",
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<PaytrTokenResult>;
+
+  invoke(
+    name: "shopier-create-payment",
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<ShopierPaymentFormResult>;
+
+  invoke<T = unknown>(name: string, args?: Readonly<{ body?: unknown }>): InvokeResult<T>;
+}
+
+/* ========================= Metahub kök tipi ========================= */
 
 export type Metahub = {
   auth: AuthFacade;
   functions: FunctionsFacade;
+
   api: typeof import("../rtk");
   baseApi: typeof import("../rtk/baseApi").baseApi;
-  from: <T = unknown>(table: string) => FromPromise<T extends User ? T : never>;
+
+  // Projedeki from() imzası
+  from: FromFn;
+
   channel: (
     name: string
   ) => {
@@ -78,6 +115,7 @@ export type Metahub = {
       cb?: (s: ChannelStatus) => void
     ): Promise<{ data: { subscription: { unsubscribe(): void } }; error: null }>;
   };
+
   removeChannel: (ch: unknown) => void;
   removeAllChannels: () => void;
 };

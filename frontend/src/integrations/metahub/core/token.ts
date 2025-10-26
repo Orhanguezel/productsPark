@@ -1,3 +1,5 @@
+// src/integrations/metahub/core/token.ts
+
 const TOKEN_KEY = "access_token";
 
 export const tokenStore = {
