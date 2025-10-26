@@ -29,6 +29,11 @@ function iso(d?: Date | string | null): string | undefined {
   const dt = typeof d === "string" ? new Date(d) : d;
   return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
 }
+function getIdFromReq(req: any): string | undefined {
+  const p = (req.params as any)?.id;
+  const q = (req.query as any)?.id;
+  return (typeof p === "string" && p) || (typeof q === "string" && q) || undefined;
+}
 
 function mapRow(row: {
   cart: typeof cartItems.$inferSelect;
@@ -41,7 +46,6 @@ function mapRow(row: {
     user_id: row.cart.user_id,
     product_id: row.cart.product_id,
     quantity: toNum(row.cart.quantity),
-    // FE'nin beklediği isim:
     selected_options: parseJson<Record<string, unknown>>(row.cart.options),
     created_at: iso(row.cart.created_at as unknown as string),
     updated_at: iso(row.cart.updated_at as unknown as string),
@@ -54,10 +58,12 @@ function mapRow(row: {
           image_url: p.image_url ?? null,
           delivery_type: p.delivery_type ?? null,
           stock_quantity: p.stock_quantity == null ? null : toNum(p.stock_quantity),
-          custom_fields: parseJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields as any)
-            ?? (Array.isArray(p.custom_fields) ? (p.custom_fields as any) : null),
-          quantity_options: parseJson<{ quantity: number; price: number }[]>(p.quantity_options as any) ?? null,
-
+          custom_fields:
+            parseJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields as any) ??
+            (Array.isArray(p.custom_fields) ? (p.custom_fields as any) : null),
+          quantity_options: parseJson<{ quantity: number; price: number }[]>(
+            p.quantity_options as any
+          ) ?? null,
           api_provider_id: p.api_provider_id ?? null,
           api_product_id: p.api_product_id ?? null,
           api_quantity: p.api_quantity == null ? null : toNum(p.api_quantity),
@@ -68,27 +74,44 @@ function mapRow(row: {
   };
 }
 
+type SortKey = "created_at" | "updated_at";
+function resolveSortAndOrder(q: CartItemListQuery, rawOrder?: string) {
+  if (rawOrder && rawOrder.includes(".")) {
+    const [col, d] = rawOrder.split(".");
+    const k: SortKey = col === "updated_at" ? "updated_at" : "created_at";
+    const dir = (d || "").toLowerCase() === "asc" ? "asc" : "desc";
+    return { sortKey: k, dir };
+  }
+  const sortKey: SortKey = q.sort === "updated_at" ? "updated_at" : "created_at";
+  const dir = (q.order as "asc" | "desc" | undefined) === "asc" ? "asc" : "desc";
+  return { sortKey, dir };
+}
+
 /** GET /cart_items */
 export const listCartItems: RouteHandler = async (req, reply) => {
   const q = cartItemListQuerySchema.parse(req.query || {}) as CartItemListQuery;
+  const rawOrder = (req.query as any)?.order as string | undefined;
+  const { sortKey, dir } = resolveSortAndOrder(q, rawOrder);
 
   let qb = db
-    .select({
-      cart: cartItems,
-      prod: products,
-      cat: categories,
-    })
+    .select({ cart: cartItems, prod: products, cat: categories })
     .from(cartItems)
     .leftJoin(products, eq(cartItems.product_id, products.id))
     .leftJoin(categories, eq(products.category_id, categories.id))
     .$dynamic();
 
-  const conditions: unknown[] = [];
-  if (q.user_id) conditions.push(eq(cartItems.user_id, q.user_id));
-  if (conditions.length === 1) qb = qb.where(conditions[0] as any);
-  else if (conditions.length > 1) qb = qb.where(and(...(conditions as any)));
+  const conds: unknown[] = [];
+  if (q.id)         conds.push(eq(cartItems.id, q.id));
+  if (q.user_id)    conds.push(eq(cartItems.user_id, q.user_id));
+  if (q.product_id) conds.push(eq(cartItems.product_id, q.product_id));
 
-  qb = qb.orderBy(q.order === "asc" ? asc((cartItems as any)[q.sort]) : desc((cartItems as any)[q.sort]));
+  if (conds.length === 1) qb = qb.where(conds[0] as any);
+  else if (conds.length > 1) qb = qb.where(and(...(conds as any)));
+
+  const orderExpr =
+    dir === "asc" ? asc((cartItems as any)[sortKey]) : desc((cartItems as any)[sortKey]);
+  qb = qb.orderBy(orderExpr);
+
   if (q.limit && q.limit > 0) qb = qb.limit(q.limit);
   if (q.offset && q.offset >= 0) qb = qb.offset(q.offset);
 
@@ -98,7 +121,8 @@ export const listCartItems: RouteHandler = async (req, reply) => {
 
 /** GET /cart_items/:id */
 export const getCartItemById: RouteHandler = async (req, reply) => {
-  const { id } = req.params as { id: string };
+  const id = getIdFromReq(req);
+  if (!id) return reply.code(400).send({ error: { message: "id_required" } });
 
   const rows = await db
     .select({ cart: cartItems, prod: products, cat: categories })
@@ -118,12 +142,12 @@ export const createCartItem: RouteHandler = async (req, reply) => {
     const body = cartItemCreateSchema.parse(req.body || {}) as CartItemCreateInput;
 
     const now = new Date();
+    const id = randomUUID();
     const toInsert: CartItemInsert = {
-      id: randomUUID(),
+      id,
       user_id: body.user_id,
       product_id: body.product_id,
       quantity: body.quantity,
-      // DB: options (string), API: selected_options
       options: body.selected_options
         ? JSON.stringify(body.selected_options)
         : body.options
@@ -140,7 +164,7 @@ export const createCartItem: RouteHandler = async (req, reply) => {
       .from(cartItems)
       .leftJoin(products, eq(cartItems.product_id, products.id))
       .leftJoin(categories, eq(products.category_id, categories.id))
-      .orderBy(desc(cartItems.created_at))
+      .where(eq(cartItems.id, id))
       .limit(1);
 
     return reply.code(201).send(mapRow(row));
@@ -150,17 +174,18 @@ export const createCartItem: RouteHandler = async (req, reply) => {
   }
 };
 
-/** PATCH /cart_items/:id */
+/** PATCH /cart_items/:id  veya  /cart_items?id=... */
 export const updateCartItem: RouteHandler = async (req, reply) => {
   try {
-    const { id } = req.params as { id: string };
+    const id = getIdFromReq(req);
+    if (!id) return reply.code(400).send({ error: { message: "id_required" } });
+
     const patch = cartItemUpdateSchema.parse(req.body || {}) as CartItemUpdateInput;
     const now = new Date();
 
     const set: Partial<CartItemInsert> = { updated_at: now };
     if (patch.quantity != null) set.quantity = patch.quantity;
 
-    // Hem selected_options hem options kabul edilir, DB'de options'a yazılır
     if (patch.selected_options !== undefined) {
       set.options = patch.selected_options ? JSON.stringify(patch.selected_options) : null;
     } else if (patch.options !== undefined) {
@@ -185,9 +210,11 @@ export const updateCartItem: RouteHandler = async (req, reply) => {
   }
 };
 
-/** DELETE /cart_items/:id */
-export const deleteCartItem: RouteHandler = async (_req, reply) => {
-  const { id } = _req.params as { id: string };
+/** DELETE /cart_items/:id  veya  /cart_items?id=... */
+export const deleteCartItem: RouteHandler = async (req, reply) => {
+  const id = getIdFromReq(req);
+  if (!id) return reply.code(400).send({ error: { message: "id_required" } });
+
   await db.delete(cartItems).where(eq(cartItems.id, id));
   return reply.code(204).send();
 };

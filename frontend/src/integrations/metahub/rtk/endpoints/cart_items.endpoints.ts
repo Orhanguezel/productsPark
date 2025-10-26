@@ -1,25 +1,18 @@
-// =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/cart_items.endpoints.ts
-// =============================================================
-import { baseApi as baseApi2 } from "../baseApi";
+import { baseApi } from "../baseApi";
 
+/* utils */
 const toFiniteNumber = (x: unknown): number => {
   if (typeof x === "number") return Number.isFinite(x) ? x : 0;
-  if (typeof x === "string") {
-    const n = Number(x);
-    return Number.isFinite(n) ? n : 0;
-  }
+  if (typeof x === "string") { const n = Number(x); return Number.isFinite(n) ? n : 0; }
   return 0;
 };
-
 const tryJson = <T>(x: unknown): T | null => {
   if (x == null) return null;
-  if (typeof x === "string") {
-    try { return JSON.parse(x) as T; } catch { /* noop */ }
-  }
+  if (typeof x === "string") { try { return JSON.parse(x) as T; } catch { /* noop */ } }
   return x as T;
 };
 
+/* types */
 export type CartItemProduct = {
   id: string;
   name: string;
@@ -51,22 +44,22 @@ export type CartItem = {
   user_id?: string | null;
   product_id: string;
   quantity: number;
-  options?: Record<string, unknown> | null;
+  /** FE & BE ortak isim */
+  selected_options?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string;
-  // join:
   products?: CartItemProduct | null;
 };
 
-export type ApiCartItem = Omit<CartItem, "quantity" | "options" | "products"> & {
+export type ApiCartItem = Omit<CartItem, "quantity" | "selected_options" | "products"> & {
   quantity: number | string;
-  options?: string | CartItem["options"];
+  selected_options?: string | CartItem["selected_options"];
   products?: ApiCartItemProduct | null;
 };
 
+/* normalize */
 const normalizeProduct = (p?: ApiCartItemProduct | null): CartItemProduct | null => {
   if (!p) return null;
-
   const parsedCustomFields =
     typeof p.custom_fields === "string"
       ? tryJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields)
@@ -95,37 +88,27 @@ const normalizeCartItem = (c: ApiCartItem): CartItem => ({
   user_id: c.user_id ?? null,
   product_id: c.product_id,
   quantity: toFiniteNumber(c.quantity),
-  options: c.options ? tryJson<Record<string, unknown>>(c.options) : null,
+  selected_options: c.selected_options ? tryJson<Record<string, unknown>>(c.selected_options) : null,
   created_at: c.created_at,
   updated_at: c.updated_at,
   products: normalizeProduct(c.products),
 });
 
-export const cartItemsApi = baseApi2.injectEndpoints({
+/* endpoints */
+export const cartItemsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCartItems: b.query<
       CartItem[],
-      {
-        user_id?: string;
-        with?: string; // ör: "products,products.categories"
-        limit?: number;
-        offset?: number;
-        sort?: "created_at" | "updated_at";
-        order?: "asc" | "desc";
-      }
+      { user_id?: string; with?: string; limit?: number; offset?: number; sort?: "created_at" | "updated_at"; order?: "asc" | "desc" }
     >({
       query: (params) => ({ url: "/cart_items", params }),
       transformResponse: (res: unknown): CartItem[] =>
         Array.isArray(res) ? (res as ApiCartItem[]).map(normalizeCartItem) : [],
       providesTags: (result) =>
         result
-          ? [
-              ...result.map((i) => ({ type: "CartItem" as const, id: i.id })),
-              { type: "CartItems" as const, id: "LIST" },
-            ]
+          ? [...result.map((i) => ({ type: "CartItem" as const, id: i.id })), { type: "CartItems" as const, id: "LIST" }]
           : [{ type: "CartItems" as const, id: "LIST" }],
     }),
-
     getCartItemById: b.query<CartItem, string>({
       query: (id) => ({ url: `/cart_items/${id}` }),
       transformResponse: (res: unknown): CartItem => normalizeCartItem(res as ApiCartItem),

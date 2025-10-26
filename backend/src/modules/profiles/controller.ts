@@ -2,8 +2,8 @@ import type { RouteHandler, FastifyRequest } from 'fastify';
 import '@fastify/jwt';
 import { db } from '@/db/client';
 import { eq } from 'drizzle-orm';
-import { profiles, type ProfileRow, type ProfileInsert } from '@/modules/profiles/schema';
-import { profileUpsertSchema, type ProfileUpsertInput } from '@/modules/profiles/validation';
+import { profiles, type ProfileRow, type ProfileInsert } from './schema';
+import { profileUpsertSchema, type ProfileUpsertInput } from './validation';
 import { ZodError } from 'zod';
 
 export type ProfileUpsertRequest = { profile: ProfileUpsertInput };
@@ -11,6 +11,7 @@ export type ProfileUpsertRequest = { profile: ProfileUpsertInput };
 type JwtUser = { sub?: unknown };
 
 function getUserId(req: FastifyRequest): string {
+  // requireAuth sonrası fastify-jwt payload'ını req.user'a yazar.
   const payload = (req as unknown as { user?: JwtUser }).user;
   const subVal = payload?.sub;
   if (typeof subVal !== 'string' || subVal.length === 0) {
@@ -50,7 +51,7 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
       ...(input.city !== undefined ? { city: input.city } : {}),
       ...(input.country !== undefined ? { country: input.country } : {}),
       ...(input.postal_code !== undefined ? { postal_code: input.postal_code } : {}),
-      // wallet_balance burada bilinçli olarak güncellenmiyor
+      // wallet_balance bu tabloda YOK; users tablosunda tutuluyor.
     };
 
     const existing = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
@@ -64,7 +65,6 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
       const insertValues: ProfileInsert = {
         id: userId,
         ...set,
-        // wallet_balance DB default ile 0.00 kalır
       };
       await db.insert(profiles).values(insertValues);
     }

@@ -20,8 +20,14 @@ import { cartItems, type CartItemRow } from '@/modules/cart/schema';
 import { coupons as couponsTable } from '@/modules/coupons/schema';
 import type { MySql2Database } from 'drizzle-orm/mysql2';
 import type { MySqlTransaction } from 'drizzle-orm/mysql-core';
+import { ZodError, z } from 'zod';
+
+
+type OrderCreateInput = z.infer<typeof orderCreateSchema>;
 
 type TxOrDb = MySql2Database<any> | MySqlTransaction<any, any, any, any>;
+
+
 
 // --- helpers
 const now = () => new Date();
@@ -110,10 +116,13 @@ async function redeemCouponAtomic(client: TxOrDb, couponId: string) {
 // ===================== READ ENDPOINTS =====================
 
 // GET /orders  → normalized list (RTK)
+// controller.ts içindeki listOrdersNormalized:
+
 export const listOrdersNormalized: RouteHandler = async (req, reply) => {
   try {
     const userId = getAuthUserId(req);
     const {
+      id, // <-- ekledik
       status,
       payment_status,
       limit = 50,
@@ -121,6 +130,7 @@ export const listOrdersNormalized: RouteHandler = async (req, reply) => {
       sort = 'created_at',
       order = 'desc',
     } = (req.query ?? {}) as {
+      id?: string;
       status?: OrderRow['status'];
       payment_status?: string;
       limit?: number;
@@ -132,6 +142,7 @@ export const listOrdersNormalized: RouteHandler = async (req, reply) => {
     const conds = [eq(orders.user_id, userId)];
     if (status) conds.push(eq(orders.status, status));
     if (payment_status) conds.push(eq(orders.payment_status, payment_status));
+    if (id) conds.push(eq(orders.id, id)); // <-- id filtresi
 
     const sortCol = sort === 'total_price' ? orders.total : orders.created_at;
 
@@ -143,13 +154,16 @@ export const listOrdersNormalized: RouteHandler = async (req, reply) => {
       .limit(Number(limit))
       .offset(Number(offset));
 
-    return reply.send(rows.map(mapOrder));
+    // 🔑 Hem normalized hem raw alanları birlikte döndür
+    // FE normalizer'ı subtotal/discount/total'ı kullanarak UI alanlarına çevirir.
+    return reply.send(rows.map((r) => ({ ...mapOrder(r), ...r })));
   } catch (e: any) {
     if (e?.message === 'unauthorized') return reply.code(401).send({ error: { message: 'unauthorized' } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'orders_list_failed' } });
   }
 };
+
 
 // GET /orders/by-user/:userId → normalized list (RTK)
 export const listOrdersByUserNormalized: RouteHandler = async (req, reply) => {
@@ -202,22 +216,27 @@ export const getOrder: RouteHandler = async (req, reply) => {
 
 // ===================== WRITE ENDPOINTS =====================
 
-// POST /orders
+
+// --- createOrder
 export const createOrder: RouteHandler = async (req, reply) => {
   try {
     const userId = getAuthUserId(req);
-    const body = orderCreateSchema.parse(req.body || {});
+    const body = orderCreateSchema.parse(req.body || {}) as OrderCreateInput;
+
+    const items = body.items; // artık schema min(1) → var garanti
+
     const id = randomUUID();
 
-    const normalizedItems = body.items.map((it) => {
-      const priceStr = String(it.price);
-      const totalStr =
-        it.total != null ? String(it.total) : (Number(priceStr) * Number(it.quantity)).toFixed(2);
+    const normalizedItems = items.map((it) => {
+      // it.price ve it.total zaten "xx.yy" string
+      const priceStr = it.price;
+      const totalStr = it.total ?? (Number(priceStr) * Number(it.quantity)).toFixed(2);
       return { ...it, price: priceStr, total: totalStr };
     });
 
     const subtotalStr =
-      body.subtotal ?? normalizedItems.reduce((acc, it) => acc + Number(it.total), 0).toFixed(2);
+      body.subtotal ??
+      normalizedItems.reduce((acc, it) => acc + Number(it.total), 0).toFixed(2);
 
     let discountStr = body.discount ?? '0.00';
     let couponDiscountStr = '0.00';
@@ -244,10 +263,10 @@ export const createOrder: RouteHandler = async (req, reply) => {
         status: 'pending',
         payment_method: body.payment_method,
         payment_status: body.payment_status ?? 'pending',
-        subtotal: String(subtotalStr),
-        discount: String(discountStr),
-        coupon_discount: String(couponDiscountStr),
-        total: String(totalStr),
+        subtotal: subtotalStr,
+        discount: discountStr,
+        coupon_discount: couponDiscountStr,
+        total: totalStr,
         coupon_code: body.coupon_code ?? null,
         notes: body.notes ?? null,
         ip_address: (req.headers['x-forwarded-for'] as string) || (req.socket?.remoteAddress as string) || null,
@@ -260,26 +279,24 @@ export const createOrder: RouteHandler = async (req, reply) => {
 
       await tx.insert(orders).values(orderToInsert);
 
-      if (normalizedItems.length) {
-        const orderItemsToInsert: OrderItemInsert[] = normalizedItems.map((it) => ({
-          id: randomUUID(),
-          order_id: id,
-          product_id: it.product_id,
-          product_name: it.product_name,
-          quantity: it.quantity,
-          price: String(it.price),
-          total: String(it.total),
-          options: asJsonText(it.options),
-          delivery_status: 'pending',
-          activation_code: null,
-          stock_code: null,
-          api_order_id: null,
-          delivered_at: null,
-          created_at: now(),
-          updated_at: now(),
-        }));
-        await tx.insert(order_items).values(orderItemsToInsert);
-      }
+      const orderItemsToInsert: OrderItemInsert[] = normalizedItems.map((it) => ({
+        id: randomUUID(),
+        order_id: id,
+        product_id: it.product_id,
+        product_name: it.product_name,
+        quantity: it.quantity,
+        price: it.price,               // "xx.yy"
+        total: it.total!,              // "xx.yy"
+        options: asJsonText(it.options),
+        delivery_status: 'pending',
+        activation_code: null,
+        stock_code: null,
+        api_order_id: null,
+        delivered_at: null,
+        created_at: now(),
+        updated_at: now(),
+      }));
+      await tx.insert(order_items).values(orderItemsToInsert);
 
       if (couponIdToRedeem) await redeemCouponAtomic(tx, couponIdToRedeem);
     });
@@ -288,14 +305,21 @@ export const createOrder: RouteHandler = async (req, reply) => {
     const createdItems = (await db.select().from(order_items).where(eq(order_items.order_id, id)))
       .map((it) => ({ ...it, options: parseJsonText(it.options) }));
     return reply.code(201).send({ ...mapOrder(created), ...created, items: createdItems });
-  } catch (e: any) {
-    if (e?.name === 'ZodError') return reply.code(400).send({ error: { message: 'validation_error', details: e.issues } });
-    if (e?.message === 'unauthorized') return reply.code(401).send({ error: { message: 'unauthorized' } });
-    if (String(e?.message || '').startsWith('coupon_')) return reply.code(409).send({ error: { message: e.message } });
+  } catch (e: unknown) {
+    // Zod hatası → 400
+    if (e && typeof e === 'object' && (e as { name?: string }).name === 'ZodError') {
+      const ze = e as z.ZodError;
+      return reply.code(400).send({ error: { message: 'validation_error', details: ze.issues } });
+    }
+    if (e instanceof Error && e.message === 'unauthorized') {
+      return reply.code(401).send({ error: { message: 'unauthorized' } });
+    }
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'order_create_failed' } });
   }
 };
+
+
 
 // POST /orders/checkout
 export const checkoutFromCart: RouteHandler = async (req, reply) => {

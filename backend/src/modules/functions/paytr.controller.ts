@@ -4,14 +4,14 @@ import { env } from '@/core/env';
 
 type PaytrBody = {
   email?: string;
-  payment_amount?: number | string;
+  payment_amount?: number | string; // kuruş
   merchant_oid?: string;
   user_ip?: string;
   installment?: number | string;
   no_installment?: number | string;
   max_installment?: number | string;
-  currency?: string;
-  basket?: any[];
+  currency?: string; // 'TL'
+  basket?: Array<[string, number, number]>; // [name, unit_price, qty]
   lang?: string;
 };
 
@@ -68,18 +68,29 @@ function buildPaytrToken(body: PaytrBody) {
   };
 }
 
+/** FE beklentisi: { success: boolean, token?: string, error?: string } */
 export async function paytrGetToken(
   req: FastifyRequest<{ Body: PaytrBody }>,
   reply: FastifyReply,
 ) {
-  const data = buildPaytrToken(req.body || {});
-  return reply.send({ data });
+  try {
+    const data = buildPaytrToken(req.body || {});
+    return reply.send({ success: true, token: data.token });
+  } catch (e: any) {
+    req.log.error(e);
+    return reply.code(500).send({ success: false, error: 'token_build_failed' });
+  }
 }
 
 export async function paytrHavaleGetToken(
   req: FastifyRequest<{ Body: PaytrBody }>,
   reply: FastifyReply,
 ) {
-  const data = buildPaytrToken(req.body || {});
-  return reply.send({ data });
+  try {
+    const data = buildPaytrToken(req.body || {});
+    return reply.send({ success: true, token: data.token });
+  } catch (e: any) {
+    req.log.error(e);
+    return reply.code(500).send({ success: false, error: 'token_build_failed' });
+  }
 }
