@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { makeAuthController } from './controller';
+import { requireAuth } from '@/common/middleware/auth';
+import { requireAdmin } from '@/common/middleware/roles';
 
 export async function registerAuth(app: FastifyInstance) {
   const c = makeAuthController(app);
@@ -14,7 +16,7 @@ export async function registerAuth(app: FastifyInstance) {
   app.post('/auth/v1/google/start',  { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, c.googleStart);
   app.get('/auth/v1/google/callback', c.googleCallback);
 
-  // Authenticated-ish (me & status – me 401, status 200 döner)
+  // Authenticated-ish
   app.get('/auth/v1/user',   c.me);
   app.get('/auth/v1/status', c.status);
 
@@ -25,5 +27,9 @@ export async function registerAuth(app: FastifyInstance) {
   app.post('/auth/v1/logout', c.logout);
 
   // Admin
-  app.get('/auth/v1/admin/users/:id', c.adminGet);
+  app.get('/auth/v1/admin/users',        { preHandler: [requireAuth, requireAdmin] }, c.adminList);
+  app.get('/auth/v1/admin/users/:id',    { preHandler: [requireAuth, requireAdmin] }, c.adminGet);
+  app.post('/auth/v1/admin/roles',       { preHandler: [requireAuth, requireAdmin] }, c.adminGrantRole);
+  app.delete('/auth/v1/admin/roles',     { preHandler: [requireAuth, requireAdmin] }, c.adminRevokeRole);
+  app.post('/auth/v1/admin/make-admin',  { preHandler: [requireAuth, requireAdmin] }, c.adminMakeByEmail);
 }

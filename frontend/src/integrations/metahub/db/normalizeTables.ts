@@ -79,21 +79,23 @@ const deleteKeyIfExists = (obj: Record<string, unknown>, key: string) => {
  * Not: Bu fonksiyon sadece SELECT akışında çağrılır.
  */
 export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow[] {
-  if (!Array.isArray(rows)) return rows;
-
-  // /site_settings: value alanı JSON-string gelebilir
-  if (path === "/site_settings") {
+  if (path === "/categories") {
     return rows.map((r) => {
-      const clone: Record<string, unknown> = { ...r };
-      const v = clone["value"];
-      if (typeof v === "string") {
-        try {
-          clone["value"] = JSON.parse(v) as unknown;
-        } catch {
-          /* ignore */
-        }
-      }
-      return clone as UnknownRow;
+      const row = r as Record<string, unknown>;
+      return {
+        ...row,
+        description: row.description ?? null,
+        image_url: row.image_url ?? null,
+        icon: row.icon ?? null,
+        parent_id: row.parent_id ?? null,
+        // ✅ boolean normalize
+        is_active: !!(row.is_active ?? 1),
+        is_featured: !!(row.is_featured ?? 0),
+        display_order: Number(row.display_order ?? 0),
+        // ✅ FE-only alanları güvenli default ile sağla (TS2339 fix)
+        article_content: (row ).article_content ?? "",
+        article_enabled: !!((row ).article_enabled ?? false),
+      };
     });
   }
 
@@ -655,6 +657,34 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
       return c as UnknownRow;
     });
   }
+
+
+if (path === "/categories") {
+  return rows.map((r) => {
+    const c: Record<string, unknown> = { ...r };
+    const b = (x: unknown) => x === true || x === 1 || x === "1" || x === "true";
+    const n = (x: unknown) => (typeof x === "number" ? x : Number(x ?? 0)) || 0;
+
+    c.is_featured = b(c.is_featured);
+    c.is_active = b(c.is_active); // varsa
+    c.display_order = n(c.display_order);
+
+    return c as unknown as import("./types").UnknownRow;
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   return rows;
 }

@@ -59,6 +59,22 @@ function readCountFromHeaders(res: Response): number | undefined {
   return undefined;
 }
 
+/** Tüm istekler için ortak auth header’ları hazırla */
+function buildAuthHeaders(extra?: Record<string, string>): HeadersInit {
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    ...(extra ?? {}),
+  };
+  try {
+    const lsToken =
+      typeof window !== "undefined" ? window.localStorage.getItem("metahub:token") : null;
+    const envToken = (import.meta.env.VITE_API_TOKEN as string | undefined) || null;
+    const token = lsToken || envToken;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch { /* ignore */ }
+  return headers;
+}
+
 /** payment method mapper */
 function mapPaymentMethod(v: unknown): string | unknown {
   const s = String(v ?? "");
@@ -71,7 +87,9 @@ function mapPaymentMethod(v: unknown): string | unknown {
 function asMoney(v: unknown): string {
   if (typeof v === "number") return v.toFixed(2);
   if (typeof v === "string") {
-    const n = v.trim().replace(/\s+/g, "").replace(/\.(?=\d{3}(?:[.,]|$))/g, "").replace(",", ".");
+    const n = v.trim().replace(/\s+/g, "")
+      .replace(/\.(?=\d{3}(?:[.,]|$))/g, "")
+      .replace(",", ".");
     const num = Number(n);
     return Number.isFinite(num) ? num.toFixed(2) : "0.00";
   }
@@ -82,7 +100,6 @@ function asMoney(v: unknown): string {
 function transformOrdersOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
-  // FE alan adlarını BE’ye çevir
   if ("total_amount" in rec) {
     if (!("subtotal" in rec)) rec["subtotal"] = rec["total_amount"];
     delete rec["total_amount"];
@@ -96,22 +113,18 @@ function transformOrdersOut(obj: Record<string, unknown>): void {
     delete rec["final_amount"];
   }
 
-  // payment_method normalize
   if ("payment_method" in rec) rec["payment_method"] = mapPaymentMethod(rec["payment_method"]);
 
-  // BE kabul etmeyecek alanları temizle
   delete rec["user_id"];
   delete rec["customer_name"];
   delete rec["customer_email"];
   delete rec["customer_phone"];
   delete rec["coupon_id"];
 
-  // Para alanlarını string’e sabitle
   if (rec["subtotal"] != null) rec["subtotal"] = asMoney(rec["subtotal"]);
   if (rec["discount"] != null) rec["discount"] = asMoney(rec["discount"]);
   if (rec["total"] != null) rec["total"] = asMoney(rec["total"]);
 
-  // Items yoksa sessionStorage.checkoutData’dan üret
   const itemsUnknown = rec["items"];
   const hasNoItems =
     !("items" in rec) ||
@@ -147,9 +160,7 @@ function transformOrdersOut(obj: Record<string, unknown>): void {
           });
         }
       }
-    } catch {
-      // sess. storage yoksa/bozuksa sessiz geç
-    }
+    } catch { /* sessiz geç */ }
   }
 }
 
@@ -179,6 +190,41 @@ function transformPaymentRequestsOut(obj: Record<string, unknown>): void {
   if ("payment_method" in rec) rec["payment_method"] = mapPaymentMethod(rec["payment_method"]);
 }
 
+/** categories: FE→BE — UI local alanları at, tip/nullable düzelt */
+function transformCategoriesOut(obj: Record<string, unknown>): void {
+  const rec: Record<string, unknown> = obj;
+
+  // UI-only
+  delete rec["article_content"];
+  delete rec["article_enabled"];
+
+  // Trim
+  if (typeof rec["name"] === "string") rec["name"] = (rec["name"] as string).trim();
+  if (typeof rec["slug"] === "string") rec["slug"] = (rec["slug"] as string).trim();
+
+  // Boş stringleri null’a çevir
+  const nullableStrings = ["description", "image_url", "icon", "seo_title", "seo_description"];
+  for (const k of nullableStrings) {
+    if (rec[k] === "") rec[k] = null;
+  }
+
+  // parent_id ""/undefined → null
+  if (rec["parent_id"] === "" || rec["parent_id"] === undefined) {
+    rec["parent_id"] = null;
+  }
+
+  // Tip güvenliği
+  if ("display_order" in rec) rec["display_order"] = Number(rec["display_order"] ?? 0);
+  if ("is_featured" in rec) rec["is_featured"] = !!rec["is_featured"];
+  if ("is_active" in rec) rec["is_active"] = !!rec["is_active"];
+
+  // Bazı ortamlarda NULL kabul etmeyen kolonlara null göndermeyelim
+  const maybeNotNullInDb = ["image_url", "parent_id"];
+  for (const k of maybeNotNullInDb) {
+    if (rec[k] === null) delete rec[k];
+  }
+}
+
 /** outgoing body transform */
 function transformOutgoingPayload(
   path: string,
@@ -189,6 +235,7 @@ function transformOutgoingPayload(
     if (path === "/orders") transformOrdersOut(obj);
     if (path === "/order_items") transformOrderItemsOut(obj);
     if (path === "/payment_requests") transformPaymentRequestsOut(obj);
+    if (path === "/categories") transformCategoriesOut(obj);
     return obj;
   };
   return Array.isArray(payload) ? payload.map(apply) : apply(payload);
@@ -232,14 +279,13 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
   delete() { this._op = "delete"; return this; }
 
   async single(): Promise<FetchResult<TRow>> {
-  const isSelect = this._op === "select";
-  const r = isSelect ? await this.limit(1).execute() : await this.execute();
-  return { data: (r.data?.[0] ?? null) as TRow | null, error: r.error };
-}
+    const isSelect = this._op === "select";
+    const r = isSelect ? await this.limit(1).execute() : await this.execute();
+    return { data: (r.data?.[0] ?? null) as TRow | null, error: r.error };
+  }
 
   async maybeSingle(): Promise<FetchResult<TRow>> { return this.single(); }
 
-  // PromiseLike: then
   then<TResult1 = FetchResult<TRow[]>, TResult2 = never>(
     onfulfilled?: ((v: FetchResult<TRow[]>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
@@ -250,9 +296,7 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
     ) as Promise<TResult1 | TResult2>;
   }
 
-  /** URL builder + özel shımlar (profiles, orders tekil) */
-  // ... sınıf QB içindeki buildUrl() içinde:
-
+  /** URL builder + özel shımlar (profiles tekil, orders tekil, update/delete :id) */
   private buildUrl(): { url: string; path: string; methodOverride?: "PUT" } | null {
     const logicalPath = TABLES[this.table as KnownTables];
     if (!logicalPath) return null;
@@ -266,12 +310,9 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
 
     const params: Record<string, unknown> = {};
 
-    // 🔧 FIX: Daraltma yapmadan ifade et
-    // select=* sadece SELECT'te ya da .select() çağrılmışsa (Prefer: return=representation)
     const wantSelectParam = this._op === "select" || this._preferReturn === "representation";
     if (wantSelectParam) params.select = this._select;
 
-    // Filtreler: SELECT/UPDATE/DELETE için gerekli; INSERT’te değil
     const includeFilters = this._op === "select" || this._op === "update" || this._op === "delete";
     if (includeFilters) {
       for (const f of this._filters) {
@@ -282,7 +323,6 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
       }
     }
 
-    // Sıralama/limit/range sadece SELECT’te
     if (this._op === "select") {
       if (this._order) params.order = this._order.ascending === false ? `${this._order.col}.desc` : `${this._order.col}.asc`;
       if (this._limit != null) params.limit = this._limit;
@@ -293,19 +333,30 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
       const idEq = this._filters.find(f => f.type === "eq" && f.col === "id");
       if (idEq && typeof idEq.val === "string" && this._op === "select" && (this._limit === 1 || !!this._range)) {
         const qs = toQS({ select: this._select });
-        const url = `${joinUrl(BASE_URL, `${logicalPath}/${encodeURIComponent(idEq.val)}`)}?${qs}`;
+        const base = joinUrl(BASE_URL, `${logicalPath}/${encodeURIComponent(idEq.val)}`);
+        const url = qs ? `${base}?${qs}` : base;
         return { url, path: logicalPath };
       }
     }
 
-    const url = `${joinUrl(BASE_URL, logicalPath)}?${toQS(params)}`;
+    // UPDATE/DELETE → RESTful /:id
+    if ((this._op === "update" || this._op === "delete") && includeFilters) {
+      const idEq = this._filters.find(f => f.type === "eq" && f.col === "id");
+      if (idEq && typeof idEq.val === "string") {
+        const url = joinUrl(BASE_URL, `${logicalPath}/${encodeURIComponent(idEq.val)}`);
+        return { url, path: logicalPath };
+      }
+    }
+
+    const base = joinUrl(BASE_URL, logicalPath);
+    const qs = toQS(params);
+    const url = qs ? `${base}?${qs}` : base;
     return { url, path: logicalPath };
   }
 
-
   private getHeadersForSelect(): HeadersInit {
-    const headers: Record<string, string> = {};
-    if (this._selectOpts.count) headers["Prefer"] = `count=${this._selectOpts.count}`;
+    const headers = buildAuthHeaders();
+    if (this._selectOpts.count) (headers as Record<string, string>)["Prefer"] = `count=${this._selectOpts.count}`;
     return headers;
   }
 
@@ -343,21 +394,82 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
 
       // INSERT
       if (this._op === "insert") {
-        const headers: Record<string, string> = {
+        const headers = buildAuthHeaders({
           "content-type": "application/json",
-          "accept": "application/json"
-        };
-        if (this._preferReturn) headers["Prefer"] = `return=${this._preferReturn}`;
+          "Prefer": `return=${this._preferReturn ?? "minimal"}`
+        });
 
-        const payload = (this._insertPayload ?? {}) as UnknownRow | UnknownRow[];
-        const bodyPayload: UnknownRow | UnknownRow[] = transformOutgoingPayload(path, payload);
-        const res = await fetch(url, {
+        // Transform + categories defaultları/tekile çevirme
+        let bodyPayload: UnknownRow | UnknownRow[] =
+          transformOutgoingPayload(path, (this._insertPayload ?? {}) as UnknownRow | UnknownRow[]);
+
+        if (path === "/categories") {
+          const ensure = (rec: Record<string, unknown>) => {
+            if (rec.is_active == null) rec.is_active = true;
+            if (rec.is_featured == null) rec.is_featured = false;
+            if (rec.display_order == null) rec.display_order = 0;
+            if (rec.image_url == null) delete rec.image_url;
+            if (rec.parent_id == null) delete rec.parent_id;
+            return rec;
+          };
+          if (Array.isArray(bodyPayload)) {
+            bodyPayload = bodyPayload.map((x) => ensure({ ...(x as Record<string, unknown>) }));
+            // BE tek obje bekliyorsa çevir
+            if (bodyPayload.length === 1) bodyPayload = bodyPayload[0];
+          } else {
+            bodyPayload = ensure({ ...(bodyPayload as Record<string, unknown>) });
+          }
+        }
+
+        let res = await fetch(url, {
           method: "POST",
           credentials: "include",
           headers,
           body: JSON.stringify(bodyPayload),
         });
-        if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
+
+        // /categories için 400 fallback'leri — hep tekil obje gönder
+        if (!res.ok && path === "/categories" && res.status === 400) {
+          const original = Array.isArray(bodyPayload) ? bodyPayload[0] : (bodyPayload as Record<string, unknown>);
+          const first = { ...original };
+
+          if (first.description == null) first.description = "";
+          if (first.is_active == null) first.is_active = true;
+          if (first.is_featured == null) first.is_featured = false;
+          if (first.display_order == null) first.display_order = 0;
+          if (first.image_url == null) delete first.image_url;
+          if (first.parent_id == null) delete first.parent_id;
+
+          res = await fetch(url, {
+            method: "POST",
+            credentials: "include",
+            headers,
+            body: JSON.stringify(first),
+          });
+
+          if (!res.ok && res.status === 400) {
+            const core = {
+              name: String(first.name ?? ""),
+              slug: String(first.slug ?? ""),
+              description: String(first.description ?? ""),
+              is_active: first.is_active === undefined ? true : !!first.is_active,
+              ...(first.parent_id === null ? { parent_id: null } : {}),
+            };
+            res = await fetch(url, {
+              method: "POST",
+              credentials: "include",
+              headers,
+              body: JSON.stringify(core),
+            });
+          }
+        }
+
+        if (!res.ok) {
+          if (res.status === 409) {
+            return { data: null, error: { message: "duplicate_slug", status: 409 } };
+          }
+          return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
+        }
 
         let json: unknown = null;
         try { json = await res.json(); } catch { json = null; }
@@ -366,28 +478,107 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
         return { data, error: null };
       }
 
-      // UPDATE (profiles: PUT /profiles/v1/me)
+      // UPDATE (profiles → PUT; categories → PUT; diğerleri → PATCH)
       if (this._op === "update") {
-        const headers: Record<string, string> = {
+        const headers = buildAuthHeaders({
           "content-type": "application/json",
-          "accept": "application/json"
-        };
-        if (this._preferReturn) headers["Prefer"] = `return=${this._preferReturn}`;
+          "Prefer": `return=${this._preferReturn ?? "minimal"}`
+        });
 
-        const payload = (this._updatePayload ?? {}) as UnknownRow;
-        let bodyPayload: unknown = transformOutgoingPayload(path, payload);
+        const originalPayload = (this._updatePayload ?? {}) as Record<string, unknown>;
+        let bodyPayload: unknown = transformOutgoingPayload(path, originalPayload);
+        const methodForThis =
+          methodOverride ?? (path === "/categories" ? "PUT" : "PATCH");
+
         if (path === "/profiles") {
-          // URL /profiles/v1/me ama normalize path /profiles tutuldu
           bodyPayload = { profile: bodyPayload as Record<string, unknown> };
         }
 
-        const res = await fetch(url, {
-          method: methodOverride ?? "PATCH",
+        let res = await fetch(url, {
+          method: methodForThis,
           credentials: "include",
           headers,
           body: JSON.stringify(bodyPayload),
         });
-        if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
+
+        if (path === "/categories" && !res.ok) {
+          const status = res.status;
+
+          // 5xx → slug’sız bir kez dene; sonra verify
+          if (status >= 500) {
+            if ("slug" in originalPayload) {
+              const pNoSlug = { ...originalPayload };
+              delete (pNoSlug as Record<string, unknown>).slug;
+              const bNoSlug = transformOutgoingPayload(path, pNoSlug);
+              const res2 = await fetch(url, {
+                method: "PUT",
+                credentials: "include",
+                headers,
+                body: JSON.stringify(bNoSlug),
+              });
+              if (res2.ok) res = res2;
+            }
+            if (!res.ok) {
+              const idEq = this._filters.find(f => f.type === "eq" && f.col === "id");
+              if (idEq && typeof idEq.val === "string") {
+                const verifyUrl = joinUrl(BASE_URL, `/categories/${encodeURIComponent(idEq.val)}`);
+                const verify = await fetch(verifyUrl, { credentials: "include", headers: buildAuthHeaders() });
+                if (verify.ok) {
+                  let json: unknown = null;
+                  try { json = await verify.json(); } catch { json = null; }
+                  let data = this.parseBodyToRows(json) as TRow[] | null;
+                  if (data) data = normalizeTableRows(path, data as unknown as UnknownRow[]) as unknown as TRow[];
+                  return { data, error: null };
+                }
+              }
+              return { data: null, error: { message: `request_failed_${status}`, status } };
+            }
+          }
+
+          // 400 → daraltarak tekrar dene
+          if (status === 400) {
+            if ("is_featured" in originalPayload || "display_order" in originalPayload) {
+              const p1 = { ...originalPayload };
+              delete p1.is_featured;
+              delete p1.display_order;
+
+              const b1: unknown = transformOutgoingPayload(path, p1);
+              res = await fetch(url, {
+                method: "PUT",
+                credentials: "include",
+                headers,
+                body: JSON.stringify(b1),
+              });
+            }
+
+            if (!res.ok && res.status === 400 && "slug" in originalPayload) {
+              const p2 = { ...originalPayload };
+              delete p2.slug;
+
+              const b2: unknown = transformOutgoingPayload(path, p2);
+              res = await fetch(url, {
+                method: "PUT",
+                credentials: "include",
+                headers,
+                body: JSON.stringify(b2),
+              });
+            }
+
+            if (!res.ok) {
+              if (res.status === 409) {
+                return { data: null, error: { message: "duplicate_slug", status: 409 } };
+              }
+              return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
+            }
+          }
+        }
+
+        if (!res.ok) {
+          if (res.status === 409) {
+            return { data: null, error: { message: "duplicate_slug", status: 409 } };
+          }
+          return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
+        }
 
         let json: unknown = null;
         try { json = await res.json(); } catch { json = null; }
@@ -398,7 +589,8 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
 
       // DELETE
       if (this._op === "delete") {
-        const res = await fetch(url, { method: "DELETE", credentials: "include" });
+        const headers = buildAuthHeaders();
+        const res = await fetch(url, { method: "DELETE", credentials: "include", headers });
         if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
         return { data: [] as unknown as TRow[], error: null };
       }

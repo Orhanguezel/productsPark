@@ -1,6 +1,5 @@
-
 // =============================================================
-// FILE: src/integrations/metahub/client.ts  (UPDATED aggregator)
+// FILE: src/integrations/metahub/client.ts
 // =============================================================
 import { auth } from "./client/auth/client";
 import { user_roles } from "./client/user_roles/client";
@@ -18,7 +17,7 @@ import { blog } from "./client/blog/client";
 import { navigation } from "./client/navigation/client";
 import { catalogExtras } from "./client/catalog-extras/client";
 import { walletsPayments } from "./client/wallets-payments/client";
-import { settings2 } from "./client/site-settings/client"; 
+import { settings2 } from "./client/site-settings/client";
 
 import { variants } from "./client/variants/client";
 import { options } from "./client/options/client";
@@ -57,9 +56,6 @@ import { support_tickets } from "./client/support/client";
 import { profilesClient } from "./client/profiles/client";
 import { rpc } from "./client/rpc/client";
 
-
-
-
 import { siteSettingsAdmin } from "./client/admin/siteSettings";
 import { categoriesAdmin } from "./client/admin/categories";
 import { productsAdmin } from "./client/admin/products";
@@ -91,14 +87,13 @@ import { rbacAdmin } from "./client/admin/rbac";
 import { billingAdmin } from "./client/admin/billing";
 import { inventoryAdmin } from "./client/admin/inventory";
 
-
 import { baseApi } from "./rtk/baseApi";
 import * as rtk from "./rtk";
 import { from as fromDb, type FromFn } from "./db/from";
 import { channel, removeChannel, removeAllChannels } from "./realtime/channel";
 
 export const metahub = {
-  // facades
+  // Facades
   auth,
   functions,
   rpc,
@@ -149,9 +144,7 @@ export const metahub = {
   support_tickets,
   profiles: profilesClient,
 
-
-
-admin: {
+  admin: {
     siteSettings: siteSettingsAdmin,
     categories: categoriesAdmin,
     products: productsAdmin,
@@ -191,7 +184,6 @@ admin: {
   channel,
   removeChannel,
   removeAllChannels,
-
 } as const;
 
 export { metahubstorage };

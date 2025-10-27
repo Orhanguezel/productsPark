@@ -13,14 +13,21 @@ export type CategoryRow = {
   id: string;
   name: string;
   slug: string;
+  description: string | null;
   image_url: string | null;
   icon: string | null;
-  description: string | null;
-  is_featured?: boolean | 0 | 1;
   parent_id: string | null;
-  display_order?: number;
-  product_count: number;
+  is_active: boolean;    // normalized
+  is_featured: boolean;  // normalized
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+
+  // FE-only convenience (DB’de zorunlu değil)
+  article_content?: string | null;
+  article_enabled?: boolean;
 };
+
 
 export type SiteSettingRow = {
   id: string;
@@ -494,6 +501,8 @@ export type ProductView = {
   categories?: { id: string; name: string; slug?: string };
 };
 
+
+
 /* ===========================
  * Known Tables & TableRow map
  * =========================== */
@@ -534,6 +543,7 @@ export type KnownTables =
   | "user_roles"
   | "support_tickets"
   | "ticket_replies";
+
 
 /** TableRow eşlemesi */
 export type TableRow<TName extends string> = TName extends "categories"
