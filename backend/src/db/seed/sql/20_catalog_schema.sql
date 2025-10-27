@@ -1,9 +1,3 @@
--- =========================================================
---  SCHEMA (MySQL 8+, utf8mb4, Drizzle uyumlu)
--- =========================================================
-SET NAMES utf8mb4;
-SET time_zone = '+00:00';
-
 -- =========================
 -- CATEGORIES
 -- =========================
@@ -36,7 +30,7 @@ CREATE TABLE IF NOT EXISTS categories (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- PRODUCTS (Drizzle-compatible)
+-- PRODUCTS  (FE tiplerine tam uyum)
 -- =========================
 CREATE TABLE IF NOT EXISTS products (
   id                 CHAR(36)      NOT NULL,
@@ -53,8 +47,8 @@ CREATE TABLE IF NOT EXISTS products (
   cost               DECIMAL(10,2) DEFAULT NULL,
 
   image_url          VARCHAR(500)  DEFAULT NULL,
-  gallery_urls       LONGTEXT      DEFAULT NULL,
-  features           LONGTEXT      DEFAULT NULL,
+  gallery_urls       JSON          DEFAULT NULL,
+  features           JSON          DEFAULT NULL,
 
   rating             DECIMAL(3,2)  NOT NULL DEFAULT 5.00,
   review_count       INT(11)       NOT NULL DEFAULT 0,
@@ -62,8 +56,8 @@ CREATE TABLE IF NOT EXISTS products (
   product_type       VARCHAR(50)   DEFAULT NULL,
   delivery_type      VARCHAR(50)   DEFAULT NULL,
 
-  custom_fields      LONGTEXT      DEFAULT NULL,
-  quantity_options   LONGTEXT      DEFAULT NULL,
+  custom_fields      JSON          DEFAULT NULL,
+  quantity_options   JSON          DEFAULT NULL,
 
   api_provider_id    CHAR(36)      DEFAULT NULL,
   api_product_id     VARCHAR(64)   DEFAULT NULL,
@@ -78,7 +72,7 @@ CREATE TABLE IF NOT EXISTS products (
   demo_embed_enabled TINYINT(1)    NOT NULL DEFAULT 0,
   demo_button_text   VARCHAR(100)  DEFAULT NULL,
 
-  badges             LONGTEXT      DEFAULT NULL,
+  badges             JSON          DEFAULT NULL,
 
   sku                VARCHAR(100)  DEFAULT NULL,
   stock_quantity     INT(11)       NOT NULL DEFAULT 0,
@@ -86,6 +80,19 @@ CREATE TABLE IF NOT EXISTS products (
   is_featured        TINYINT(1)    NOT NULL DEFAULT 0,
   is_digital         TINYINT(1)    NOT NULL DEFAULT 0,
   requires_shipping  TINYINT(1)    NOT NULL DEFAULT 1,
+
+  -- FE'de bulunan ilave alanlar
+  file_url           VARCHAR(500)  DEFAULT NULL,
+  epin_game_id       VARCHAR(64)   DEFAULT NULL,
+  epin_product_id    VARCHAR(64)   DEFAULT NULL,
+  auto_delivery_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  pre_order_enabled     TINYINT(1) NOT NULL DEFAULT 0,
+  min_order          INT(11)       DEFAULT NULL,
+  max_order          INT(11)       DEFAULT NULL,
+  min_barem          INT(11)       DEFAULT NULL,
+  max_barem          INT(11)       DEFAULT NULL,
+  barem_step         INT(11)       DEFAULT NULL,
+  tax_type           INT(11)       DEFAULT NULL,
 
   created_at         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -97,15 +104,8 @@ CREATE TABLE IF NOT EXISTS products (
   KEY products_sku_idx (sku),
   KEY products_active_idx (is_active),
 
-  -- Listeleme pattern'leri
   KEY products_cat_active_created_idx (category_id, is_active, created_at),
   KEY products_slug_active_idx (slug, is_active),
-
-  CHECK (gallery_urls IS NULL OR JSON_VALID(gallery_urls)),
-  CHECK (features IS NULL OR JSON_VALID(features)),
-  CHECK (custom_fields IS NULL OR JSON_VALID(custom_fields)),
-  CHECK (quantity_options IS NULL OR JSON_VALID(quantity_options)),
-  CHECK (badges IS NULL OR JSON_VALID(badges)),
 
   CONSTRAINT fk_products_category
     FOREIGN KEY (category_id) REFERENCES categories(id)
@@ -130,21 +130,6 @@ CREATE TABLE IF NOT EXISTS product_faqs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- PRODUCT OPTIONS
--- =========================
-CREATE TABLE IF NOT EXISTS product_options (
-  id            CHAR(36)     NOT NULL,
-  product_id    CHAR(36)     NOT NULL,
-  option_name   VARCHAR(100) NOT NULL,
-  option_values LONGTEXT     NOT NULL,
-  created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  KEY product_options_product_id_idx (product_id),
-  CHECK (JSON_VALID(option_values))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =========================
 -- PRODUCT REVIEWS
 -- =========================
 CREATE TABLE IF NOT EXISTS product_reviews (
@@ -158,23 +143,39 @@ CREATE TABLE IF NOT EXISTS product_reviews (
   review_date   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
   PRIMARY KEY (id),
   KEY product_reviews_product_id_idx (product_id),
   KEY product_reviews_approved_idx (product_id, is_active),
   KEY product_reviews_rating_idx (rating)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
 -- =========================
--- PRODUCT STOCK
+-- PRODUCT OPTIONS
 -- =========================
-CREATE TABLE IF NOT EXISTS product_stock (
+CREATE TABLE IF NOT EXISTS product_options (
   id            CHAR(36)     NOT NULL,
   product_id    CHAR(36)     NOT NULL,
-  code          VARCHAR(255) NOT NULL,
-  is_used       TINYINT(1)   NOT NULL DEFAULT 0,
-  used_at       DATETIME(3)  DEFAULT NULL,
+  option_name   VARCHAR(100) NOT NULL,
+  option_values JSON         NOT NULL,
   created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  order_item_id CHAR(36)     DEFAULT NULL,
+  updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY product_options_product_id_idx (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =========================
+-- PRODUCT STOCK  (FE: stock_content)
+-- =========================
+CREATE TABLE IF NOT EXISTS product_stock (
+  id             CHAR(36)     NOT NULL,
+  product_id     CHAR(36)     NOT NULL,
+  stock_content  VARCHAR(255) NOT NULL,          -- FE ile birebir
+  is_used        TINYINT(1)   NOT NULL DEFAULT 0,
+  used_at        DATETIME(3)  DEFAULT NULL,
+  created_at     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  order_item_id  CHAR(36)     DEFAULT NULL,
   PRIMARY KEY (id),
   KEY product_stock_product_id_idx (product_id),
   KEY product_stock_is_used_idx (product_id, is_used),

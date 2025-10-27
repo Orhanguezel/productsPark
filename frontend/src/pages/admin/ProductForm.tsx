@@ -624,7 +624,7 @@ export default function ProductForm() {
                     const fileName = `${Date.now()}.${fileExt}`;
                     const filePath = `${fileName}`;
 
-                    const { error: uploadError } = await metahubstorage
+                    const { error: uploadError } = await metahub.storage
                       .from('product-images')
                       .upload(filePath, file);
 
@@ -633,7 +633,7 @@ export default function ProductForm() {
                       return;
                     }
 
-                    const { data } = metahubstorage.from('product-images').getPublicUrl(filePath);
+                    const { data } = metahub.storage.from('product-images').getPublicUrl(filePath);
                     setFormData({ ...formData, image_url: data.publicUrl });
                     toast({ title: "Başarılı", description: "Görsel yüklendi." });
                   }}
@@ -1370,7 +1370,7 @@ export default function ProductForm() {
                             const fileName = `${Date.now()}.${fileExt}`;
                             const filePath = `${fileName}`;
 
-                            const { error: uploadError } = await metahubstorage
+                            const { error: uploadError } = await metahub.storage
                               .from('product-images')
                               .upload(filePath, file);
 
@@ -1379,7 +1379,7 @@ export default function ProductForm() {
                               return;
                             }
 
-                            const { data } = metahubstorage.from('product-images').getPublicUrl(filePath);
+                            const { data } = metahub.storage.from('product-images').getPublicUrl(filePath);
                             setFormData({ ...formData, file_url: data.publicUrl });
                             toast({ title: "Başarılı", description: "Dosya yüklendi." });
                           }}

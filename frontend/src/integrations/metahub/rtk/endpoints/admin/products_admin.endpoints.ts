@@ -1,124 +1,98 @@
-
 // -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/products_admin.endpoints.ts
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
+import type {
+  ProductRow,
+  ProductFaqRow,
+  ProductReviewRow,
+  ProductStockRow,
+  CategoryRow,
+} from "@/integrations/metahub/db/types";
 
-const toIso = (x: unknown): string => new Date(x as string | number | Date).toISOString();
-const toNum = (x: unknown): number => (typeof x === "number" ? x : Number(x as unknown));
-const toBool = (x: unknown): boolean => (typeof x === "boolean" ? x : Number(x as unknown) === 1);
-const tryParse = <T>(x: unknown): T => { if (typeof x === "string") { try { return JSON.parse(x) as T; } catch {/* keep string */} } return x as T; };
+// Alias’lar (merkez tipleri FE admin için yeniden adlandırıyoruz)
+export type ProductAdmin = ProductRow;
+export type Review = ProductReviewRow;
+export type FAQ = ProductFaqRow;
 
-export type ProductSEO = { title?: string | null; description?: string | null; keywords?: string[] | null };
-export type ProductAttributes = Record<string, string | number | boolean | null>;
-
-export type ProductAdmin = {
-  id: string;
-  name: string;
-  slug: string;
-  sku: string | null;
-  barcode: string | null;
-  category_id: string | null;
-  price: number;
-  original_price: number | null;
-  currency: string;
-  image_url: string | null;
-  gallery: string[];                 // additional images
-  short_description: string | null;
-  description: string | null;        // rich text (HTML/MD)
-  is_active: boolean;
-  show_on_homepage: boolean;
-  tags: string[];
-  rating: number;
-  review_count: number;
-  attributes: ProductAttributes | null;
-  seo: ProductSEO | null;
-  created_at: string;
-  updated_at: string;
+// Sipariş join’i ile kullanılan stok satırı (FE’de usedStock kartları için)
+export type UsedStockItem = ProductStockRow & {
+  order: {
+    id: string;
+    order_number: string;
+    customer_name: string;
+    customer_email?: string | null;
+  } | null;
 };
 
-export type ApiProductAdmin = Omit<ProductAdmin, "price" | "original_price" | "gallery" | "is_active" | "show_on_homepage" | "tags" | "attributes" | "seo" | "rating" | "review_count" | "created_at" | "updated_at"> & {
-  price: number | string;
-  original_price: number | string | null;
-  gallery: string | string[] | null;         // JSON-string or array
-  is_active: boolean | 0 | 1 | "0" | "1";
-  show_on_homepage: boolean | 0 | 1 | "0" | "1";
-  tags: string[] | string | null;            // JSON-string or array
-  attributes: string | ProductAttributes | null;
-  seo: string | ProductSEO | null;
-  rating: number | string;
-  review_count: number | string;
-  created_at: string | number | Date;
-  updated_at: string | number | Date;
-};
-
-const normalizeProduct = (p: ApiProductAdmin): ProductAdmin => ({
-  ...p,
-  price: toNum(p.price),
-  original_price: p.original_price == null ? null : toNum(p.original_price),
-  gallery: p.gallery == null ? [] : (Array.isArray(p.gallery) ? p.gallery.map(String) : tryParse<string[]>(p.gallery)),
-  is_active: toBool(p.is_active),
-  show_on_homepage: toBool(p.show_on_homepage),
-  tags: p.tags == null ? [] : (Array.isArray(p.tags) ? p.tags.map(String) : tryParse<string[]>(p.tags)),
-  attributes: p.attributes == null ? null : tryParse<ProductAttributes>(p.attributes),
-  seo: p.seo == null ? null : tryParse<ProductSEO>(p.seo),
-  rating: toNum(p.rating),
-  review_count: toNum(p.review_count),
-  created_at: toIso(p.created_at),
-  updated_at: toIso(p.updated_at),
-});
-
+// List parametreleri (sade)
 export type ProductsAdminListParams = {
-  q?: string;                       // name/sku/slug search
+  q?: string;
   category_id?: string;
   is_active?: boolean;
   show_on_homepage?: boolean;
-  min_price?: number; max_price?: number;
-  limit?: number; offset?: number;
-  sort?: "created_at" | "price" | "name" | "review_count" | "rating"; order?: "asc" | "desc";
+  min_price?: number;
+  max_price?: number;
+  limit?: number;
+  offset?: number;
+  sort?: "created_at" | "price" | "name" | "review_count" | "rating";
+  order?: "asc" | "desc";
 };
 
-export type UpsertProductBody = Omit<ProductAdmin, "id" | "created_at" | "updated_at" | "rating" | "review_count">;
+// Upsert/Patch (rating hesaplanır; categories join olduğundan çıkarıldı)
+export type UpsertProductBody = Omit<ProductRow, "id" | "created_at" | "updated_at" | "categories" | "rating">;
 export type PatchProductBody = Partial<UpsertProductBody>;
+
+// (Projede tiplenmemiş) API provider minimal tipi
+export type ApiProviderRow = { id: string; name: string; is_active: boolean };
 
 export const productsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
+
+    // === PRODUCTS ===
     listProductsAdmin: b.query<ProductAdmin[], ProductsAdminListParams | void>({
       query: (params) => ({
         url: "/admin/products",
-        params: params ? {
-          ...params,
-          is_active: params.is_active == null ? undefined : params.is_active ? 1 : 0,
-          show_on_homepage: params.show_on_homepage == null ? undefined : params.show_on_homepage ? 1 : 0,
-        } : undefined,
+        params: params
+          ? {
+              ...params,
+              // BE tarafı 0/1 bekliyorsa backend uyumlu; boolean destekliyorsa olduğu gibi gider
+              is_active: params.is_active ?? undefined,
+              show_on_homepage: params.show_on_homepage ?? undefined,
+            }
+          : undefined,
       }),
       transformResponse: (res: unknown): ProductAdmin[] => {
-        if (Array.isArray(res)) return (res as ApiProductAdmin[]).map(normalizeProduct);
+        if (Array.isArray(res)) return res as ProductAdmin[];
         const maybe = res as { data?: unknown };
-        return Array.isArray(maybe?.data) ? (maybe.data as ApiProductAdmin[]).map(normalizeProduct) : [];
+        return Array.isArray(maybe?.data) ? (maybe.data as ProductAdmin[]) : [];
       },
-      providesTags: (result) => result ? [
-        ...result.map((p) => ({ type: "Product" as const, id: p.id })),
-        { type: "Products" as const, id: "LIST" },
-      ] : [{ type: "Products" as const, id: "LIST" }],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((p) => ({ type: "Product" as const, id: p.id })),
+              { type: "Products" as const, id: "LIST" },
+            ]
+          : [{ type: "Products" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
 
     getProductAdmin: b.query<ProductAdmin, string>({
       query: (id) => ({ url: `/admin/products/${id}` }),
-      transformResponse: (res: unknown): ProductAdmin => normalizeProduct(res as ApiProductAdmin),
+      transformResponse: (res: unknown): ProductAdmin =>
+        (Array.isArray(res) ? (res[0] as ProductAdmin) : (res as ProductAdmin)),
       providesTags: (_r, _e, id) => [{ type: "Product", id }],
     }),
 
     createProductAdmin: b.mutation<ProductAdmin, UpsertProductBody>({
       query: (body) => ({ url: "/admin/products", method: "POST", body }),
-      transformResponse: (res: unknown): ProductAdmin => normalizeProduct(res as ApiProductAdmin),
+      transformResponse: (res: unknown): ProductAdmin => res as ProductAdmin,
       invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
     }),
 
     updateProductAdmin: b.mutation<ProductAdmin, { id: string; body: PatchProductBody }>({
       query: ({ id, body }) => ({ url: `/admin/products/${id}`, method: "PATCH", body }),
-      transformResponse: (res: unknown): ProductAdmin => normalizeProduct(res as ApiProductAdmin),
+      transformResponse: (res: unknown): ProductAdmin => res as ProductAdmin,
       invalidatesTags: (_r, _e, arg) => [{ type: "Product", id: arg.id }, { type: "Products", id: "LIST" }],
     }),
 
@@ -129,9 +103,98 @@ export const productsAdminApi = baseApi.injectEndpoints({
     }),
 
     bulkSetActiveAdmin: b.mutation<{ ok: true }, { ids: string[]; is_active: boolean }>({
-      query: ({ ids, is_active }) => ({ url: "/admin/products/bulk/active", method: "POST", body: { ids, is_active: is_active ? 1 : 0 } }),
+      query: ({ ids, is_active }) => ({
+        url: "/admin/products/bulk/active",
+        method: "POST",
+        body: { ids, is_active },
+      }),
       transformResponse: () => ({ ok: true as const }),
       invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
+    }),
+
+    reorderProductsAdmin: b.mutation<{ ok: true }, Array<{ id: string; display_order: number }>>({
+      query: (items) => ({ url: "/admin/products/bulk/reorder", method: "POST", body: { items } }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
+    }),
+
+    toggleActiveProductAdmin: b.mutation<ProductAdmin, { id: string; is_active: boolean }>({
+      query: ({ id, is_active }) => ({
+        url: `/admin/products/${id}/active`,
+        method: "PATCH",
+        body: { is_active },
+      }),
+      transformResponse: (res: unknown): ProductAdmin => res as ProductAdmin,
+      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }, { type: "Products", id: "LIST" }],
+    }),
+
+    toggleHomepageProductAdmin: b.mutation<ProductAdmin, { id: string; show_on_homepage: boolean }>({
+      query: ({ id, show_on_homepage }) => ({
+        url: `/admin/products/${id}/homepage`,
+        method: "PATCH",
+        body: { show_on_homepage },
+      }),
+      transformResponse: (res: unknown): ProductAdmin => res as ProductAdmin,
+      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }, { type: "Products", id: "LIST" }],
+    }),
+
+    // === RELATIONS (opsiyonel) ===
+    attachVariantToProductAdmin: b.mutation<{ ok: true }, { product_id: string; variant_id: string }>({
+      query: (body) => ({ url: "/admin/products/attach-variant", method: "POST", body }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
+    }),
+    detachVariantFromProductAdmin: b.mutation<{ ok: true }, { product_id: string; variant_id: string }>({
+      query: (body) => ({ url: "/admin/products/detach-variant", method: "POST", body }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
+    }),
+    attachOptionToProductAdmin: b.mutation<{ ok: true }, { product_id: string; option_id: string }>({
+      query: (body) => ({ url: "/admin/products/attach-option", method: "POST", body }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
+    }),
+    detachOptionFromProductAdmin: b.mutation<{ ok: true }, { product_id: string; option_id: string }>({
+      query: (body) => ({ url: "/admin/products/detach-option", method: "POST", body }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: [{ type: "Products" as const, id: "LIST" }],
+    }),
+
+    // === REVIEWS / FAQS ===
+    replaceReviewsAdmin: b.mutation<{ ok: true }, { id: string; reviews: Review[] }>({
+      query: ({ id, reviews }) => ({ url: `/admin/products/${id}/reviews`, method: "PUT", body: { reviews } }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }],
+    }),
+    replaceFaqsAdmin: b.mutation<{ ok: true }, { id: string; faqs: FAQ[] }>({
+      query: ({ id, faqs }) => ({ url: `/admin/products/${id}/faqs`, method: "PUT", body: { faqs } }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }],
+    }),
+
+    // === STOCK (auto_stock) ===
+    setProductStockAdmin: b.mutation<{ updated_stock_quantity: number }, { id: string; lines: string[] }>({
+      query: ({ id, lines }) => ({ url: `/admin/products/${id}/stock`, method: "PUT", body: { lines } }),
+      transformResponse: (r: { updated_stock_quantity: number }) => r,
+      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }, { type: "Products", id: "LIST" }],
+    }),
+
+    listUsedStockAdmin: b.query<UsedStockItem[], string>({
+      query: (id) => ({ url: `/admin/products/${id}/stock/used` }),
+      transformResponse: (res: unknown): UsedStockItem[] => {
+        const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data;
+        return Array.isArray(arr) ? (arr as UsedStockItem[]) : [];
+      },
+      providesTags: (_r, _e, id) => [{ type: "Product", id }],
+    }),
+
+    // === CATEGORIES & API PROVIDERS ===
+    listCategoriesAdmin: b.query<Pick<CategoryRow, "id" | "name" | "parent_id" | "is_featured">[], void>({
+      query: () => ({ url: "/admin/categories", method: "GET" }),
+    }),
+
+    listApiProvidersAdmin: b.query<ApiProviderRow[], void>({
+      query: () => ({ url: "/admin/api-providers?is_active=1", method: "GET" }),
     }),
   }),
   overrideExisting: true,
@@ -144,6 +207,24 @@ export const {
   useUpdateProductAdminMutation,
   useDeleteProductAdminMutation,
   useBulkSetActiveAdminMutation,
+
+  useReorderProductsAdminMutation,
+  useToggleActiveProductAdminMutation,
+  useToggleHomepageProductAdminMutation,
+
+  useAttachVariantToProductAdminMutation,
+  useDetachVariantFromProductAdminMutation,
+  useAttachOptionToProductAdminMutation,
+  useDetachOptionFromProductAdminMutation,
+
+  useReplaceReviewsAdminMutation,
+  useReplaceFaqsAdminMutation,
+
+  useSetProductStockAdminMutation,
+  useListUsedStockAdminQuery,
+
+  useListCategoriesAdminQuery,
+  useListApiProvidersAdminQuery,
 } = productsAdminApi;
 
 
