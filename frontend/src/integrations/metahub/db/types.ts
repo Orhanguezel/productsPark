@@ -26,8 +26,12 @@ export type CategoryRow = {
   // FE-only convenience (DB’de zorunlu değil)
   article_content?: string | null;
   article_enabled?: boolean;
-};
 
+  // SEO / Banner (opsiyonel genişletme)
+  meta_title?: string | null;
+  meta_description?: string | null;
+  banner_image_url?: string | null;
+};
 
 export type SiteSettingRow = {
   id: string;
@@ -44,21 +48,41 @@ export type ProductReviewRow = {
   rating: number;
   comment: string;
   review_date: string;
-  is_active?: boolean | 0 | 1;
+  /** ⛳ FE Review tipine uyum için kesin boolean */
+  is_active: boolean;
   created_at?: string;
   updated_at?: string;
 };
+
 
 export type ProductFaqRow = {
   id: string;
   product_id: string;
   question: string;
   answer: string;
-  display_order: number;
-  is_active?: boolean | 0 | 1;
+  display_order: number;        // normalize: order_num -> display_order
+  /** ⛳ FE FAQ tipine uyum için kesin boolean */
+  is_active: boolean;
   created_at?: string;
   updated_at?: string;
 };
+
+
+export type ProductStockRow = {
+  id: string;
+  product_id: string;
+  /** ⛳ FE 'stock_content' bekliyor */
+  stock_content: string;        // örn. key / e-pin / "hesap:şifre"
+  is_used: boolean;             // normalize
+  used_at: string | null;       // ISO | null
+  created_at: string;
+  order_item_id: string | null;
+
+  /** İstersen geriye dönük uyum için: */
+  // code?: string | null;
+};
+
+
 
 export type MenuItemRow = {
   id: string;
@@ -210,8 +234,6 @@ export type CartItemRow = {
   } | null;
 };
 
-
-
 export type BlogPostRow = {
   id: string;
   title: string;
@@ -319,7 +341,6 @@ export type ProfileRow = {
   created_at: string; // ISO
   updated_at: string; // ISO
 };
-
 /** ---- VIEW tipleri (UI’nin beklediği) ---- */
 export interface OrderView {
   id: string;
@@ -415,42 +436,66 @@ export type ProductRow = {
 
   /** Stok & kimlik alanları */
   sku?: string | null;
-  stock_quantity?: number | null;
+  /** ⛳ FE listesinde required: */
+  stock_quantity: number;
 
   /** Bayraklar */
   is_active: boolean;
+  /** Anasayfada gösterim */
+  show_on_homepage: boolean;
   is_featured?: boolean;
   is_digital?: boolean;
   requires_shipping?: boolean;
 
-  /** SEO */
-  meta_title?: string | null;
-  meta_description?: string | null;
+  /** Teslimat/ürün tipi */
+  delivery_type?: "manual" | "auto_stock" | "file" | "api" | string | null;
 
-  /** Teslimat/ürün tipi (opsiyonel) */
-  product_type?: string | null;
-  delivery_type?: string | null;
+  /** Dosya/Api alanları */
+  file_url?: string | null;
+  api_provider_id?: string | null;
+  api_product_id?: string | null;
+  api_quantity?: number | null;
 
-  /** Özel alanlar / adet-seçenekleri (opsiyonel) */
+  /** EPIN / Turkpin & otomasyon */
+  epin_game_id?: string | null;
+  epin_product_id?: string | null;
+  auto_delivery_enabled?: boolean;
+  pre_order_enabled?: boolean;
+
+  /** Adet/barem limitleri */
+  min_order?: number;
+  max_order?: number;
+  min_barem?: number;
+  max_barem?: number;
+  barem_step?: number;
+
+  /** Vergi */
+  tax_type?: number;
+
+  /** Özel alanlar / adet-seçenekleri */
   custom_fields?: ReadonlyArray<Record<string, unknown>> | null;
   quantity_options?: { quantity: number; price: number }[] | null;
 
-  /** Rozetler (opsiyonel) */
+  /** Rozetler */
   badges?: Array<{ text: string; icon?: string | null; active: boolean }> | null;
 
-  /** İçerik & Demo (opsiyonel) */
+  /** İçerik & Demo */
   article_content?: string | null;
   article_enabled?: boolean;
   demo_url?: string | null;
   demo_embed_enabled?: boolean;
   demo_button_text?: string | null;
 
-  created_at?: string;
+  /** ⛳ FE listesinde required: */
+  created_at: string;
   updated_at?: string;
 
   // join: select("*, categories(id, name, slug)")
   categories?: { id: string; name: string; slug: string };
 };
+
+
+
 
 /** View tip (FE’nin beklediği genişletilmiş ürün tipi) */
 export type ProductView = {
@@ -501,8 +546,6 @@ export type ProductView = {
   categories?: { id: string; name: string; slug?: string };
 };
 
-
-
 /* ===========================
  * Known Tables & TableRow map
  * =========================== */
@@ -544,7 +587,6 @@ export type KnownTables =
   | "support_tickets"
   | "ticket_replies";
 
-
 /** TableRow eşlemesi */
 export type TableRow<TName extends string> = TName extends "categories"
   ? CategoryRow
@@ -584,6 +626,10 @@ export type TableRow<TName extends string> = TName extends "categories"
   ? WalletDepositRequestRow
   : TName extends "profiles"
   ? ProfileRow
-  : TName extends "orders" ? OrderView
-  : TName extends "order_items" ? OrderItemView
+  : TName extends "product_stock"
+  ? ProductStockRow
+  : TName extends "orders"
+  ? OrderView
+  : TName extends "order_items"
+  ? OrderItemView
   : UnknownRow;
