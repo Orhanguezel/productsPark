@@ -1,10 +1,10 @@
-
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/categories_admin.endpoints.ts
+// FILE: src/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints.ts
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query"; // 👈 EKLE
 
-// helpers
+// helpers ...
 const toNumber = (x: unknown): number => (typeof x === "number" ? x : Number(x as unknown));
 const toBool = (x: unknown): boolean => {
   if (typeof x === "boolean") return x;
@@ -24,7 +24,6 @@ export type Category = {
   is_active: boolean;
   is_featured: boolean;
   display_order: number;
-  // SEO
   seo_title?: string | null;
   seo_description?: string | null;
   created_at?: string;
@@ -78,61 +77,77 @@ export type UpsertCategoryBody = {
 export const categoriesAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCategoriesAdmin: b.query<Category[], ListParams | void>({
-      query: (params) => ({ url: "/categories", params }),
-      transformResponse: (res: unknown): Category[] => Array.isArray(res) ? (res as ApiCategory[]).map(normalizeCategory) : [],
-      providesTags: (result) => result ? [
-        ...result.map((c) => ({ type: "Categories" as const, id: c.id })),
-        { type: "Categories" as const, id: "LIST" },
-      ] : [{ type: "Categories" as const, id: "LIST" }],
+      query: (params): FetchArgs => ({ url: "/categories", params }), // 👈
+      transformResponse: (res: unknown): Category[] =>
+        Array.isArray(res) ? (res as ApiCategory[]).map(normalizeCategory) : [],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((c) => ({ type: "Categories" as const, id: c.id })),
+              { type: "Categories" as const, id: "LIST" },
+            ]
+          : [{ type: "Categories" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
 
     getCategoryAdminById: b.query<Category, string>({
-      query: (id) => ({ url: `/categories/${id}` }),
+      query: (id): FetchArgs => ({ url: `/categories/${id}` }), // 👈
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
       providesTags: (_r, _e, id) => [{ type: "Categories", id }],
     }),
 
     getCategoryAdminBySlug: b.query<Category | null, string>({
-      query: (slug) => ({ url: `/categories/by-slug/${encodeURIComponent(slug)}` }),
-      transformResponse: (res: unknown): Category | null => res ? normalizeCategory(res as ApiCategory) : null,
+      query: (slug): FetchArgs => ({ url: `/categories/by-slug/${encodeURIComponent(slug)}` }), // 👈
+      transformResponse: (res: unknown): Category | null => (res ? normalizeCategory(res as ApiCategory) : null),
       providesTags: (_r, _e, slug) => [{ type: "Categories", id: `SLUG_${slug}` }],
     }),
 
     createCategoryAdmin: b.mutation<Category, UpsertCategoryBody>({
-      query: (body) => ({ url: "/categories", method: "POST", body }),
+      query: (body): FetchArgs => ({ url: "/categories", method: "POST", body }), // 👈
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
       invalidatesTags: [{ type: "Categories", id: "LIST" }],
     }),
 
     updateCategoryAdmin: b.mutation<Category, { id: string; body: UpsertCategoryBody }>({
-      query: ({ id, body }) => ({ url: `/categories/${id}`, method: "PUT", body }),
+      query: ({ id, body }): FetchArgs => ({ url: `/categories/${id}`, method: "PUT", body }), // 👈
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
-      invalidatesTags: (_r, _e, arg) => [{ type: "Categories", id: arg.id }, { type: "Categories", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Categories", id: arg.id },
+        { type: "Categories", id: "LIST" },
+      ],
     }),
 
     deleteCategoryAdmin: b.mutation<{ ok: true }, string>({
-      query: (id) => ({ url: `/categories/${id}`, method: "DELETE" }),
+      query: (id): FetchArgs => ({ url: `/categories/${id}`, method: "DELETE" }), // 👈
       transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: (_r, _e, id) => [{ type: "Categories", id }, { type: "Categories", id: "LIST" }],
+      invalidatesTags: (_r, _e, id) => [
+        { type: "Categories", id },
+        { type: "Categories", id: "LIST" },
+      ],
     }),
 
     reorderCategoriesAdmin: b.mutation<{ ok: true }, Array<{ id: string; display_order: number }>>({
-      query: (items) => ({ url: "/categories/reorder", method: "POST", body: { items } }),
+      query: (items): FetchArgs => ({ url: "/categories/reorder", method: "POST", body: { items } }), // 👈
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "Categories", id: "LIST" }],
     }),
 
     toggleActiveCategoryAdmin: b.mutation<Category, { id: string; is_active: boolean }>({
-      query: ({ id, is_active }) => ({ url: `/categories/${id}/active`, method: "PATCH", body: { is_active } }),
+      query: ({ id, is_active }): FetchArgs => ({ url: `/categories/${id}/active`, method: "PATCH", body: { is_active } }), // 👈
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
-      invalidatesTags: (_r, _e, arg) => [{ type: "Categories", id: arg.id }, { type: "Categories", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Categories", id: arg.id },
+        { type: "Categories", id: "LIST" },
+      ],
     }),
 
     toggleFeaturedCategoryAdmin: b.mutation<Category, { id: string; is_featured: boolean }>({
-      query: ({ id, is_featured }) => ({ url: `/categories/${id}/featured`, method: "PATCH", body: { is_featured } }),
+      query: ({ id, is_featured }): FetchArgs => ({ url: `/categories/${id}/featured`, method: "PATCH", body: { is_featured } }), // 👈
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
-      invalidatesTags: (_r, _e, arg) => [{ type: "Categories", id: arg.id }, { type: "Categories", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Categories", id: arg.id },
+        { type: "Categories", id: "LIST" },
+      ],
     }),
   }),
   overrideExisting: true,

@@ -1,3 +1,5 @@
+// src/integrations/metahub/db/tables.ts
+
 import type { KnownTables} from "./types";
 
 

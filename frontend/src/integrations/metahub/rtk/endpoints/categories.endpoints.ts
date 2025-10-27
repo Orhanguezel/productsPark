@@ -1,5 +1,5 @@
-// src/integrations/metahub/rtk/endpoints/categories.endpoints.ts
 import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query"; // 👈 EKLE
 
 export type Category = {
   id: string;
@@ -13,13 +13,12 @@ export type Category = {
   display_order?: number;
   created_at?: string;
   updated_at?: string;
-  // FE’de kullanılan ekstra alanlar varsa burada genişletebilirsin
 };
 
 export const categoriesApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     listCategories: builder.query<Category[], void>({
-      query: () => ({ url: "/categories" }),
+      query: (): FetchArgs => ({ url: "/categories" }), // 👈
       providesTags: (result) =>
         result
           ? [
@@ -29,7 +28,7 @@ export const categoriesApi = baseApi.injectEndpoints({
           : [{ type: "Categories" as const, id: "LIST" }],
     }),
     getCategoryById: builder.query<Category, string>({
-      query: (id) => ({ url: `/categories/${id}` }),
+      query: (id): FetchArgs => ({ url: `/categories/${id}` }), // 👈
       providesTags: (_r, _e, id) => [{ type: "Categories", id }],
     }),
   }),

@@ -1,0 +1,53 @@
+{
+  "id": "4f8a6a90-pp-env-1",
+  "name": "AAA ProductsPark Local",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:8081", "enabled": true },
+    { "key": "frontend_url", "value": "http://localhost:5173", "enabled": true },
+
+    { "key": "login_email", "value": "orhanguzell@gmail.com", "enabled": true },
+    { "key": "login_password", "value": "admin123", "enabled": true },
+    { "key": "access_token", "value": "", "enabled": true },
+
+    { "key": "profile_full_name", "value": "Orhan Güzel", "enabled": true },
+    { "key": "profile_phone", "value": "+905551112233", "enabled": true },
+
+    { "key": "category_id", "value": "", "enabled": true },
+    { "key": "category_slug", "value": "elektronik", "enabled": true },
+    { "key": "cat_q", "value": "", "enabled": true },
+    { "key": "cat_parent_id", "value": "", "enabled": true },
+    { "key": "cat_is_active", "value": "", "enabled": true },
+    { "key": "cat_is_featured", "value": "", "enabled": true },
+    { "key": "cat_limit", "value": "50", "enabled": true },
+    { "key": "cat_offset", "value": "0", "enabled": true },
+    { "key": "cat_sort", "value": "created_at", "enabled": true },
+    { "key": "cat_order", "value": "desc", "enabled": true },
+    { "key": "new_category_name", "value": "", "enabled": true },
+    { "key": "new_category_slug", "value": "", "enabled": true },
+
+    { "key": "product_id", "value": "", "enabled": true },
+    { "key": "product_slug", "value": "", "enabled": true },
+    { "key": "search_q", "value": "", "enabled": true },
+    { "key": "limit", "value": "50", "enabled": true },
+    { "key": "offset", "value": "0", "enabled": true },
+    { "key": "sort", "value": "created_at", "enabled": true },
+    { "key": "order", "value": "desc", "enabled": true },
+
+    { "key": "faq_id", "value": "", "enabled": true },
+    { "key": "option_id", "value": "", "enabled": true },
+    { "key": "review_id", "value": "", "enabled": true },
+    { "key": "stock_id", "value": "", "enabled": true },
+    { "key": "stock_is_used", "value": "", "enabled": true },
+
+    { "key": "admin_q", "value": "", "enabled": true },
+    { "key": "admin_limit", "value": "50", "enabled": true },
+    { "key": "admin_offset", "value": "0", "enabled": true },
+    { "key": "admin_target_user_id", "value": "", "enabled": true },
+    { "key": "admin_target_email", "value": "user@example.com", "enabled": true },
+    { "key": "admin_role", "value": "admin", "enabled": true },
+
+    { "key": "google_id_token", "value": "", "enabled": true }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_using": "Postman/10.x"
+}

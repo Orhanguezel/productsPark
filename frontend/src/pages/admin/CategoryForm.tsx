@@ -208,7 +208,7 @@ export default function CategoryForm() {
                     const fileName = `${Date.now()}.${fileExt}`;
                     const filePath = `${fileName}`;
 
-                    const { error: uploadError } = await metahubstorage
+                    const { error: uploadError } = await metahub.storage
                       .from('product-images')
                       .upload(filePath, file);
 
@@ -217,7 +217,7 @@ export default function CategoryForm() {
                       return;
                     }
 
-                    const { data } = metahubstorage.from('product-images').getPublicUrl(filePath);
+                    const { data } = metahub.storage.from('product-images').getPublicUrl(filePath);
                     setFormData({ ...formData, image_url: data.publicUrl });
                     toast({ title: "Başarılı", description: "Görsel yüklendi." });
                   }}

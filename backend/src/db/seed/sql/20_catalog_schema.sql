@@ -1,3 +1,9 @@
+-- =========================================================
+--  SCHEMA (MySQL 8+, utf8mb4, Drizzle uyumlu)
+-- =========================================================
+SET NAMES utf8mb4;
+SET time_zone = '+00:00';
+
 -- =========================
 -- CATEGORIES
 -- =========================
@@ -9,15 +15,24 @@ CREATE TABLE IF NOT EXISTS categories (
   image_url     VARCHAR(500)  DEFAULT NULL,
   icon          VARCHAR(100)  DEFAULT NULL,
   parent_id     CHAR(36)      DEFAULT NULL,
+
+  is_active     TINYINT(1)    NOT NULL DEFAULT 1,
   is_featured   TINYINT(1)    NOT NULL DEFAULT 0,
   display_order INT(11)       NOT NULL DEFAULT 0,
+
   created_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
   PRIMARY KEY (id),
 
-  -- tekillik + arama
   UNIQUE KEY categories_slug_uq (slug),
-  KEY categories_parent_id_idx (parent_id)
+  KEY categories_parent_id_idx (parent_id),
+  KEY categories_active_idx (is_active),
+  KEY categories_order_idx (display_order),
+
+  CONSTRAINT fk_categories_parent
+    FOREIGN KEY (parent_id) REFERENCES categories(id)
+    ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
@@ -31,7 +46,6 @@ CREATE TABLE IF NOT EXISTS products (
   description        TEXT          DEFAULT NULL,
   short_description  VARCHAR(500)  DEFAULT NULL,
 
-  -- Drizzle FK is nullable (ON DELETE SET NULL)
   category_id        CHAR(36)      DEFAULT NULL,
 
   price              DECIMAL(10,2) NOT NULL,
@@ -78,13 +92,12 @@ CREATE TABLE IF NOT EXISTS products (
 
   PRIMARY KEY (id),
 
-  -- tekillik + arama
   UNIQUE KEY products_slug_uq (slug),
   KEY products_category_id_idx (category_id),
   KEY products_sku_idx (sku),
   KEY products_active_idx (is_active),
 
-  -- listeleme pattern'leri
+  -- Listeleme pattern'leri
   KEY products_cat_active_created_idx (category_id, is_active, created_at),
   KEY products_slug_active_idx (slug, is_active),
 
