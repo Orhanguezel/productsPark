@@ -19,6 +19,10 @@ const CORS_ORIGIN = CORS_LIST.length ? CORS_LIST : [FRONTEND_URL];
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PORT: toInt(process.env.PORT, 8081),
+   QUIZ: {
+      DURATION_SECONDS: Number(process.env.QUIZ_DURATION_SECONDS ?? 60),
+    },
+
 
   DB: {
     host: process.env.DB_HOST || '127.0.0.1',

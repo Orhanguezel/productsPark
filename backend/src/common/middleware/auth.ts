@@ -1,31 +1,39 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import '@fastify/jwt';
+import '@fastify/cookie';
 
+/**
+ * Cookie-first + Header fallback.
+ * - Cookie adları: access_token | accessToken
+ * - Header: Authorization: Bearer <token>
+ */
 export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   try {
-    const hasAuthHeader =
-      typeof req.headers.authorization === 'string' && req.headers.authorization.length > 0;
-
-    // her iki adı da tara
+    const hasAuthHeader = typeof req.headers.authorization === 'string' && req.headers.authorization.length > 0;
     const cookies = (req.cookies ?? {}) as Record<string, string | undefined>;
     const cookieToken = cookies.access_token ?? cookies.accessToken;
 
-    if (hasAuthHeader) {
-      // Authorization: Bearer ... (plugin kendi alır)
-      await req.jwtVerify();
-      return;
-    }
-
     if (cookieToken) {
-      // Cookie-first doğrulama (adı ne olursa olsun)
       const payload = req.server.jwt.verify(cookieToken);
-      (req as any).user = payload; // fastify-jwt'nin yaptığı gibi request.user doldur
+      (req as any).user = payload;
       return;
     }
 
-    return reply.code(401).send({ error: { message: 'no_token' } });
+    if (hasAuthHeader) {
+      // fastify-jwt: req.jwtVerify() -> payload'ı req.user içine yazar
+      await req.jwtVerify();
+      // güvene almak için:
+      if (!(req as any).user && (req as any).user === undefined) {
+        (req as any).user = (req as any).user ?? (req as any).jwt ?? undefined;
+      }
+      return;
+    }
+
+    reply.code(401).send({ error: { message: 'no_token' } });
+    return;
   } catch (err) {
-    req.log.warn(err);
-    return reply.code(401).send({ error: { message: 'invalid_token' } });
+    req.log.warn({ err }, 'auth_failed');
+    reply.code(401).send({ error: { message: 'invalid_token' } });
+    return;
   }
 }

@@ -1,0 +1,549 @@
+{
+  "info": {
+    "_postman_id": "9bb6ab64-d0cc-45e3-8ce9-96111efca479",
+    "name": "AAA ilave ProductsPark API",
+    "description": "Cookie-first auth akışı: Auth, Profiles, Status, Products, FAQs, Options, Reviews, Stock, Categories ve Auth Admin.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+    "_exporter_id": "20528167"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Cookie-first: Authorization header'ını ancak açıkça istenirse ekle",
+          "const preferHeader = pm.environment.get('prefer_header_auth') === '1';",
+          "const at = pm.environment.get('access_token');",
+          "if (preferHeader && at) {",
+          "  pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${at}` });",
+          "} else {",
+          "  pm.request.headers.remove('Authorization');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Sign Up (email+password)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Boşsa random e-posta üret",
+                  "if(!pm.environment.get('signup_email')){",
+                  "  pm.environment.set('signup_email', `test_${Date.now()}@example.com`);",
+                  "}",
+                  "if(!pm.environment.get('signup_password')) pm.environment.set('signup_password','Test1234!');",
+                  "if(!pm.environment.get('signup_full_name')) pm.environment.set('signup_full_name','Test User');",
+                  "if(!pm.environment.get('signup_phone')) pm.environment.set('signup_phone','+905551112233');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Signup OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if(json && json.access_token){ pm.environment.set('access_token', json.access_token); }",
+                  "if(json && json.user && json.user.id){",
+                  "  pm.environment.set('user_id', json.user.id);",
+                  "  pm.environment.set('login_email', json.user.email || pm.environment.get('signup_email'));",
+                  "  pm.environment.set('login_password', pm.environment.get('signup_password'));",
+                  "}",
+                  "// Cookie doğrulama",
+                  "pm.test('access_token cookie set', () => pm.expect(pm.cookies.has('access_token')).to.be.true);",
+                  "pm.test('refresh_token cookie set', () => pm.expect(pm.cookies.has('refresh_token')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{signup_email}}\",\n  \"password\": \"{{signup_password}}\",\n  \"options\": { \"data\": { \"full_name\": \"{{signup_full_name}}\", \"phone\": \"{{signup_phone}}\" } }\n}"
+            },
+            "url": "{{base_url}}/auth/v1/signup"
+          }
+        },
+        {
+          "name": "Token (password grant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if(json && json.access_token){ pm.environment.set('access_token', json.access_token); }",
+                  "if(json && json.user && json.user.id){ pm.environment.set('user_id', json.user.id); }",
+                  "// Cookie doğrulama",
+                  "pm.test('access_token cookie set', () => pm.expect(pm.cookies.has('access_token')).to.be.true);",
+                  "pm.test('refresh_token cookie set', () => pm.expect(pm.cookies.has('refresh_token')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/v1/token"
+          }
+        },
+        {
+          "name": "Refresh Access Token (uses refresh cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Refresh OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "if (j && j.access_token) pm.environment.set('access_token', j.access_token);",
+                  "pm.test('access_token cookie set (after refresh)', () => pm.expect(pm.cookies.has('access_token')).to.be.true);",
+                  "pm.test('refresh_token cookie set (after refresh)', () => pm.expect(pm.cookies.has('refresh_token')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [], "url": "{{base_url}}/auth/v1/token/refresh" }
+        },
+        {
+          "name": "Get Status (/auth/v1/user) — via Cookie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if(json && json.user){",
+                  "  pm.environment.set('user_id', json.user.id);",
+                  "  pm.environment.set('user_role', json.user.role);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [], "url": "{{base_url}}/auth/v1/user" }
+        },
+        {
+          "name": "Update User (/auth/v1/user)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{login_email}}\"\n}" },
+            "url": "{{base_url}}/auth/v1/user"
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Logout 204', () => pm.response.to.have.status(204));",
+                  "pm.environment.unset('access_token');"
+                ]
+              }
+            }
+          ],
+          "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [], "url": "{{base_url}}/auth/v1/logout" }
+        }
+      ]
+    },
+
+    {
+      "name": "Auth Admin",
+      "item": [
+        { "name": "Admin: List Users", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/auth/v1/admin/users?q={{admin_q}}&limit={{admin_limit}}&offset={{admin_offset}}" } },
+        { "name": "Admin: Get User by ID", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/auth/v1/admin/users/{{admin_target_user_id}}" } },
+        {
+          "name": "Admin: Grant Role",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"{{admin_target_user_id}}\",\n  \"role\": \"{{admin_role}}\"\n}" },
+            "url": "{{base_url}}/auth/v1/admin/roles"
+          }
+        },
+        {
+          "name": "Admin: Revoke Role",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"{{admin_target_user_id}}\",\n  \"role\": \"{{admin_role}}\"\n}" },
+            "url": "{{base_url}}/auth/v1/admin/roles"
+          }
+        },
+        {
+          "name": "Admin: Make Admin by Email",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{admin_target_email}}\"\n}" },
+            "url": "{{base_url}}/auth/v1/admin/make-admin"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Categories",
+      "item": [
+        { "name": "List Categories (public)", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/categories?q={{cat_q}}&parent_id={{cat_parent_id}}&is_active={{cat_is_active}}&is_featured={{cat_is_featured}}&limit={{cat_limit}}&offset={{cat_offset}}&sort={{cat_sort}}&order={{cat_order}}" } },
+        { "name": "Get Category by ID (public)", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/categories/{{category_id}}" } },
+        {
+          "name": "Get Category by Slug (public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if(j && j.id){",
+                  "  pm.environment.set('category_id', j.id);",
+                  "  pm.environment.set('category_slug', j.slug || pm.environment.get('category_slug'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/categories/by-slug/{{category_slug}}" }
+        },
+        {
+          "name": "Create Category (admin, cookie)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('ts', Date.now());",
+                  "if(!pm.environment.get('new_category_name')) pm.environment.set('new_category_name', `Elektronik {{ts}}`);",
+                  "if(!pm.environment.get('new_category_slug')) pm.environment.set('new_category_slug', `elektronik-{{ts}}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "if(j && j.id){",
+                  "  pm.environment.set('category_id', j.id);",
+                  "  pm.environment.set('category_slug', j.slug);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{new_category_name}}\",\n  \"slug\": \"{{new_category_slug}}\",\n  \"description\": null,\n  \"image_url\": null,\n  \"icon\": null,\n  \"parent_id\": null,\n  \"is_active\": 1,\n  \"is_featured\": 0,\n  \"display_order\": 1\n}"
+            },
+            "url": "{{base_url}}/categories"
+          }
+        },
+        {
+          "name": "PUT Category (admin, cookie)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{new_category_name}} (Güncellendi)\",\n  \"slug\": \"{{new_category_slug}}\",\n  \"description\": \"Güncel açıklama\",\n  \"display_order\": 2\n}"
+            },
+            "url": "{{base_url}}/categories/{{category_id}}"
+          }
+        },
+        {
+          "name": "PATCH Category (admin, cookie)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Patch ile güncellendi\"\n}" },
+            "url": "{{base_url}}/categories/{{category_id}}"
+          }
+        },
+        {
+          "name": "Toggle Active (admin, cookie)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_active\": false\n}" },
+            "url": "{{base_url}}/categories/{{category_id}}/active"
+          }
+        },
+        {
+          "name": "Toggle Featured (admin, cookie)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_featured\": true\n}" },
+            "url": "{{base_url}}/categories/{{category_id}}/featured"
+          }
+        },
+        {
+          "name": "Reorder (admin, cookie)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"items\": [ { \"id\": \"{{category_id}}\", \"display_order\": 3 } ]\n}" },
+            "url": "{{base_url}}/categories/reorder"
+          }
+        },
+        {
+          "name": "Delete Category (admin, cookie)",
+          "request": { "auth": { "type": "noauth" }, "method": "DELETE", "url": "{{base_url}}/categories/{{category_id}}" }
+        }
+      ]
+    },
+
+    {
+      "name": "Profiles",
+      "item": [
+        { "name": "Get My Profile", "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [], "url": "{{base_url}}/profiles/v1/me" } },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"{{profile_full_name}}\",\n  \"phone\": \"{{profile_phone}}\",\n  \"avatar_url\": null,\n  \"address_line1\": \"\",\n  \"address_line2\": \"\",\n  \"city\": \"\",\n  \"country\": \"\",\n  \"postal_code\": \"\"\n}"
+            },
+            "url": "{{base_url}}/profiles/v1/me"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products (active, optional filters)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/products?is_active=1&category_id={{category_id}}&q={{search_q}}&limit={{limit}}&offset={{offset}}&sort={{sort}}&order={{order}}",
+              "host": ["{{base_url}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "is_active", "value": "1" },
+                { "key": "category_id", "value": "{{category_id}}" },
+                { "key": "q", "value": "{{search_q}}" },
+                { "key": "limit", "value": "{{limit}}" },
+                { "key": "offset", "value": "{{offset}}" },
+                { "key": "sort", "value": "{{sort}}" },
+                { "key": "order", "value": "{{order}}" }
+              ]
+            }
+          }
+        },
+        { "name": "Get Product by Slug", "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [], "url": "{{base_url}}/products/by-slug/{{product_slug}}" } },
+        { "name": "Get Product by ID", "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [], "url": "{{base_url}}/products/{{product_id}}" } },
+        {
+          "name": "Create Product (admin, cookie)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["pm.environment.set('timestamp', Date.now());"] } },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "if(j && j.id){ pm.environment.set('product_id', j.id); pm.environment.set('product_slug', j.slug); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Ürün {{timestamp}}\",\n  \"slug\": \"test-urun-{{timestamp}}\",\n  \"price\": 99.90,\n  \"original_price\": 129.90,\n  \"short_description\": \"Kısa açıklama\",\n  \"description\": \"<p>Uzun açıklama</p>\",\n  \"category_id\": \"{{category_id}}\",\n  \"image_url\": \"https://picsum.photos/seed/{{timestamp}}/800/600\",\n  \"gallery_urls\": [\"https://picsum.photos/seed/{{timestamp}}a/800/600\"],\n  \"features\": [\"Ozellik A\",\"Ozellik B\"],\n  \"rating\": 4.8,\n  \"review_count\": 120,\n  \"product_type\": \"software\",\n  \"delivery_type\": \"manual\",\n  \"custom_fields\": [\n    {\"id\":\"email\",\"label\":\"E-Posta\",\"type\":\"email\",\"required\":true}\n  ],\n  \"quantity_options\": [ {\"quantity\":1, \"price\":99.90}, {\"quantity\":5, \"price\":449.00} ],\n  \"demo_url\": null,\n  \"demo_embed_enabled\": 0,\n  \"badges\": [ {\"text\":\"Popüler\",\"icon\":\"Sparkles\",\"active\":true} ]\n}"
+            },
+            "url": "{{base_url}}/products"
+          }
+        },
+        {
+          "name": "Update Product (admin, cookie)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"price\": 89.90,\n  \"is_active\": 1\n}" },
+            "url": "{{base_url}}/products/{{product_id}}"
+          }
+        },
+        { "name": "Delete Product (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "DELETE", "header": [], "url": "{{base_url}}/products/{{product_id}}" } }
+      ]
+    },
+
+    {
+      "name": "Product FAQs",
+      "item": [
+        {
+          "name": "List FAQs (only_active optional)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/product_faqs?product_id={{product_id}}&only_active=true",
+              "host": ["{{base_url}}"],
+              "path": ["product_faqs"],
+              "query": [
+                { "key": "product_id", "value": "{{product_id}}" },
+                { "key": "only_active", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create FAQ (admin, cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["const j = pm.response.json();","if(j && j.id) pm.environment.set('faq_id', j.id);"] }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"question\": \"Soru?\",\n  \"answer\": \"Cevap.\",\n  \"display_order\": 1,\n  \"is_active\": 1\n}" },
+            "url": "{{base_url}}/product_faqs"
+          }
+        },
+        { "name": "Update FAQ (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"display_order\": 2\n}" }, "url": "{{base_url}}/product_faqs/{{faq_id}}" } },
+        { "name": "Delete FAQ (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "DELETE", "header": [], "url": "{{base_url}}/product_faqs/{{faq_id}}" } }
+      ]
+    },
+
+    {
+      "name": "Product Options",
+      "item": [
+        {
+          "name": "List Options",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/product_options?product_id={{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["product_options"],
+              "query": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Create Option (admin, cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["const j = pm.response.json();","if(j && j.id) pm.environment.set('option_id', j.id);"] }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"option_name\": \"Renk\",\n  \"option_values\": [\"Kırmızı\",\"Mavi\"]\n}" },
+            "url": "{{base_url}}/product_options"
+          }
+        },
+        { "name": "Update Option (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"option_values\": [\"Kırmızı\",\"Siyah\"]\n}" }, "url": "{{base_url}}/product_options/{{option_id}}" } },
+        { "name": "Delete Option (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "DELETE", "header": [], "url": "{{base_url}}/product_options/{{option_id}}" } }
+      ]
+    },
+
+    {
+      "name": "Product Stock (requires auth)",
+      "item": [
+        {
+          "name": "List Stock",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/product_stock?product_id={{product_id}}&is_used={{stock_is_used}}",
+              "host": ["{{base_url}}"],
+              "path": ["product_stock"],
+              "query": [
+                { "key": "product_id", "value": "{{product_id}}" },
+                { "key": "is_used", "value": "{{stock_is_used}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Stock Code (admin, cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["const j = pm.response.json();","if(j && j.id) pm.environment.set('stock_id', j.id);"] }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"code\": \"KEY-{{timestamp}}-ABC\",\n  \"is_used\": 0\n}" },
+            "url": "{{base_url}}/product_stock"
+          }
+        },
+        { "name": "Update Stock Code (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"is_used\": 1\n}" }, "url": "{{base_url}}/product_stock/{{stock_id}}" } },
+        { "name": "Delete Stock Code (admin, cookie)", "request": { "auth": { "type": "noauth" }, "method": "DELETE", "header": [], "url": "{{base_url}}/product_stock/{{stock_id}}"} }
+      ]
+    }
+  ],
+  "auth": { "type": "noauth" }
+}

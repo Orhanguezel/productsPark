@@ -46,7 +46,7 @@ export const metahubTags = [
   "Payments","Payment",
   "Permissions","Permission",
   "Invoices","Invoice",
-  "UserRoles","UserRole",
+  "UserRoles","UserRole","AdminUsers",
   "TopbarSettings","TopbarSetting",
   "WalletDepositRequests","WalletDepositRequest",
   "RPC","Rpc",

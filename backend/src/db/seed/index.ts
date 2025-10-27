@@ -1,9 +1,8 @@
-// src/db/seed/index.ts
-
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 import { env } from '@/core/env';
 import { cleanSql, splitStatements, logStep } from './utils';
 
@@ -61,7 +60,8 @@ async function createConnToDb(): Promise<mysql.Connection> {
     password: env.DB.password,
     database: env.DB.name,
     multipleStatements: true,
-    charset: 'utf8mb4_general_ci',
+    // unicode_ci ile uyumlu
+    charset: 'utf8mb4_unicode_ci',
   });
 }
 
@@ -72,14 +72,57 @@ function shouldRun(file: string, flags: Flags) {
   return prefix ? flags.only.includes(prefix) : false;
 }
 
-async function runSqlFile(conn: mysql.Connection, absPath: string) {
+/** admin değişkenlerini ENV'den oku + bcrypt üret */
+function getAdminVars() {
+  const email = (process.env.ADMIN_EMAIL || 'orhanguzell@gmail.com').trim();
+  const id = (process.env.ADMIN_ID || '4f618a8d-6fdb-498c-898a-395d368b2193').trim();
+  const plainPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const passwordHash = bcrypt.hashSync(plainPassword, 12);
+  return { email, id, passwordHash };
+}
+
+/** SQL string güvenli tek tırnak escape */
+function sqlStr(v: string) {
+  return v.replaceAll("'", "''");
+}
+
+/** Dosyayı oku, temizle, admin değişkenleri enjekte et ve opsiyonel yer tutucu değiştir */
+function prepareSqlForRun(rawSql: string, admin: { email: string; id: string; passwordHash: string }) {
+  // Dosyadaki comment/boşluk temizliği
+  let sql = cleanSql(rawSql);
+
+  // Header ile session değişkenlerini set et (dosyada COALESCE olsa bile önce biz set ediyoruz)
+  const header = [
+    `SET @ADMIN_EMAIL := '${sqlStr(admin.email)}';`,
+    `SET @ADMIN_ID := '${sqlStr(admin.id)}';`,
+    `SET @ADMIN_PASSWORD_HASH := '${sqlStr(admin.passwordHash)}';`
+  ].join('\n');
+
+  // Eski yer tutucu kalıplarını da destekle (örn: {{ADMIN_BCRYPT}})
+  sql = sql
+    .replaceAll('{{ADMIN_BCRYPT}}', admin.passwordHash)
+    .replaceAll('{{ADMIN_PASSWORD_HASH}}', admin.passwordHash)
+    .replaceAll('{{ADMIN_EMAIL}}', admin.email)
+    .replaceAll('{{ADMIN_ID}}', admin.id);
+
+  // En üstte header'ı ekle
+  sql = `${header}\n${sql}`;
+
+  return sql;
+}
+
+async function runSqlFile(conn: mysql.Connection, absPath: string, adminVars: { email: string; id: string; passwordHash: string }) {
   const name = path.basename(absPath);
   logStep(`⏳ ${name} çalışıyor...`);
   const raw = fs.readFileSync(absPath, 'utf8');
-  const sql = cleanSql(raw);
+
+  const sql = prepareSqlForRun(raw, adminVars);
   const statements = splitStatements(sql);
+
+  // bağlantı karakter seti & timezone
   await conn.query('SET NAMES utf8mb4;');
   await conn.query("SET time_zone = '+00:00';");
+
   for (const stmt of statements) {
     if (!stmt) continue;
     await conn.query(stmt);
@@ -108,7 +151,10 @@ async function main() {
   const conn = await createConnToDb();
 
   try {
-    // 3) SQL klasörünü bul (öncelik env, sonra dist/sql, yoksa src/sql)
+    // 3) Admin değişkenlerini hazırla (tek sefer)
+    const ADMIN = getAdminVars();
+
+    // 4) SQL klasörünü bul (öncelik env, sonra dist/sql, yoksa src/sql)
     const envDir = process.env.SEED_SQL_DIR && process.env.SEED_SQL_DIR.trim();
     const distSql = path.resolve(__dirname, 'sql');
     const srcSql  = path.resolve(__dirname, '../../../src/db/seed/sql');
@@ -124,7 +170,7 @@ async function main() {
         logStep(`⏭️ ${f} atlandı (--only filtresi)`);
         continue;
       }
-      await runSqlFile(conn, abs);
+      await runSqlFile(conn, abs, ADMIN);
     }
     logStep('🎉 Seed tamamlandı.');
   } finally {
