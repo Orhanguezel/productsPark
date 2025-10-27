@@ -17,7 +17,6 @@ export const products = mysqlTable(
 
     category_id: char('category_id', { length: 36 }),
 
-    // DECIMAL -> Drizzle tarafında string döner (normalize'da number'a çeviriyoruz)
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
     original_price: decimal('original_price', { precision: 10, scale: 2 }),
     cost: decimal('cost', { precision: 10, scale: 2 }),
@@ -32,6 +31,7 @@ export const products = mysqlTable(
 
     product_type: varchar('product_type', { length: 50 }),
     delivery_type: varchar('delivery_type', { length: 50 }),
+
     custom_fields: json('custom_fields'),
     quantity_options: json('quantity_options'),
 
@@ -44,27 +44,45 @@ export const products = mysqlTable(
 
     article_content: text('article_content'),
     article_enabled: tinyint('article_enabled').notNull().default(0),
+
     demo_url: varchar('demo_url', { length: 500 }),
     demo_embed_enabled: tinyint('demo_embed_enabled').notNull().default(0),
     demo_button_text: varchar('demo_button_text', { length: 100 }),
+
     badges: json('badges'),
 
     sku: varchar('sku', { length: 100 }),
     stock_quantity: int('stock_quantity').notNull().default(0),
     is_active: tinyint('is_active').notNull().default(1),
     is_featured: tinyint('is_featured').notNull().default(0),
+    is_digital: tinyint('is_digital').notNull().default(0),
     requires_shipping: tinyint('requires_shipping').notNull().default(1),
+
+    // FE ilave alanlar
+    file_url: varchar('file_url', { length: 500 }),
+    epin_game_id: varchar('epin_game_id', { length: 64 }),
+    epin_product_id: varchar('epin_product_id', { length: 64 }),
+    auto_delivery_enabled: tinyint('auto_delivery_enabled').notNull().default(0),
+    pre_order_enabled: tinyint('pre_order_enabled').notNull().default(0),
+    min_order: int('min_order'),
+    max_order: int('max_order'),
+    min_barem: int('min_barem'),
+    max_barem: int('max_barem'),
+    barem_step: int('barem_step'),
+    tax_type: int('tax_type'),
 
     created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
     updated_at: datetime('updated_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`).$onUpdateFn(() => new Date()),
   },
   (t) => [
     uniqueIndex('products_slug_uq').on(t.slug),
-    index('products_category_idx').on(t.category_id),
+    index('products_category_id_idx').on(t.category_id),
+    index('products_sku_idx').on(t.sku),
+    index('products_active_idx').on(t.is_active),
     foreignKey({
       columns: [t.category_id],
       foreignColumns: [categories.id],
-      name: 'fk_products_category_id',
+      name: 'fk_products_category',               // DDL ile birebir
     }).onDelete('set null').onUpdate('cascade'),
   ]
 );
@@ -96,7 +114,7 @@ export const productReviews = mysqlTable('product_reviews', {
 export const productStock = mysqlTable('product_stock', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   product_id: char('product_id', { length: 36 }).notNull(),
-  code: varchar('code', { length: 255 }).notNull(),
+  stock_content: varchar('stock_content', { length: 255 }).notNull(), // FE ile birebir
   is_used: tinyint('is_used').notNull().default(0),
   used_at: datetime('used_at', { fsp: 3 }),
   created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
@@ -104,5 +122,6 @@ export const productStock = mysqlTable('product_stock', {
 });
 
 export { productOptions } from '../productOptions/schema';
+
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;

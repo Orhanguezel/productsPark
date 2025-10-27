@@ -1,8 +1,12 @@
-import { z } from 'zod';
+// =============================================================
+// FILE: src/modules/products/validation.ts
+// =============================================================
+import { z } from "zod";
 
 /** products */
 export const productCreateSchema = z.object({
   id: z.string().uuid().optional(),
+
   name: z.string().min(1).max(255),
   slug: z.string().min(1).max(255),
 
@@ -23,16 +27,19 @@ export const productCreateSchema = z.object({
   review_count: z.coerce.number().int().min(0).optional(),
 
   product_type: z.string().max(50).optional().nullable(),
-  delivery_type: z.enum(['manual', 'api']).optional().nullable(),
+  // FE beklediği kapsam:
+  delivery_type: z.enum(["manual", "auto_stock", "file", "api"]).optional().nullable(),
+
   custom_fields: z.array(
     z.object({
       id: z.string(),
       label: z.string(),
-      type: z.enum(['text','email','phone','url','textarea']),
+      type: z.enum(["text", "email", "phone", "url", "textarea"]),
       placeholder: z.string().optional().nullable(),
       required: z.boolean().default(false),
     })
   ).optional().nullable(),
+
   quantity_options: z.array(z.object({
     quantity: z.coerce.number().int().min(1),
     price: z.coerce.number().min(0),
@@ -44,11 +51,14 @@ export const productCreateSchema = z.object({
 
   meta_title: z.string().max(255).optional().nullable(),
   meta_description: z.string().max(500).optional().nullable(),
+
   article_content: z.string().optional().nullable(),
   article_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
+
   demo_url: z.string().url().max(500).optional().nullable(),
   demo_embed_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
   demo_button_text: z.string().max(100).optional().nullable(),
+
   badges: z.array(z.object({
     text: z.string(),
     icon: z.string().optional().nullable(),
@@ -57,11 +67,16 @@ export const productCreateSchema = z.object({
 
   sku: z.string().max(100).optional().nullable(),
   stock_quantity: z.coerce.number().int().min(0).optional().default(0),
+
   is_active: z.coerce.number().int().min(0).max(1).optional().default(1),
   is_featured: z.coerce.number().int().min(0).max(1).optional().default(0),
+
+  // DB’de var, FE ile uyumlu:
   requires_shipping: z.coerce.number().int().min(0).max(1).optional().default(1),
 });
+
 export const productUpdateSchema = productCreateSchema.partial();
+
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
 

@@ -13,6 +13,7 @@ import { registerAuth } from '@/modules/auth/router';
 import { registerProfiles } from '@/modules/profiles/router';
 import { registerCategories } from '@/modules/categories/router';
 import { registerProducts } from '@/modules/products/router';
+import { registerProductsAdmin } from "@/modules/products/admin.routes";
 import { registerCartItems } from "@/modules/cart/router";
 import { registerCoupons } from "@/modules/coupons/router";
 import { registerOrders } from '@/modules/orders/router';
@@ -90,6 +91,7 @@ export async function createApp() {
   });
 
   // Modüller
+  await registerProductsAdmin(app);
   await registerAuth(app);
   await registerProfiles(app);
   await registerCategories(app);

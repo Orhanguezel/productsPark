@@ -4,23 +4,19 @@
 import type { UnknownRow, ProductRow } from "./types";
 import { toNumber, numOrNullish, toBool } from "../core/normalize";
 
-
 const num = (v: unknown, fb = 0): number => {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
   return fb;
 };
 
-/**
- * path yardımcıları
- */
+/** path yardımcıları */
 const stripQuery = (p: string) => p.split("?")[0] || p;
 const isProductsPath = (p: string) => {
   const s = stripQuery(p);
-  // /products           -> liste
-  // /products/xxx       -> tekil (id ya da slug)
-  // /products/by-slug   -> liste/tekil için legacy
-  // /products/by-slug/xxx -> tekil legacy
+  // /products                -> liste
+  // /products/:id|:slug      -> tekil
+  // /products/by-slug(/:id)  -> legacy
   return (
     s === "/products" ||
     s.startsWith("/products/") ||
@@ -51,7 +47,10 @@ const parseStringArray = (v: unknown): string[] | null => {
     } catch {
       // CSV fallback
     }
-    const arr = s.split(",").map((x) => x.trim()).filter(Boolean);
+    const arr = s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
     return arr.length ? arr : null;
   }
   return null;
@@ -79,26 +78,44 @@ const deleteKeyIfExists = (obj: Record<string, unknown>, key: string) => {
  * Not: Bu fonksiyon sadece SELECT akışında çağrılır.
  */
 export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow[] {
+  // ---------- CATEGORIES ----------
   if (path === "/categories") {
     return rows.map((r) => {
-      const row = r as Record<string, unknown>;
-      return {
-        ...row,
-        description: row.description ?? null,
-        image_url: row.image_url ?? null,
-        icon: row.icon ?? null,
-        parent_id: row.parent_id ?? null,
-        // ✅ boolean normalize
-        is_active: !!(row.is_active ?? 1),
-        is_featured: !!(row.is_featured ?? 0),
-        display_order: Number(row.display_order ?? 0),
-        // ✅ FE-only alanları güvenli default ile sağla (TS2339 fix)
-        article_content: (row ).article_content ?? "",
-        article_enabled: !!((row ).article_enabled ?? false),
-      };
+      const c: Record<string, unknown> = { ...r };
+
+      // zorunlu stringler
+      c.name = typeof c.name === "string" ? c.name : String(c.name ?? "");
+      c.slug = typeof c.slug === "string" ? c.slug : String(c.slug ?? "");
+
+      // metin & media alanları
+      c.description = typeof c.description === "string" ? c.description : c.description ?? null;
+      c.image_url = typeof c.image_url === "string" ? c.image_url : null;
+      c.icon = typeof c.icon === "string" ? c.icon : null;
+      c.parent_id = typeof c.parent_id === "string" ? c.parent_id : c.parent_id ? String(c.parent_id) : null;
+
+      // boolean normalize
+      const act = toBool(c.is_active);
+      const feat = toBool(c.is_featured);
+      c.is_active = act === undefined ? !!(c.is_active ?? 1) : act;
+      c.is_featured = feat === undefined ? !!(c.is_featured ?? 0) : feat;
+
+      // order normalize
+      c.display_order = toNumber(c.display_order ?? 0);
+
+      // FE-only güvenli alanlar
+      c.article_content = typeof c.article_content === "string" ? c.article_content : (c.article_content ?? "") as string;
+      c.article_enabled = toBool(c.article_enabled) ?? false;
+
+      // SEO/Banner opsiyoneller (varsa string/nullable)
+      if (typeof c.meta_title !== "string") c.meta_title = c.meta_title ?? null;
+      if (typeof c.meta_description !== "string") c.meta_description = c.meta_description ?? null;
+      if (typeof c.banner_image_url !== "string") c.banner_image_url = c.banner_image_url ?? null;
+
+      return c as UnknownRow;
     });
   }
 
+  // ---------- MENU ITEMS ----------
   if (path === "/menu_items") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -131,7 +148,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // 🔸 POPUPS
+  // ---------- POPUPS ----------
   if (path === "/popups") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -204,7 +221,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
       if (
         (!gallery || gallery.length === 0) &&
         typeof c.image_url === "string" &&
-        c.image_url.trim()
+        (c.image_url as string).trim()
       ) {
         gallery = [c.image_url as string];
       }
@@ -249,12 +266,18 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // product_reviews: rating → number, is_active → boolean
+  // ---------- PRODUCT REVIEWS ----------
+  // rating → number, is_approved → is_active (boolean)
   if (path === "/product_reviews") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
       if ("rating" in c) c.rating = toNumber(c.rating);
-      if ("is_active" in c) {
+
+      // map is_approved -> is_active
+      if ("is_approved" in c && c.is_active === undefined) {
+        const b = toBool(c.is_approved);
+        if (b !== undefined) c.is_active = b;
+      } else if ("is_active" in c) {
         const b = toBool(c.is_active);
         if (b !== undefined) c.is_active = b;
       }
@@ -262,20 +285,27 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // product_faqs: display_order → number, is_active → boolean
+  // ---------- PRODUCT FAQS ----------
+  // order_num → display_order, is_active normalize (yoksa true)
   if (path === "/product_faqs") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
-      if ("display_order" in c) c.display_order = toNumber(c.display_order);
+
+      const order = firstDefined(c, ["display_order", "order_num"]);
+      c.display_order = toNumber(order ?? 0);
+
       if ("is_active" in c) {
         const b = toBool(c.is_active);
-        if (b !== undefined) c.is_active = b;
+        c.is_active = b === undefined ? true : b;
+      } else {
+        c.is_active = true;
       }
+
       return c as UnknownRow;
     });
   }
 
-  // 🔹 FOOTER SECTIONS
+  // ---------- FOOTER SECTIONS ----------
   if (path === "/footer_sections") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -295,7 +325,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // 🔹 CART ITEMS
+  // ---------- CART ITEMS ----------
   if (path === "/cart_items") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -337,7 +367,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-   // --- /orders → UI alanları (OrderView) ---
+  // ---------- ORDERS (OrderView) ----------
   if (path === "/orders") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -372,7 +402,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // --- /order_items → UI alanları (OrderItemView) ---
+  // ---------- ORDER ITEMS (OrderItemView) ----------
   if (path === "/order_items") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -397,7 +427,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // 🔹 COUPONS
+  // ---------- COUPONS ----------
   if (path === "/coupons") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -442,6 +472,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
+  // ---------- TOPBAR SETTINGS ----------
   if (path === "/topbar_settings") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -474,6 +505,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
+  // ---------- BLOG POSTS ----------
   if (path === "/blog_posts") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -525,6 +557,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
+  // ---------- CUSTOM PAGES ----------
   if (path === "/custom_pages") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -571,7 +604,8 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // support_tickets — camel→snake alanları da karşıla
+  // ---------- SUPPORT TICKETS ----------
+  // camel→snake alias & defaults
   if (path === "/support_tickets") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -595,7 +629,8 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // ticket_replies — camel→snake + boolean normalize
+  // ---------- TICKET REPLIES ----------
+  // camel→snake + boolean normalize
   if (path === "/ticket_replies") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -615,7 +650,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // WALLET TRANSACTIONS
+  // ---------- WALLET TRANSACTIONS ----------
   if (path === "/wallet_transactions") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -628,7 +663,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // WALLET DEPOSIT REQUESTS
+  // ---------- WALLET DEPOSIT REQUESTS ----------
   if (path === "/wallet_deposit_requests") {
     return rows.map((r) => {
       const c: Record<string, unknown> = { ...r };
@@ -641,7 +676,7 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
-  // ✅ PROFILES
+  // ---------- PROFILES ----------
   if (path === "/profiles") {
     const toNum = (v: unknown): number => {
       if (typeof v === "number") return v;
@@ -658,33 +693,26 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
+  // ---------- PRODUCT STOCK ----------
+  if (path === "/product_stock") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
 
-if (path === "/categories") {
-  return rows.map((r) => {
-    const c: Record<string, unknown> = { ...r };
-    const b = (x: unknown) => x === true || x === 1 || x === "1" || x === "true";
-    const n = (x: unknown) => (typeof x === "number" ? x : Number(x ?? 0)) || 0;
+      // code → string
+      if (typeof c.code !== "string") c.code = String(c.code ?? "");
 
-    c.is_featured = b(c.is_featured);
-    c.is_active = b(c.is_active); // varsa
-    c.display_order = n(c.display_order);
+      // boolean is_used
+      const used = toBool(c.is_used);
+      c.is_used = used === undefined ? boolLike(c.is_used) : used;
 
-    return c as unknown as import("./types").UnknownRow;
-  });
-}
+      // timestamps
+      if (typeof c.used_at !== "string") c.used_at = c.used_at ?? null;
+      if (typeof c.order_item_id !== "string") c.order_item_id = c.order_item_id ? String(c.order_item_id) : null;
 
+      return c as UnknownRow;
+    });
+  }
 
-
-
-
-
-
-
-
-
-
-
-
-
+  // fallback
   return rows;
 }
