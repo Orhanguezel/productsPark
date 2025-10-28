@@ -169,7 +169,7 @@ const PopupForm = () => {
       const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
       const filePath = `popup-images/${fileName}`;
 
-      const { error: uploadError, data } = await metahubstorage
+      const { error: uploadError, data } = await metahub.storage
         .from("blog-images")
         .upload(filePath, file, {
           cacheControl: "3600",
@@ -178,7 +178,7 @@ const PopupForm = () => {
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = metahubstorage
+      const { data: urlData } = metahub.storage
         .from("blog-images")
         .getPublicUrl(filePath);
 

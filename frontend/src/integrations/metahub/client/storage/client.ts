@@ -1,41 +1,69 @@
-const API_URL =
-  ((import.meta.env.VITE_STORAGE_URL as string | undefined) ||
-   (import.meta.env.VITE_API_URL as string | undefined) + "/storage" ||
-   "").replace(/\/+$/, "");
+// =============================================================
+// FILE: src/integrations/metahub/client/storage/client.ts
+// =============================================================
+const RAW_STORAGE =
+  (import.meta.env.VITE_STORAGE_URL as string | undefined) ||
+  ((((import.meta.env.VITE_API_URL as string | undefined) || "").replace(/\/+$/, "")) + "/storage");
 
-type UploadOptions = { upsert?: boolean };
+const API_URL = (RAW_STORAGE || "").replace(/\/+$/, "");
+const CDN_URL = (import.meta.env.VITE_CDN_URL as string | undefined)?.replace(/\/+$/, "");
 
-function bucket(bucket: string) {
+export type UploadOptions = { upsert?: boolean };
+export type UploadResp = { path: string; url: string };
+export type Err = { message: string };
+
+/** "folder/sub/img.png" → "folder/sub/img.png" (segment bazlı encode) */
+function encPath(p: string): string {
+  return p.split("/").map(encodeURIComponent).join("/");
+}
+
+/** Public route KULLANMADAN URL üret */
+function urlOf(bucket: string, path: string): string {
+  const b = encodeURIComponent(bucket);
+  const p = encPath(path);
+  // CDN varsa doğrudan CDN → bucket/path
+  if (CDN_URL) return `${CDN_URL}/${b}/${p}`;
+  // Aksi halde backend storage serve → /storage/:bucket/:path  (NOT: /public yok!)
+  return `${API_URL}/${b}/${p}`;
+}
+
+function from(bucket: string) {
   return {
-    async upload(path: string, file: File | Blob, opts?: UploadOptions): Promise<{ data: { path: string } | null; error: { message: string } | null }> {
+    async upload(
+      path: string,
+      file: File | Blob,
+      opts?: UploadOptions
+    ): Promise<{ data: UploadResp | null; error: Err | null }> {
       if (!API_URL) return { data: null, error: { message: "storage_disabled_no_backend" } };
+
       const qs = new URLSearchParams();
+      qs.set("path", path);
       if (opts?.upsert) qs.set("upsert", "1");
-      const url = `${API_URL}/${encodeURIComponent(bucket)}/upload?path=${encodeURIComponent(path)}&${qs.toString()}`;
-      const res = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: { /* 'content-type' otomatik form-data oluyor */ },
-        body: (() => {
-          const f = new FormData();
-          f.append("file", file);
-          return f;
-        })(),
-      });
+
+      const url = `${API_URL}/${encodeURIComponent(bucket)}/upload?${qs.toString()}`;
+
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch(url, { method: "POST", credentials: "include", body: fd });
       if (!res.ok) return { data: null, error: { message: `upload_failed_${res.status}` } };
-      const json = await res.json().catch(() => null);
-      return { data: json ?? { path }, error: null };
+
+      // BE {path,url}? dönebilir; dönmezse URL’i biz türetiriz
+      const json = (await res.json().catch(() => null)) as Partial<UploadResp> | null;
+      const p = json?.path || path;
+      const u = json?.url || urlOf(bucket, p);
+      return { data: { path: p, url: u }, error: null };
     },
 
+    // UI imzasını BOZMAMAK için isim aynı kalsın; "public" rota kullanılmıyor.
     getPublicUrl(path: string): { data: { publicUrl: string } } {
-      // Basit kural: GET /storage/<bucket>/public/<path> üzerinden servis verin (BE bu route’u sağlasın)
-      const publicUrl = `${API_URL}/${encodeURIComponent(bucket)}/public/${encodeURIComponent(path)}`;
-      return { data: { publicUrl } };
+      return { data: { publicUrl: urlOf(bucket, path) } };
     },
+
+    // İleride gerekirse:
+    // async remove(path: string) { ... }
+    // async list(prefix?: string) { ... }
   };
 }
 
-export const storage = { from: bucket };
-
-/** Eski kullanım stilini kolaylaştırmak için alias */
-export const metahubstorage = storage;
+export const storage = { from };

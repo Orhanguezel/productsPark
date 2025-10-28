@@ -10,18 +10,29 @@ import { registerErrorHandlers } from '@/core/error';
 
 // Modüller
 import { registerAuth } from '@/modules/auth/router';
+import { registerRest } from '@/modules/rest/router';
+import { registerStorage } from '@/modules/storage/router';
+import { registerFunctions } from '@/modules/functions/router';
+import { registerRpc } from '@/modules/rpc/router';
 import { registerProfiles } from '@/modules/profiles/router';
 import { registerCategories } from '@/modules/categories/router';
 import { registerProducts } from '@/modules/products/router';
-import { registerProductsAdmin } from "@/modules/products/admin.routes";
 import { registerCartItems } from "@/modules/cart/router";
 import { registerCoupons } from "@/modules/coupons/router";
 import { registerOrders } from '@/modules/orders/router';
+import { registerCustomPages } from '@/modules/customPages/router';
+import { registerBlog } from '@/modules/blog/router';
+import { registerMenuItems } from '@/modules/menuItems/router';
+import { registerSiteSettings } from '@/modules/siteSettings/router';
+import { registerPopups } from '@/modules/popups/router';
 import { registerUserRoles } from "@/modules/userRoles/router";
+import { registerTopbar } from '@/modules/topbarSettings/router';
+import { registerFooterSections } from "@/modules/footerSections/router";
+import { registerSupport } from "@/modules/support/router";
 import { registerWalletTransactions } from "@/modules/wallet_transactions/router";
 import { registerWalletDeposits } from "@/modules/wallet_deposit_requests/router";
 import { registerPayments } from '@/modules/payments/router';
-import { registerQuiz  } from '@/modules/quiz/router';
+import { registerProductsAdmin } from "@/modules/products/admin.routes";
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
   if (!v) return true;
@@ -46,7 +57,7 @@ export async function createApp() {
   await app.register(cors, {
     origin: parseCorsOrigins(env.CORS_ORIGIN as any),
     credentials: true,
-    methods: ['GET', 'POST','PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Prefer'],
     exposedHeaders: ['x-total-count', 'content-range'],
     // preflight varsayılanı true -> plugin kendi OPTIONS /* rotasını ekler
@@ -93,17 +104,28 @@ export async function createApp() {
   // Modüller
   await registerProductsAdmin(app);
   await registerAuth(app);
+  await registerRest(app);
+  await registerStorage(app);
+  await registerFunctions(app);
+  await registerRpc(app);
   await registerProfiles(app);
   await registerCategories(app);
   await registerProducts(app);
   await registerCartItems(app);
   await registerOrders(app);
+  await registerCustomPages(app);
+  await registerBlog(app);
+  await registerMenuItems(app);
+  await registerSiteSettings(app);
+  await registerPopups(app);
   await registerUserRoles(app);
+  await registerTopbar(app);
   await registerCoupons(app);
+  await registerFooterSections(app);
+  await registerSupport(app);
   await registerWalletTransactions(app);
   await registerWalletDeposits(app);
   await registerPayments(app);
-  await registerQuiz(app);
 
   registerErrorHandlers(app);
   return app;

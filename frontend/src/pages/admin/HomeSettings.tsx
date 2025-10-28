@@ -305,13 +305,13 @@ export default function HomeSettings() {
                       const fileName = `hero-${Date.now()}.${fileExt}`;
                       const filePath = `${fileName}`;
 
-                      const { error: uploadError } = await metahubstorage
+                      const { error: uploadError } = await metahub.storage
                         .from('product-images')
                         .upload(filePath, file);
 
                       if (uploadError) throw uploadError;
 
-                      const { data: { publicUrl } } = metahubstorage
+                      const { data: { publicUrl } } = metahub.storage
                         .from('product-images')
                         .getPublicUrl(filePath);
 

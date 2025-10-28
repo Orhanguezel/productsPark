@@ -1,3 +1,4 @@
+// src/core/env.ts
 import 'dotenv/config';
 
 const toInt = (v: string | undefined, d: number) => {
@@ -19,10 +20,15 @@ const CORS_ORIGIN = CORS_LIST.length ? CORS_LIST : [FRONTEND_URL];
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PORT: toInt(process.env.PORT, 8081),
-   QUIZ: {
-      DURATION_SECONDS: Number(process.env.QUIZ_DURATION_SECONDS ?? 60),
-    },
 
+  QUIZ: {
+    DURATION_SECONDS: Number(process.env.QUIZ_DURATION_SECONDS ?? 60),
+  },
+
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+  CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET || '',
 
   DB: {
     host: process.env.DB_HOST || '127.0.0.1',
@@ -36,6 +42,10 @@ export const env = {
   COOKIE_SECRET: process.env.COOKIE_SECRET || 'cookie-secret',
 
   CORS_ORIGIN,
+
+  // ✅ Storage controller'ın kullandığı alanları ekliyoruz
+  CDN_PUBLIC_BASE: process.env.CDN_PUBLIC_BASE || '',      // ör: https://cdn.example.com
+  PUBLIC_API_BASE: process.env.PUBLIC_API_BASE || '',      // ör: https://api.example.com
 
   CLOUDINARY: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
@@ -57,13 +67,12 @@ export const env = {
     DIRECT_REQUEST: toBool(process.env.PAYTR_DIRECT_REQUEST, false),
   },
 
-  // Yeni yapı
   GOOGLE: {
     CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? '',
     CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? '',
   },
 
-  // Geriye dönük uyumluluk (auth/controller.ts bu alanları bekliyor)
+  // Geriye dönük
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? '',
 
