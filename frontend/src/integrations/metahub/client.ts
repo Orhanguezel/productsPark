@@ -55,6 +55,7 @@ import { custom_pages } from "./client/customPages/client";
 import { support_tickets } from "./client/support/client";
 import { profilesClient } from "./client/profiles/client";
 import { rpc } from "./client/rpc/client";
+import { api_providers } from "./client/api_providers/client";
 
 import { siteSettingsAdmin } from "./client/admin/siteSettings";
 import { categoriesAdmin } from "./client/admin/categories";
@@ -143,6 +144,7 @@ export const metahub = {
   custom_pages,
   support_tickets,
   profiles: profilesClient,
+  api_providers,
 
   admin: {
     siteSettings: siteSettingsAdmin,

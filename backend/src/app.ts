@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import authPlugin from "./plugins/authPlugin";
+import mysqlPlugin from '@/plugins/mysql';
 
 import type { FastifyInstance } from 'fastify';
 import { env } from '@/core/env';
@@ -33,6 +34,7 @@ import { registerWalletTransactions } from "@/modules/wallet_transactions/router
 import { registerWalletDeposits } from "@/modules/wallet_deposit_requests/router";
 import { registerPayments } from '@/modules/payments/router';
 import { registerProductsAdmin } from "@/modules/products/admin.routes";
+import { registerApiProviders } from "@/modules/api_providers/router";
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
   if (!v) return true;
@@ -91,6 +93,8 @@ export async function createApp() {
 
   // 🔒 Guard
   await app.register(authPlugin);
+  // 🗄️ MySQL
+  await app.register(mysqlPlugin);
 
   // Public health
   app.get('/health', async () => ({ ok: true }));
@@ -126,6 +130,7 @@ export async function createApp() {
   await registerWalletTransactions(app);
   await registerWalletDeposits(app);
   await registerPayments(app);
+  await registerApiProviders(app);
 
   registerErrorHandlers(app);
   return app;

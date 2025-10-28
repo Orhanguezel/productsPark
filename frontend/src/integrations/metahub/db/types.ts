@@ -9,6 +9,16 @@ export type UnknownRow = Record<string, unknown>;
  * Domain Row Types
  * =========================== */
 
+export type ApiProviderRow = {
+  id: string;
+  name: string;
+  code?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+
 export type CategoryRow = {
   id: string;
   name: string;
@@ -585,7 +595,8 @@ export type KnownTables =
   | "telemetry_events"
   | "user_roles"
   | "support_tickets"
-  | "ticket_replies";
+  | "ticket_replies"
+  | "api_providers"; 
 
 /** TableRow eşlemesi */
 export type TableRow<TName extends string> = TName extends "categories"
@@ -632,4 +643,6 @@ export type TableRow<TName extends string> = TName extends "categories"
   ? OrderView
   : TName extends "order_items"
   ? OrderItemView
+  : TName extends "api_providers"          // 👈 yeni
+  ? ApiProviderRow
   : UnknownRow;

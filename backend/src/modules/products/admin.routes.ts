@@ -18,7 +18,7 @@ import {
   adminSetProductStock,
   adminListUsedStock,
   adminListCategories,
-  adminListApiProviders,
+  // ❌ adminListApiProviders kaldırıldı (kendi modülünde)
 } from './admin.controller';
 
 export async function registerProductsAdmin(app: FastifyInstance) {
@@ -47,5 +47,4 @@ export async function registerProductsAdmin(app: FastifyInstance) {
 
   // Lists used by FE (filters)
   app.get('/admin/categories', { preHandler: [requireAuth] }, adminListCategories);
-  app.get('/admin/api-providers', { preHandler: [requireAuth] }, adminListApiProviders);
 }
