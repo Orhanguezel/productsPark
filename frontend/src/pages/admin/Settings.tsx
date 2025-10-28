@@ -560,7 +560,7 @@ export default function Settings() {
                       const fileExt = file.name.split('.').pop();
                       const filePath = `light-logo.${fileExt}`;
 
-                      const { error: uploadError } = await metahubstorage
+                      const { error: uploadError } = await metahub.storage
                         .from('logos')
                         .upload(filePath, file, { upsert: true });
 
@@ -569,7 +569,7 @@ export default function Settings() {
                         return;
                       }
 
-                      const { data } = metahubstorage.from('logos').getPublicUrl(filePath);
+                      const { data } = metahub.storage.from('logos').getPublicUrl(filePath);
                       setSettings({ ...settings, light_logo: data.publicUrl });
                       toast.success('Logo yüklendi');
                     }}
@@ -590,7 +590,7 @@ export default function Settings() {
                       const fileExt = file.name.split('.').pop();
                       const filePath = `dark-logo.${fileExt}`;
 
-                      const { error: uploadError } = await metahubstorage
+                      const { error: uploadError } = await metahub.storage
                         .from('logos')
                         .upload(filePath, file, { upsert: true });
 
@@ -599,7 +599,7 @@ export default function Settings() {
                         return;
                       }
 
-                      const { data } = metahubstorage.from('logos').getPublicUrl(filePath);
+                      const { data } = metahub.storage.from('logos').getPublicUrl(filePath);
                       setSettings({ ...settings, dark_logo: data.publicUrl });
                       toast.success('Logo yüklendi');
                     }}
@@ -620,7 +620,7 @@ export default function Settings() {
                       const fileExt = file.name.split('.').pop();
                       const filePath = `favicon.${fileExt}`;
 
-                      const { error: uploadError } = await metahubstorage
+                      const { error: uploadError } = await metahub.storage
                         .from('logos')
                         .upload(filePath, file, { upsert: true });
 
@@ -629,7 +629,7 @@ export default function Settings() {
                         return;
                       }
 
-                      const { data } = metahubstorage.from('logos').getPublicUrl(filePath);
+                      const { data } = metahub.storage.from('logos').getPublicUrl(filePath);
                       setSettings({ ...settings, favicon_url: data.publicUrl });
                       toast.success('Favicon yüklendi');
                     }}

@@ -1,7 +1,6 @@
-
-// -------------------------------------------------------------
+// =============================================================
 // FILE: src/integrations/metahub/rtk/endpoints/uploads.endpoints.ts
-// -------------------------------------------------------------
+// =============================================================
 import { baseApi as baseApi3 } from "../baseApi";
 
 export type SignPutBody = { filename: string; content_type: string; folder?: string };

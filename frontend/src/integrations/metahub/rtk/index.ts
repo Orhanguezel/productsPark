@@ -23,7 +23,6 @@ export * from "./endpoints/product_stock.endpoints";
 export * from "./endpoints/wallet_transactions.endpoints";
 export * from "./endpoints/site_settings.endpoints";
 export * from "./endpoints/payment_providers.endpoints";
-export * from "./endpoints/storage_uploads.endpoints";
 export * from "./endpoints/product_variants.endpoints";
 export * from "./endpoints/menu_items.endpoints";
 export * from "./endpoints/footer_sections.endpoints";
@@ -68,7 +67,7 @@ export * as adminWebhooks       from "./endpoints/admin/webhooks_admin.endpoints
 export * as adminAudit          from "./endpoints/admin/audit_admin.endpoints";
 export * as adminFeatureFlags   from "./endpoints/admin/featureflags_admin.endpoints";
 export * as adminCms            from "./endpoints/admin/cms_admin.endpoints";
-export * as adminMedia          from "./endpoints/admin/media_admin.endpoints";
+export * as adminMedia          from "./endpoints/admin/storage_admin.endpoints";
 export * as adminUsers          from "./endpoints/admin/users_admin.endpoints";
 export * as adminRoles          from "./endpoints/admin/roles_admin.endpoints";
 export * as adminStock          from "./endpoints/admin/stock_admin.endpoints";

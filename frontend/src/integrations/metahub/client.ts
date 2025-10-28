@@ -7,7 +7,7 @@ import { functions } from "./client/functions/client";
 import { products } from "./client/products/client";
 import { categories } from "./client/categories/client";
 import { settings } from "./client/settings/client";
-import { storage, metahubstorage } from "./client/storage/client";
+import { storage} from "./client/storage/client";
 
 import { orders } from "./client/orders/client";
 import { carts } from "./client/carts/client";
@@ -81,11 +81,11 @@ import { auditAdmin } from "./client/admin/audit";
 import { flagsAdmin } from "./client/admin/flags";
 import { cmsAdmin } from "./client/admin/cms";
 import { settingsAdmin } from "./client/admin/settings";
-import { mediaAdmin } from "./client/admin/media";
 import { usersAdmin } from "./client/admin/users";
 import { rbacAdmin } from "./client/admin/rbac";
 import { billingAdmin } from "./client/admin/billing";
 import { inventoryAdmin } from "./client/admin/inventory";
+import { storageAdmin } from "./client/admin/storage";
 
 import { baseApi } from "./rtk/baseApi";
 import * as rtk from "./rtk";
@@ -170,11 +170,11 @@ export const metahub = {
     flags: flagsAdmin,
     cms: cmsAdmin,
     settings: settingsAdmin,
-    media: mediaAdmin,
     users: usersAdmin,
     rbac: rbacAdmin,
     billing: billingAdmin,
     inventory: inventoryAdmin,
+    storage: storageAdmin,
   },
 
   // RTK + helpers
@@ -186,5 +186,4 @@ export const metahub = {
   removeAllChannels,
 } as const;
 
-export { metahubstorage };
 export type Metahub = typeof metahub;

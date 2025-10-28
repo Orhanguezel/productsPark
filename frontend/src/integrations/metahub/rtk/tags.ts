@@ -55,6 +55,8 @@ export const metahubTags = [
   "MediaAssets","MediaAsset",
   "MediaFolders","MediaFolder",
   "Redirects","Redirect",
+  "StorageAssets","StorageAsset",
+  "StorageFolders","StorageFolder"
 ] as const;
 
 export type MetahubTag = typeof metahubTags[number];
