@@ -1,3 +1,5 @@
+// src/integrations/metahub/client/admin/storage.ts
+
 import { store } from "@/store";
 import { storageAdminApi, type StorageAsset, type StorageListParams } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 import { normalizeError } from "@/integrations/metahub/core/errors";

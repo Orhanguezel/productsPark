@@ -713,6 +713,16 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
     });
   }
 
+  // ---------- API PROVIDERS ----------
+  if (path === "/api_providers") {
+    return rows.map((r) => {
+      const c: Record<string, unknown> = { ...r };
+      c.is_active =
+        c.is_active === true || c.is_active === 1 || c.is_active === "1" || c.is_active === "true";
+      return c as UnknownRow;
+    });
+  }
+
   // fallback
   return rows;
 }

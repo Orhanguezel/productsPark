@@ -443,24 +443,3 @@ export const adminListCategories: RouteHandler = async (_req, reply) => {
     .orderBy(asc(categories.name));
   return reply.send(rows);
 };
-
-/** GET /admin/api-providers?is_active=1 */
-export const adminListApiProviders: RouteHandler = async (req, reply) => {
-  const onlyActive = (req.query as any)?.is_active;
-  const activeCond = onlyActive === '1' || onlyActive === 'true';
-
-  // api_providers tablosu varsa:
-  const rows = await db.execute(
-    sql`SELECT id, name, is_active FROM api_providers ${
-      activeCond ? sql`WHERE is_active = 1` : sql``
-    } ORDER BY name`
-  );
-  const data = Array.isArray(rows) ? rows : (rows as any)?.rows || [];
-  return reply.send(
-    data.map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      is_active: toBool(r.is_active),
-    }))
-  );
-};

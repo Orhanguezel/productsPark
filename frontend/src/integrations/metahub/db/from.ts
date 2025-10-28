@@ -9,7 +9,7 @@ export type {
   ProductRow, CategoryRow, SiteSettingRow, MenuItemRow, FooterSectionRow,
   PopupRow, UserRoleRow, TopbarSettingRow, BlogPostRow, CouponRow, CartItemRow,
   CustomPageView, SupportTicketView, TicketReplyView, ProfileRow, WalletTransactionRow, WalletDepositRequestRow,
-  OrderRow, OrderView
+  OrderRow, OrderView, ApiProviderRow
 } from "./types";
 
 import { TABLES } from "./tables";
@@ -73,6 +73,25 @@ function buildAuthHeaders(extra?: Record<string, string>): HeadersInit {
     if (token) headers["Authorization"] = `Bearer ${token}`;
   } catch { /* ignore */ }
   return headers;
+}
+
+async function readJson(res: Response) {
+  const ct = res.headers.get("content-type") || "";
+  const text = await res.text();
+  if (ct.includes("application/json")) {
+    try { return JSON.parse(text); } catch {/* ignore */}
+  }
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+/** küçük yardımcı: body'den dizi çıkar */
+function extractArray(payload: unknown): UnknownRow[] {
+  if (Array.isArray(payload)) return payload as UnknownRow[];
+  if (payload && typeof payload === "object" && "data" in (payload as Record<string, unknown>)) {
+    const d = (payload as { data?: unknown }).data;
+    if (Array.isArray(d)) return d as UnknownRow[];
+  }
+  return [];
 }
 
 /** payment method mapper */
@@ -225,6 +244,83 @@ function transformCategoriesOut(obj: Record<string, unknown>): void {
   }
 }
 
+/** products: FE→BE — UI-only alanları at, tip normalize */
+function transformProductsOut(obj: Record<string, unknown>): void {
+  const rec: Record<string, unknown> = obj;
+
+  // İzinli alanlar (BE şemasıyla uyumlu)
+  const ALLOWED = new Set<string>([
+    "name","slug","price","original_price","stock_quantity","category_id","image_url",
+    "short_description","description","is_active","show_on_homepage","delivery_type",
+    "file_url","api_provider_id","api_product_id","api_quantity",
+    "demo_url","demo_embed_enabled","demo_button_text",
+    "epin_game_id","epin_product_id","auto_delivery_enabled",
+    "min_order","max_order","min_barem","max_barem","barem_step","pre_order_enabled",
+    "tax_type","review_count","article_content","article_enabled",
+    "custom_fields","badges","quantity_options"
+  ]);
+
+  // UI-only / backend-dışı alanları kesin at
+  const DROP = [
+    "stock_list",
+    "gallery_urls",
+    "features",
+    "images",
+    "usedStock",
+    "categories", // join objesi
+    "demo_enabled" // FE toggle’dan derive ediliyor
+  ];
+  DROP.forEach((k) => { if (k in rec) delete rec[k]; });
+
+  // Allowed dışındakileri temizle
+  for (const k of Object.keys(rec)) {
+    if (!ALLOWED.has(k)) delete rec[k];
+  }
+
+  // Trim strings
+  if (typeof rec["name"] === "string") rec["name"] = (rec["name"] as string).trim();
+  if (typeof rec["slug"] === "string") rec["slug"] = (rec["slug"] as string).trim();
+
+  // Boş string → null
+  const NULLABLE = ["image_url","file_url","short_description","description","demo_url","demo_button_text","epin_game_id","epin_product_id","article_content"];
+  for (const k of NULLABLE) {
+    if (rec[k] === "") rec[k] = null;
+  }
+
+  // Number normalize
+  const toNum = (v: unknown, fb = 0) => (typeof v === "number" ? v : (v == null || v === "" ? fb : Number(v)));
+  const toInt = (v: unknown, fb = 0) => {
+    const n = toNum(v, fb);
+    return Number.isFinite(n) ? Math.trunc(n) : fb;
+  };
+  const toBool = (v: unknown) => v === true || v === 1 || v === "1" || v === "true";
+
+  if ("price" in rec) rec["price"] = toNum(rec["price"], 0);
+  if ("original_price" in rec && rec["original_price"] != null) rec["original_price"] = toNum(rec["original_price"], 0);
+  if ("stock_quantity" in rec) rec["stock_quantity"] = toInt(rec["stock_quantity"], 0);
+  if ("api_quantity" in rec) rec["api_quantity"] = toInt(rec["api_quantity"], 1);
+  if ("min_order" in rec) rec["min_order"] = toInt(rec["min_order"], 1);
+  if ("max_order" in rec) rec["max_order"] = toInt(rec["max_order"], 0);
+  if ("min_barem" in rec) rec["min_barem"] = toInt(rec["min_barem"], 0);
+  if ("max_barem" in rec) rec["max_barem"] = toInt(rec["max_barem"], 0);
+  if ("barem_step" in rec) rec["barem_step"] = toInt(rec["barem_step"], 0);
+  if ("tax_type" in rec) rec["tax_type"] = toInt(rec["tax_type"], 0);
+  if ("review_count" in rec) rec["review_count"] = toInt(rec["review_count"], 0);
+
+  // Boolean normalize
+  ["is_active","show_on_homepage","demo_embed_enabled","auto_delivery_enabled","pre_order_enabled","article_enabled"]
+    .forEach((k) => { if (k in rec) rec[k] = toBool(rec[k]); });
+
+  // delivery_type default
+  if (typeof rec["delivery_type"] !== "string" || !rec["delivery_type"]) rec["delivery_type"] = "manual";
+
+  // JSON alanları: boş array ise [], yoksa null
+  const arrayOrNull = (v: unknown) => Array.isArray(v) ? v : (v == null ? null : v);
+  if ("custom_fields" in rec) rec["custom_fields"] = arrayOrNull(rec["custom_fields"]);
+  if ("badges" in rec) rec["badges"] = arrayOrNull(rec["badges"]);
+  if ("quantity_options" in rec) rec["quantity_options"] = arrayOrNull(rec["quantity_options"]);
+}
+
 /** outgoing body transform */
 function transformOutgoingPayload(
   path: string,
@@ -236,10 +332,73 @@ function transformOutgoingPayload(
     if (path === "/order_items") transformOrderItemsOut(obj);
     if (path === "/payment_requests") transformPaymentRequestsOut(obj);
     if (path === "/categories") transformCategoriesOut(obj);
+    if (path === "/products") transformProductsOut(obj);
     return obj;
   };
   return Array.isArray(payload) ? payload.map(apply) : apply(payload);
 }
+
+/** ---------- SPECIAL QUERIES ---------- */
+
+/** ApiProvidersQuery: /admin/api-providers GET proxy */
+class ApiProvidersQuery implements PromiseLike<FetchResult<TableRow<"api_providers">[]>> {
+  private _isActive?: boolean;
+  private _order?: { col: string; ascending?: boolean };
+
+  select(_cols?: string, _opts?: SelectOpts): this { return this; }
+  eq(col: string, val: unknown): this {
+    if (col === "is_active") {
+      this._isActive = (val === true) || (val === 1) || (val === "1") || (val === "true");
+    }
+    return this;
+  }
+  neq(_col: string, _val: unknown): this { return this; }
+  in(_col: string, _val: unknown[]): this { return this; }
+  order(col: string, o?: { ascending?: boolean }): this { this._order = { col, ascending: o?.ascending }; return this; }
+  limit(_n: number): this { return this; }
+  range(_a: number, _b: number): this { return this; }
+  insert(_v: UnknownRow | UnknownRow[]): this { return this; }
+  update(_v: Partial<UnknownRow>): this { return this; }
+  delete(): this { return this; }
+
+  async single(): Promise<FetchResult<TableRow<"api_providers">>> {
+    const r = await this.execute();
+    const one = (r.data?.[0] ?? null) as TableRow<"api_providers"> | null;
+    return { data: one, error: r.error, count: r.count };
+  }
+  async maybeSingle(): Promise<FetchResult<TableRow<"api_providers">>> { return this.single(); }
+
+  then<TResult1 = FetchResult<TableRow<"api_providers">[]>, TResult2 = never>(
+    onfulfilled?: ((value: FetchResult<TableRow<"api_providers">[]>) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    return this.execute().then(
+      (v) => (onfulfilled ? onfulfilled(v) : (v as unknown as TResult1)),
+      (e) => { if (onrejected) return onrejected(e); throw e; }
+    );
+  }
+
+  private async execute(): Promise<FetchResult<TableRow<"api_providers">[]>> {
+    const q: Record<string, unknown> = {};
+    if (this._isActive !== undefined) q.is_active = this._isActive ? 1 : 0;
+    if (this._order) q.order = this._order.ascending === false ? `${this._order.col}.desc` : `${this._order.col}.asc`;
+
+    const url = joinUrl(BASE_URL, "/admin/api-providers") + (Object.keys(q).length ? `?${toQS(q)}` : "");
+    const res = await fetch(url, { credentials: "include", headers: buildAuthHeaders() });
+    if (!res.ok) return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
+
+    const body = await readJson(res);
+    const raw = extractArray(body);
+    const data = raw.map((x) => ({
+      ...x,
+      is_active:
+        x["is_active"] === true || x["is_active"] === 1 || x["is_active"] === "1" || x["is_active"] === "true",
+    })) as TableRow<"api_providers">[];
+    return { data, error: null };
+  }
+}
+
+/** ---------- DEFAULT QB (real tables) ---------- */
 
 class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
   private table: string;
@@ -296,11 +455,12 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
     ) as Promise<TResult1 | TResult2>;
   }
 
-  /** URL builder + özel shımlar (profiles tekil, orders tekil, update/delete :id) */
+  /** URL builder + özel shımlar (profiles tekil, orders tekil, update/delete :id, products write→admin) */
   private buildUrl(): { url: string; path: string; methodOverride?: "PUT" } | null {
     const logicalPath = TABLES[this.table as KnownTables];
     if (!logicalPath) return null;
 
+    // profiles özel endpoint
     if (this.table === "profiles") {
       const pathForNormalize = "/profiles";
       const meUrl = joinUrl(BASE_URL, "/profiles/v1/me");
@@ -329,6 +489,7 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
       if (this._range) { params.offset = this._range[0]; params.limit = (this._range[1] - this._range[0]) + 1; }
     }
 
+    // orders tekil GET (/:id)
     if (logicalPath === "/orders" && includeFilters) {
       const idEq = this._filters.find(f => f.type === "eq" && f.col === "id");
       if (idEq && typeof idEq.val === "string" && this._op === "select" && (this._limit === 1 || !!this._range)) {
@@ -339,7 +500,28 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
       }
     }
 
-    // UPDATE/DELETE → RESTful /:id
+    // products write → admin override
+    if (logicalPath === "/products") {
+      // INSERT → /admin/products
+      if (this._op === "insert") {
+        const url = joinUrl(BASE_URL, "/admin/products");
+        return { url, path: logicalPath };
+      }
+      // UPDATE/DELETE → /admin/products/:id (varsa), yoksa /admin/products?...
+      if (this._op === "update" || this._op === "delete") {
+        const idEq = this._filters.find(f => f.type === "eq" && f.col === "id");
+        if (idEq && typeof idEq.val === "string") {
+          const url = joinUrl(BASE_URL, `/admin/products/${encodeURIComponent(idEq.val)}`);
+          return { url, path: logicalPath };
+        }
+        const base = joinUrl(BASE_URL, "/admin/products");
+        const qs = toQS(params);
+        const url = qs ? `${base}?${qs}` : base;
+        return { url, path: logicalPath };
+      }
+    }
+
+    // UPDATE/DELETE → RESTful /:id (id varsa)
     if ((this._op === "update" || this._op === "delete") && includeFilters) {
       const idEq = this._filters.find(f => f.type === "eq" && f.col === "id");
       if (idEq && typeof idEq.val === "string") {
@@ -399,28 +581,18 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
           "Prefer": `return=${this._preferReturn ?? "minimal"}`
         });
 
-        // Transform + categories defaultları/tekile çevirme
+        // Transform payload
         let bodyPayload: UnknownRow | UnknownRow[] =
           transformOutgoingPayload(path, (this._insertPayload ?? {}) as UnknownRow | UnknownRow[]);
 
-        if (path === "/categories") {
-          const ensure = (rec: Record<string, unknown>) => {
-            if (rec.is_active == null) rec.is_active = true;
-            if (rec.is_featured == null) rec.is_featured = false;
-            if (rec.display_order == null) rec.display_order = 0;
-            if (rec.image_url == null) delete rec.image_url;
-            if (rec.parent_id == null) delete rec.parent_id;
-            return rec;
-          };
+        // /products → tekil obje gönder (BE uyumu)
+        if (path === "/products") {
           if (Array.isArray(bodyPayload)) {
-            bodyPayload = bodyPayload.map((x) => ensure({ ...(x as Record<string, unknown>) }));
-            // BE tek obje bekliyorsa çevir
-            if (bodyPayload.length === 1) bodyPayload = bodyPayload[0];
-          } else {
-            bodyPayload = ensure({ ...(bodyPayload as Record<string, unknown>) });
+            bodyPayload = bodyPayload.length === 1 ? bodyPayload[0] : bodyPayload.map((o) => o)[0] ?? {};
           }
         }
 
+        // /categories için özel fallback'ler (mevcut davranış aynen korunuyor)
         let res = await fetch(url, {
           method: "POST",
           credentials: "include",
@@ -428,7 +600,6 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
           body: JSON.stringify(bodyPayload),
         });
 
-        // /categories için 400 fallback'leri — hep tekil obje gönder
         if (!res.ok && path === "/categories" && res.status === 400) {
           const original = Array.isArray(bodyPayload) ? bodyPayload[0] : (bodyPayload as Record<string, unknown>);
           const first = { ...original };
@@ -602,16 +773,35 @@ class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
   }
 }
 
-/** Exported builder */
+/** Exported builder (structural type — hem QB hem special sınıflar uyuyor) */
 export type FromPromise<TRow = unknown> =
-  PromiseLike<FetchResult<TRow[]>> & QB<TRow>;
+  PromiseLike<FetchResult<TRow[]>> & {
+    select(cols?: string, opts?: SelectOpts): FromPromise<TRow>;
+    eq(col: string, val: unknown): FromPromise<TRow>;
+    neq(col: string, val: unknown): FromPromise<TRow>;
+    in(col: string, val: unknown[]): FromPromise<TRow>;
+    order(col: string, o?: { ascending?: boolean }): FromPromise<TRow>;
+    limit(n: number): FromPromise<TRow>;
+    range(a: number, b: number): FromPromise<TRow>;
+    insert(v: UnknownRow | UnknownRow[]): FromPromise<TRow>;
+    update(v: Partial<UnknownRow>): FromPromise<TRow>;
+    delete(): FromPromise<TRow>;
+    single(): Promise<FetchResult<TRow>>;
+    maybeSingle(): Promise<FetchResult<TRow>>;
+  };
 
 export function from<TName extends keyof typeof TABLES>(
   table: TName
 ): FromPromise<TableRow<TName>>;
 export function from<TRow = unknown>(table: string): FromPromise<TRow>;
 export function from(table: string): FromPromise<unknown> {
-  return new QB<unknown>(table) as FromPromise<unknown>;
+  switch (table) {
+    case "api_providers":
+      return new ApiProvidersQuery() as unknown as FromPromise<unknown>;
+    // product_reviews / product_faqs için özel class kaldırıldı → düz QB kullanılacak
+    default:
+      return new QB<unknown>(table) as FromPromise<unknown>;
+  }
 }
 
 export type FromFn =

@@ -48,4 +48,5 @@ export const TABLES: Record<KnownTables, string> = {
   user_roles: "/user_roles",
   support_tickets: "/support_tickets",
   ticket_replies: "/ticket_replies",
+  api_providers: "/api_providers",
 };
