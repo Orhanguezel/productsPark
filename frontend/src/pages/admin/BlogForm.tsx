@@ -203,7 +203,7 @@ export default function BlogForm() {
                     const fileName = `${Date.now()}.${fileExt}`;
                     const filePath = `${fileName}`;
 
-                    const { error: uploadError } = await metahubstorage
+                    const { error: uploadError } = await metahub.storage
                       .from('blog-images')
                       .upload(filePath, file);
 
@@ -212,7 +212,7 @@ export default function BlogForm() {
                       return;
                     }
 
-                    const { data } = metahubstorage.from('blog-images').getPublicUrl(filePath);
+                    const { data } = metahub.storage.from('blog-images').getPublicUrl(filePath);
                     setFormData({ ...formData, image_url: data.publicUrl });
                     toast({ title: "Başarılı", description: "Kapak fotoğrafı yüklendi." });
                   }}
