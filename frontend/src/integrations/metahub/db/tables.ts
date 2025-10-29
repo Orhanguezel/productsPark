@@ -1,6 +1,6 @@
 // src/integrations/metahub/db/tables.ts
 
-import type { KnownTables} from "./types";
+import type { KnownTables } from "./types";
 
 
 /** Tabloların yol map'i (hepsi aynı BASE_URL’e gider) */

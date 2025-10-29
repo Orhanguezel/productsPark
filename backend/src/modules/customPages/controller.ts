@@ -1,4 +1,4 @@
-// controller.ts
+// src/modules/customPages/controller.ts
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import {

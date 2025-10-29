@@ -34,6 +34,10 @@ import { registerWalletTransactions } from "@/modules/wallet_transactions/router
 import { registerWalletDeposits } from "@/modules/wallet_deposit_requests/router";
 import { registerPayments } from '@/modules/payments/router';
 import { registerProductsAdmin } from "@/modules/products/admin.routes";
+import { registerBlogAdmin } from "@/modules/blog/admin.routes";
+import { registerMenuItemsAdmin } from "@/modules/menuItems/admin.routes";
+import { registerCustomPagesAdmin } from "@/modules/customPages/admin.routes";
+import { registerSiteSettingsAdmin } from '@/modules/siteSettings/admin.routes';
 import { registerApiProviders } from "@/modules/api_providers/router";
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
@@ -59,14 +63,13 @@ export async function createApp() {
   await app.register(cors, {
     origin: parseCorsOrigins(env.CORS_ORIGIN as any),
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Prefer'],
     exposedHeaders: ['x-total-count', 'content-range'],
     // preflight varsayılanı true -> plugin kendi OPTIONS /* rotasını ekler
   });
 
-  // ❌ ÇAKIŞMA YAPTIĞI İÇİN SİLİNDİ:
-  // app.options('/*', async (req, reply) => { ... });
+
 
   // --- Cookie ---
   const cookieSecret =
@@ -107,6 +110,10 @@ export async function createApp() {
 
   // Modüller
   await registerProductsAdmin(app);
+  await registerBlogAdmin(app);
+  await registerMenuItemsAdmin(app);
+  await registerCustomPagesAdmin(app);
+  await registerSiteSettingsAdmin(app);
   await registerAuth(app);
   await registerRest(app);
   await registerStorage(app);

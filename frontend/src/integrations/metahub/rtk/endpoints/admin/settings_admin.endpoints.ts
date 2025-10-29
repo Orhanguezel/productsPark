@@ -2,14 +2,14 @@
 // -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/settings_admin.endpoints.ts
 // -------------------------------------------------------------
-import { baseApi } from "../baseApi";
+import { baseApi } from "../../baseApi";
 
 export type SettingValue = string | number | boolean | Record<string, unknown> | unknown[] | null;
 export type Setting = { key: string; value: SettingValue; group?: string | null; type?: string | null; updated_at: string };
 export type ApiSetting = Omit<Setting, "value" | "updated_at"> & { value: string | unknown | null; updated_at: string | number | Date };
 
 const toIso = (x: unknown): string => new Date(x as string | number | Date).toISOString();
-const tryParse = <T>(x: unknown): T => { if (typeof x === "string") { try { return JSON.parse(x) as T; } catch {/* keep as string */} } return x as T; };
+const tryParse = <T>(x: unknown): T => { if (typeof x === "string") { try { return JSON.parse(x) as T; } catch {/* keep as string */ } } return x as T; };
 
 const normalizeSetting = (s: ApiSetting): Setting => ({
   ...s,

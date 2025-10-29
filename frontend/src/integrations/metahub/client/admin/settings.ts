@@ -4,7 +4,7 @@
 // -------------------------------------------------------------
 import { store } from "@/store";
 import { normalizeError } from "@/integrations/metahub/core/errors";
-import { settingsAdminApi, type Setting, type SettingsListParams, type UpsertSettingBody, type BulkUpsertSettingsBody, type ImportSettingsBody, type ExportResponse } from "@/integrations/metahub/rtk/endpoints/settings_admin.endpoints";
+import { settingsAdminApi, type Setting, type SettingsListParams, type UpsertSettingBody, type BulkUpsertSettingsBody, type ImportSettingsBody, type ExportResponse } from "@/integrations/metahub/rtk/endpoints/admin/settings_admin.endpoints";
 
 export const settingsAdmin = {
   async list(params?: SettingsListParams) { try { const d = await store.dispatch(settingsAdminApi.endpoints.listSettingsAdmin.initiate(params)).unwrap(); return { data: d as Setting[], error: null as null }; } catch (e) { const { message } = normalizeError(e); return { data: null as Setting[] | null, error: { message } }; } },

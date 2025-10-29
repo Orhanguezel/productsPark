@@ -1,3 +1,6 @@
+//src/modules/customPages/schema.ts
+
+
 import {
   mysqlTable,
   char,

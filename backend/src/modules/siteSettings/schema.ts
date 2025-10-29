@@ -1,3 +1,5 @@
+// src/modules/siteSettings/schema.ts
+
 import {
   mysqlTable, char, varchar, text, datetime, index, uniqueIndex,
 } from 'drizzle-orm/mysql-core';
