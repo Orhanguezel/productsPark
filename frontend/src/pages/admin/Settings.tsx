@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+import type { TestSmtpResult } from "@/integrations/metahub/core/public-api";
 
 interface SiteSettings {
   site_title: string;
@@ -835,17 +836,15 @@ export default function Settings() {
                   variant="outline"
                   onClick={async () => {
                     try {
-                      const { data, error } = await metahub.functions.invoke('test-smtp');
-
-                      if (error) throw error;
-
-                      if (data.success) {
-                        toast.success(data.message);
+                      const { data, error } = await metahub.functions.invoke<TestSmtpResult>("test-smtp");
+                      if (error) throw new Error(error.message);
+                      if (data?.success) {
+                        toast.success(data.message ?? "SMTP testi başarılı");
                       } else {
-                        toast.error(data.error);
+                        toast.error(data?.error ?? "SMTP testi başarısız");
                       }
-                    } catch (error: any) {
-                      toast.error("SMTP testi başarısız: " + error.message);
+                    } catch (err: any) {
+                      toast.error("SMTP testi başarısız: " + (err?.message ?? String(err)));
                     }
                   }}
                 >

@@ -1,3 +1,9 @@
+// =============================================================
+// FILE: src/app/admin/menu/page.tsx
+// (projenizdeki admin menü sayfası dosya yolunuza birebir koyun)
+// =============================================================
+"use client";
+
 import { useEffect, useState } from "react";
 import { metahub } from "@/integrations/metahub/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -7,38 +13,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Plus, GripVertical, Pencil, Trash2, ExternalLink, FileText, Home, ShoppingBag, Grid3x3, Info, Mail, BookOpen, LifeBuoy, Settings, User, Instagram, Youtube, Facebook, Twitter, Linkedin, Twitch, Music, Music2, Gamepad2, Heart, Chrome, Globe, Send, MessageSquare, Camera, Pin, Crosshair, Flame, Waves } from "lucide-react";
+import {
+  Plus, GripVertical, Pencil, Trash2, ExternalLink, FileText, Home, ShoppingBag, Grid3x3, Info, Mail, BookOpen, LifeBuoy, Settings, User, Instagram, Youtube, Facebook, Twitter, Linkedin, Twitch, Music, Music2, Gamepad2, Heart, Chrome, Send, MessageSquare, Camera, Pin, Crosshair, Waves,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
+  arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -105,101 +95,56 @@ const availableIcons = [
 ];
 
 function SortableMenuItem({ item, onEdit, onDelete }: { item: MenuItem; onEdit: (item: MenuItem) => void; onDelete: (id: string) => void }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id: item.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
 
   const getIconComponent = (iconName: string | null) => {
     if (!iconName) return null;
     const iconData = availableIcons.find(i => i.name === iconName);
     return iconData ? iconData.Icon : null;
   };
-
   const IconComponent = getIconComponent(item.icon);
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 p-4 bg-card border rounded-lg hover:bg-accent/50 transition-colors"
-    >
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-4 bg-card border rounded-lg hover:bg-accent/50 transition-colors">
       <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
         <GripVertical className="h-5 w-5 text-muted-foreground" />
       </div>
-
       <div className="flex-1">
         <div className="flex items-center gap-2">
           {IconComponent && <IconComponent className="h-4 w-4 text-primary" />}
-          {!IconComponent && item.type === "page" ? (
-            <FileText className="h-4 w-4 text-primary" />
-          ) : !IconComponent ? (
-            <ExternalLink className="h-4 w-4 text-primary" />
-          ) : null}
+          {!IconComponent && (item.type === "page" ? <FileText className="h-4 w-4 text-primary" /> : <ExternalLink className="h-4 w-4 text-primary" />)}
           <span className="font-medium">{item.title}</span>
           {!item.is_active && <Badge variant="secondary">Pasif</Badge>}
         </div>
         <p className="text-sm text-muted-foreground mt-1">{item.url}</p>
       </div>
-
       <div className="flex gap-2">
-        <Button variant="ghost" size="sm" onClick={() => onEdit(item)}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => onDelete(item.id)}>
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(item)}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onDelete(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
       </div>
     </div>
   );
 }
 
 function SortableSection({ section, onEdit, onDelete }: { section: FooterSection; onEdit: (section: FooterSection) => void; onDelete: (id: string) => void }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id: section.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: section.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 p-3 bg-card border rounded-lg hover:bg-accent/50 transition-colors"
-    >
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 bg-card border rounded-lg hover:bg-accent/50 transition-colors">
       <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
         <GripVertical className="h-5 w-5 text-muted-foreground" />
       </div>
-
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <span className="font-medium">{section.title}</span>
           {!section.is_active && <Badge variant="secondary">Pasif</Badge>}
         </div>
       </div>
-
       <div className="flex gap-2">
-        <Button variant="ghost" size="sm" onClick={() => onEdit(section)}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => onDelete(section.id)}>
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(section)}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onDelete(section.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
       </div>
     </div>
   );
@@ -234,40 +179,33 @@ export default function MenuManagement() {
 
   const sensors = useSensors(
     useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [menuRes, pagesRes, sectionsRes] = await Promise.all([
-        metahub
-          .from("menu_items")
-          .select("*")
-          .order("display_order", { ascending: true }),
-        metahub
-          .from("custom_pages")
-          .select("id, title, slug")
-          .eq("is_published", true),
-        metahub
-          .from("footer_sections")
-          .select("*")
-          .order("display_order", { ascending: true }),
+        metahub.from("menu_items").select("*").order("order_num", { ascending: true }),
+        metahub.from("custom_pages").select("id, title, slug").eq("is_published", true),
+        metahub.from("footer_sections").select("*").order("display_order", { ascending: true }),
       ]);
 
       if (menuRes.error) throw menuRes.error;
       if (pagesRes.error) throw pagesRes.error;
       if (sectionsRes.error) throw sectionsRes.error;
 
-      const items = menuRes.data || [];
-      setHeaderItems(items.filter((item) => item.location === "header") as MenuItem[]);
-      setFooterItems(items.filter((item) => item.location === "footer") as MenuItem[]);
+      // public GET location döndürmeyebilir → derive et
+      const items = (menuRes.data || []).map((r: any) => ({
+        ...r,
+        display_order: r.display_order ?? r.order_num ?? r.position ?? 0,
+        location: r.location ?? (r.section_id ? "footer" : "header"),
+      })) as MenuItem[];
+
+      setHeaderItems(items.filter((i) => i.location === "header"));
+      setFooterItems(items.filter((i) => i.location === "footer"));
       setPages(pagesRes.data || []);
       setFooterSections(sectionsRes.data || []);
     } catch (error: any) {
@@ -280,7 +218,6 @@ export default function MenuManagement() {
 
   const handleDragEnd = async (event: DragEndEvent, location: "header" | "footer") => {
     const { active, over } = event;
-
     if (!over || active.id === over.id) return;
 
     const items = location === "header" ? headerItems : footerItems;
@@ -292,18 +229,14 @@ export default function MenuManagement() {
       display_order: index,
     }));
 
-    if (location === "header") {
-      setHeaderItems(reorderedItems);
-    } else {
-      setFooterItems(reorderedItems);
-    }
+    if (location === "header") setHeaderItems(reorderedItems);
+    else setFooterItems(reorderedItems);
 
-    // Update order in database
     try {
       const updates = reorderedItems.map((item) =>
-        metahub
-          .from("menu_items")
-          .update({ display_order: item.display_order })
+        metahub.from("menu_items")
+          // public API çoğunlukla order_num/position kullanıyor
+          .update({ order_num: item.display_order, position: item.display_order })
           .eq("id", item.id)
       );
       await Promise.all(updates);
@@ -316,7 +249,6 @@ export default function MenuManagement() {
 
   const handleSectionDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-
     if (!over || active.id === over.id) return;
 
     const oldIndex = footerSections.findIndex((section) => section.id === active.id);
@@ -329,13 +261,9 @@ export default function MenuManagement() {
 
     setFooterSections(reorderedSections);
 
-    // Update order in database
     try {
       const updates = reorderedSections.map((section) =>
-        metahub
-          .from("footer_sections")
-          .update({ display_order: section.display_order })
-          .eq("id", section.id)
+        metahub.from("footer_sections").update({ display_order: section.display_order }).eq("id", section.id)
       );
       await Promise.all(updates);
       toast.success("Bölüm sıralaması güncellendi");
@@ -347,33 +275,30 @@ export default function MenuManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       const selectedPage = pages.find((p) => p.id === formData.page_id);
 
-      const itemData = {
+      // public API ile uyumlu outbound (order_num/position)
+      const itemData: any = {
         title: formData.title,
         type: formData.type,
         url: formData.type === "page" && selectedPage ? `/${selectedPage.slug}` : formData.url,
         page_id: formData.type === "page" ? formData.page_id : null,
-        location: activeLocation,
         icon: formData.icon || null,
         is_active: formData.is_active,
         section_id: activeLocation === "footer" && formData.section_id ? formData.section_id : null,
-        display_order: activeLocation === "header" ? headerItems.length : footerItems.length,
       };
 
-      if (editingItem) {
-        const { error } = await metahub
-          .from("menu_items")
-          .update(itemData)
-          .eq("id", editingItem.id);
+      const nextOrder = activeLocation === "header" ? headerItems.length : footerItems.length;
+      itemData.order_num = nextOrder;
+      itemData.position = nextOrder;
 
+      if (editingItem) {
+        const { error } = await metahub.from("menu_items").update(itemData).eq("id", editingItem.id);
         if (error) throw error;
         toast.success("Menü öğesi güncellendi");
       } else {
         const { error } = await metahub.from("menu_items").insert([itemData]);
-
         if (error) throw error;
         toast.success("Menü öğesi eklendi");
       }
@@ -389,7 +314,6 @@ export default function MenuManagement() {
 
   const handleSectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       const sectionData = {
         title: sectionFormData.title,
@@ -398,16 +322,11 @@ export default function MenuManagement() {
       };
 
       if (editingSection) {
-        const { error } = await metahub
-          .from("footer_sections")
-          .update(sectionData)
-          .eq("id", editingSection.id);
-
+        const { error } = await metahub.from("footer_sections").update(sectionData).eq("id", editingSection.id);
         if (error) throw error;
         toast.success("Bölüm güncellendi");
       } else {
         const { error } = await metahub.from("footer_sections").insert([sectionData]);
-
         if (error) throw error;
         toast.success("Bölüm eklendi");
       }
@@ -438,19 +357,14 @@ export default function MenuManagement() {
 
   const handleEditSection = (section: FooterSection) => {
     setEditingSection(section);
-    setSectionFormData({
-      title: section.title,
-      is_active: section.is_active,
-    });
+    setSectionFormData({ title: section.title, is_active: section.is_active });
     setSectionDialogOpen(true);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Bu menü öğesini silmek istediğinizden emin misiniz?")) return;
-
     try {
       const { error } = await metahub.from("menu_items").delete().eq("id", id);
-
       if (error) throw error;
       toast.success("Menü öğesi silindi");
       fetchData();
@@ -462,10 +376,8 @@ export default function MenuManagement() {
 
   const handleDeleteSection = async (id: string) => {
     if (!confirm("Bu bölümü silmek istediğinizden emin misiniz? Bölüme ait menü öğeleri bölümsüz olacaktır.")) return;
-
     try {
       const { error } = await metahub.from("footer_sections").delete().eq("id", id);
-
       if (error) throw error;
       toast.success("Bölüm silindi");
       fetchData();
@@ -490,18 +402,13 @@ export default function MenuManagement() {
 
   const resetSectionForm = () => {
     setEditingSection(null);
-    setSectionFormData({
-      title: "",
-      is_active: true,
-    });
+    setSectionFormData({ title: "", is_active: true });
   };
 
   if (loading) {
     return (
       <AdminLayout title="Menü Yönetimi">
-        <div className="flex items-center justify-center py-12">
-          <p>Yükleniyor...</p>
-        </div>
+        <div className="flex items-center justify-center py-12"><p>Yükleniyor...</p></div>
       </AdminLayout>
     );
   }
@@ -512,37 +419,19 @@ export default function MenuManagement() {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold">Menü Yönetimi</h2>
-            <p className="text-muted-foreground">
-              Header ve Footer menülerini sürükle-bırak ile yönetin
-            </p>
+            <p className="text-muted-foreground">Header ve Footer menülerini sürükle-bırak ile yönetin</p>
           </div>
-
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="mr-2 h-4 w-4" />
-                Yeni Menü Öğesi
-              </Button>
+              <Button onClick={resetForm}><Plus className="mr-2 h-4 w-4" />Yeni Menü Öğesi</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  {editingItem ? "Menü Öğesini Düzenle" : "Yeni Menü Öğesi Ekle"}
-                </DialogTitle>
-              </DialogHeader>
-
+              <DialogHeader><DialogTitle>{editingItem ? "Menü Öğesini Düzenle" : "Yeni Menü Öğesi Ekle"}</DialogTitle></DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label>Konum</Label>
-                  <Select
-                    value={activeLocation}
-                    onValueChange={(value: "header" | "footer") =>
-                      setActiveLocation(value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={activeLocation} onValueChange={(v: "header" | "footer") => setActiveLocation(v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="header">Header</SelectItem>
                       <SelectItem value="footer">Footer</SelectItem>
@@ -552,15 +441,8 @@ export default function MenuManagement() {
 
                 <div className="space-y-2">
                   <Label>Tip</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value: "page" | "custom") =>
-                      setFormData({ ...formData, type: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={formData.type} onValueChange={(v: "page" | "custom") => setFormData({ ...formData, type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="page">Sayfa</SelectItem>
                       <SelectItem value="custom">Özel Link</SelectItem>
@@ -575,22 +457,12 @@ export default function MenuManagement() {
                       value={formData.page_id}
                       onValueChange={(value) => {
                         const page = pages.find((p) => p.id === value);
-                        setFormData({
-                          ...formData,
-                          page_id: value,
-                          title: page?.title || "",
-                        });
+                        setFormData({ ...formData, page_id: value, title: page?.title || "" });
                       }}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sayfa seçin" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Sayfa seçin" /></SelectTrigger>
                       <SelectContent>
-                        {pages.map((page) => (
-                          <SelectItem key={page.id} value={page.id}>
-                            {page.title}
-                          </SelectItem>
-                        ))}
+                        {pages.map((page) => (<SelectItem key={page.id} value={page.id}>{page.title}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -598,26 +470,11 @@ export default function MenuManagement() {
                   <>
                     <div className="space-y-2">
                       <Label>Başlık</Label>
-                      <Input
-                        value={formData.title}
-                        onChange={(e) =>
-                          setFormData({ ...formData, title: e.target.value })
-                        }
-                        placeholder="Menü başlığı"
-                        required
-                      />
+                      <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Menü başlığı" required />
                     </div>
-
                     <div className="space-y-2">
                       <Label>URL</Label>
-                      <Input
-                        value={formData.url}
-                        onChange={(e) =>
-                          setFormData({ ...formData, url: e.target.value })
-                        }
-                        placeholder="/link veya https://example.com"
-                        required
-                      />
+                      <Input value={formData.url} onChange={(e) => setFormData({ ...formData, url: e.target.value })} placeholder="/link veya https://example.com" required />
                     </div>
                   </>
                 )}
@@ -627,19 +484,13 @@ export default function MenuManagement() {
                     <Label>Bölüm</Label>
                     <Select
                       value={formData.section_id || "none"}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, section_id: value === "none" ? "" : value })
-                      }
+                      onValueChange={(value) => setFormData({ ...formData, section_id: value === "none" ? "" : value })}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Bölüm seçin (opsiyonel)" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Bölüm seçin (opsiyonel)" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Bölümsüz</SelectItem>
                         {footerSections.filter(s => s.is_active).map((section) => (
-                          <SelectItem key={section.id} value={section.id}>
-                            {section.title}
-                          </SelectItem>
+                          <SelectItem key={section.id} value={section.id}>{section.title}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -648,21 +499,13 @@ export default function MenuManagement() {
 
                 <div className="space-y-2">
                   <Label>Icon (Opsiyonel)</Label>
-                  <Select
-                    value={formData.icon || "none"}
-                    onValueChange={(value) => setFormData({ ...formData, icon: value === "none" ? "" : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="İcon seçin (opsiyonel)" />
-                    </SelectTrigger>
+                  <Select value={formData.icon || "none"} onValueChange={(value) => setFormData({ ...formData, icon: value === "none" ? "" : value })}>
+                    <SelectTrigger><SelectValue placeholder="İcon seçin (opsiyonel)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">İcon Yok</SelectItem>
                       {availableIcons.map((icon) => (
                         <SelectItem key={icon.name} value={icon.name}>
-                          <div className="flex items-center gap-2">
-                            <icon.Icon className="h-4 w-4" />
-                            {icon.name}
-                          </div>
+                          <div className="flex items-center gap-2"><icon.Icon className="h-4 w-4" />{icon.name}</div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -670,29 +513,13 @@ export default function MenuManagement() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, is_active: checked })
-                    }
-                  />
+                  <Switch checked={formData.is_active} onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })} />
                   <Label>Aktif</Label>
                 </div>
 
                 <div className="flex gap-2 justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setDialogOpen(false);
-                      resetForm();
-                    }}
-                  >
-                    İptal
-                  </Button>
-                  <Button type="submit">
-                    {editingItem ? "Güncelle" : "Ekle"}
-                  </Button>
+                  <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>İptal</Button>
+                  <Button type="submit">{editingItem ? "Güncelle" : "Ekle"}</Button>
                 </div>
               </form>
             </DialogContent>
@@ -707,32 +534,16 @@ export default function MenuManagement() {
 
           <TabsContent value="header" className="mt-6">
             <Card>
-              <CardHeader>
-                <CardTitle>Header Menü Öğeleri</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Header Menü Öğeleri</CardTitle></CardHeader>
               <CardContent>
                 {headerItems.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    Henüz header menü öğesi eklenmemiş
-                  </p>
+                  <p className="text-center text-muted-foreground py-8">Henüz header menü öğesi eklenmemiş</p>
                 ) : (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, "header")}
-                  >
-                    <SortableContext
-                      items={headerItems.map((item) => item.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => handleDragEnd(event, "header")}>
+                    <SortableContext items={headerItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                       <div className="space-y-2">
                         {headerItems.map((item) => (
-                          <SortableMenuItem
-                            key={item.id}
-                            item={item}
-                            onEdit={handleEdit}
-                            onDelete={handleDelete}
-                          />
+                          <SortableMenuItem key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />
                         ))}
                       </div>
                     </SortableContext>
@@ -743,61 +554,25 @@ export default function MenuManagement() {
           </TabsContent>
 
           <TabsContent value="footer" className="mt-6 space-y-4">
-            {/* Footer Sections Management */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Footer Bölümleri</CardTitle>
                 <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" onClick={resetSectionForm}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Yeni Bölüm
-                    </Button>
-                  </DialogTrigger>
+                  <DialogTrigger asChild><Button size="sm" onClick={resetSectionForm}><Plus className="mr-2 h-4 w-4" />Yeni Bölüm</Button></DialogTrigger>
                   <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>
-                        {editingSection ? "Bölümü Düzenle" : "Yeni Bölüm Ekle"}
-                      </DialogTitle>
-                    </DialogHeader>
-
+                    <DialogHeader><DialogTitle>{editingSection ? "Bölümü Düzenle" : "Yeni Bölüm Ekle"}</DialogTitle></DialogHeader>
                     <form onSubmit={handleSectionSubmit} className="space-y-4">
                       <div className="space-y-2">
                         <Label>Bölüm Adı</Label>
-                        <Input
-                          value={sectionFormData.title}
-                          onChange={(e) =>
-                            setSectionFormData({ ...sectionFormData, title: e.target.value })
-                          }
-                          placeholder="Örn: Hızlı Erişim, Müşteri Hizmetleri"
-                          required
-                        />
+                        <Input value={sectionFormData.title} onChange={(e) => setSectionFormData({ ...sectionFormData, title: e.target.value })} placeholder="Örn: Hızlı Erişim, Müşteri Hizmetleri" required />
                       </div>
-
                       <div className="flex items-center gap-2">
-                        <Switch
-                          checked={sectionFormData.is_active}
-                          onCheckedChange={(checked) =>
-                            setSectionFormData({ ...sectionFormData, is_active: checked })
-                          }
-                        />
+                        <Switch checked={sectionFormData.is_active} onCheckedChange={(checked) => setSectionFormData({ ...sectionFormData, is_active: checked })} />
                         <Label>Aktif</Label>
                       </div>
-
                       <div className="flex gap-2 justify-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setSectionDialogOpen(false);
-                            resetSectionForm();
-                          }}
-                        >
-                          İptal
-                        </Button>
-                        <Button type="submit">
-                          {editingSection ? "Güncelle" : "Ekle"}
-                        </Button>
+                        <Button type="button" variant="outline" onClick={() => { setSectionDialogOpen(false); resetSectionForm(); }}>İptal</Button>
+                        <Button type="submit">{editingSection ? "Güncelle" : "Ekle"}</Button>
                       </div>
                     </form>
                   </DialogContent>
@@ -805,27 +580,13 @@ export default function MenuManagement() {
               </CardHeader>
               <CardContent>
                 {footerSections.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">
-                    Henüz bölüm eklenmemiş
-                  </p>
+                  <p className="text-center text-muted-foreground py-4">Henüz bölüm eklenmemiş</p>
                 ) : (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleSectionDragEnd}
-                  >
-                    <SortableContext
-                      items={footerSections.map((section) => section.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
+                    <SortableContext items={footerSections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
                       <div className="space-y-2">
                         {footerSections.map((section) => (
-                          <SortableSection
-                            key={section.id}
-                            section={section}
-                            onEdit={handleEditSection}
-                            onDelete={handleDeleteSection}
-                          />
+                          <SortableSection key={section.id} section={section} onEdit={handleEditSection} onDelete={handleDeleteSection} />
                         ))}
                       </div>
                     </SortableContext>
@@ -834,45 +595,24 @@ export default function MenuManagement() {
               </CardContent>
             </Card>
 
-            {/* Footer Menu Items */}
             <Card>
-              <CardHeader>
-                <CardTitle>Footer Menü Öğeleri</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Footer Menü Öğeleri</CardTitle></CardHeader>
               <CardContent>
                 {footerItems.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    Henüz footer menü öğesi eklenmemiş
-                  </p>
+                  <p className="text-center text-muted-foreground py-8">Henüz footer menü öğesi eklenmemiş</p>
                 ) : (
                   <div className="space-y-4">
-                    {/* Group items by section */}
                     {footerSections.filter(s => s.is_active).map((section) => {
                       const sectionItems = footerItems.filter(item => item.section_id === section.id);
                       if (sectionItems.length === 0) return null;
-
                       return (
                         <div key={section.id} className="space-y-2">
-                          <h4 className="font-semibold text-sm text-muted-foreground">
-                            {section.title}
-                          </h4>
-                          <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={(event) => handleDragEnd(event, "footer")}
-                          >
-                            <SortableContext
-                              items={sectionItems.map((item) => item.id)}
-                              strategy={verticalListSortingStrategy}
-                            >
+                          <h4 className="font-semibold text-sm text-muted-foreground">{section.title}</h4>
+                          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => handleDragEnd(event, "footer")}>
+                            <SortableContext items={sectionItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                               <div className="space-y-2 pl-4 border-l-2 border-border">
                                 {sectionItems.map((item) => (
-                                  <SortableMenuItem
-                                    key={item.id}
-                                    item={item}
-                                    onEdit={handleEdit}
-                                    onDelete={handleDelete}
-                                  />
+                                  <SortableMenuItem key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />
                                 ))}
                               </div>
                             </SortableContext>
@@ -881,29 +621,14 @@ export default function MenuManagement() {
                       );
                     })}
 
-                    {/* Items without section */}
                     {footerItems.filter(item => !item.section_id).length > 0 && (
                       <div className="space-y-2">
-                        <h4 className="font-semibold text-sm text-muted-foreground">
-                          Bölümsüz Öğeler
-                        </h4>
-                        <DndContext
-                          sensors={sensors}
-                          collisionDetection={closestCenter}
-                          onDragEnd={(event) => handleDragEnd(event, "footer")}
-                        >
-                          <SortableContext
-                            items={footerItems.filter(item => !item.section_id).map((item) => item.id)}
-                            strategy={verticalListSortingStrategy}
-                          >
+                        <h4 className="font-semibold text-sm text-muted-foreground">Bölümsüz Öğeler</h4>
+                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => handleDragEnd(event, "footer")}>
+                          <SortableContext items={footerItems.filter(item => !item.section_id).map((item) => item.id)} strategy={verticalListSortingStrategy}>
                             <div className="space-y-2">
                               {footerItems.filter(item => !item.section_id).map((item) => (
-                                <SortableMenuItem
-                                  key={item.id}
-                                  item={item}
-                                  onEdit={handleEdit}
-                                  onDelete={handleDelete}
-                                />
+                                <SortableMenuItem key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />
                               ))}
                             </div>
                           </SortableContext>

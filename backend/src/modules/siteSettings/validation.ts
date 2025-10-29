@@ -1,3 +1,5 @@
+// src/modules/siteSettings/validation.ts
+
 import { z } from 'zod';
 
 /** JSON-like recursive schema (no-any) */

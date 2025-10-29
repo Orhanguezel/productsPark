@@ -1,50 +1,51 @@
-import { z } from 'zod';
+// =============================================================
+// FILE: src/modules/customPages/validation.ts
+// (Sadece Zod validasyonları ve tipler)
+// =============================================================
+import { z } from "zod";
 
-const boolLike = z.union([
+export const boolLike = z.union([
   z.boolean(),
   z.literal(0), z.literal(1),
-  z.literal('0'), z.literal('1'),
-  z.literal('true'), z.literal('false')
+  z.literal("0"), z.literal("1"),
+  z.literal("true"), z.literal("false"),
 ]);
 
-// Create
-export const menuItemCreateSchema = z.object({
-  title: z.string().min(1).max(100),              // DB: label
-  url: z.string().min(1).max(500),
-  parent_id: z.string().uuid().nullable().optional(),
-  position: z.number().int().min(0).optional(),   // DB: order_num
-  order_num: z.number().int().min(0).optional(),  // alternatif isim
-  is_active: boolLike.optional().default(true),
-
-  // DB'de yok ama FE tipinde var; kabul edip yoksayarız:
-  icon: z.string().nullable().optional(),
-  section_id: z.string().uuid().nullable().optional(),
-  href: z.string().nullable().optional(),
-  slug: z.string().nullable().optional(),
-  locale: z.string().nullable().optional(),
-});
-
-// Update (partial)
-export const menuItemUpdateSchema = menuItemCreateSchema.partial();
-
-// List query
-export const menuItemListQuerySchema = z.object({
-  select: z.string().optional(), // FE gönderiyor; yoksayacağız
-  parent_id: z.string().uuid().nullable().optional(),
-  is_active: boolLike.optional(),
-
-  // FE’de kullanılabilen ama DB’de olmayan filtreler (yoksay):
-  location: z.string().optional(),
-  section_id: z.string().uuid().nullable().optional(),
-  locale: z.string().optional(),
-
-  // sıralama: display_order/position/order_num/created_at/updated_at
+/** LIST query (admin/public aynı) */
+export const customPageListQuerySchema = z.object({
+  /** "created_at.desc" benzeri */
   order: z.string().optional(),
-
-  limit: z.union([z.string(), z.number()]).optional(),
-  offset: z.union([z.string(), z.number()]).optional(),
+  sort: z.enum(["created_at", "updated_at"]).optional(),
+  orderDir: z.enum(["asc", "desc"]).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  is_published: boolLike.optional(),
+  q: z.string().optional(),
+  slug: z.string().optional(),
+  /** FE’den gelebilir; BE yoksayabilir */
+  select: z.string().optional(),
 });
+export type CustomPageListQuery = z.infer<typeof customPageListQuerySchema>;
 
-export type MenuItemCreateInput = z.infer<typeof menuItemCreateSchema>;
-export type MenuItemUpdateInput = z.infer<typeof menuItemUpdateSchema>;
-export type MenuItemListQuery = z.infer<typeof menuItemListQuerySchema>;
+/** CREATE / UPSERT body */
+export const upsertCustomPageBodySchema = z.object({
+  title: z.string().min(1).max(255).trim(),
+  slug: z
+    .string()
+    .min(1).max(255)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug sadece küçük harf, rakam ve tire içermelidir")
+    .trim(),
+  /** düz HTML */
+  content: z.string().min(1),
+  meta_title: z.string().max(255).nullable().optional(),
+  meta_description: z.string().max(500).nullable().optional(),
+  is_published: boolLike.optional().default(false),
+
+  /** DB’de sütun yok; gönderilirse controller’da yoksayılır */
+  locale: z.string().max(10).nullable().optional(),
+});
+export type UpsertCustomPageBody = z.infer<typeof upsertCustomPageBodySchema>;
+
+/** PATCH body (hepsi opsiyonel) */
+export const patchCustomPageBodySchema = upsertCustomPageBodySchema.partial();
+export type PatchCustomPageBody = z.infer<typeof patchCustomPageBodySchema>;

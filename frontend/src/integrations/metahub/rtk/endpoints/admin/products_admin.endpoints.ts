@@ -55,11 +55,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
         url: "/admin/products",
         params: params
           ? {
-              ...params,
-              // BE tarafı 0/1 bekliyorsa backend uyumlu; boolean destekliyorsa olduğu gibi gider
-              is_active: params.is_active ?? undefined,
-              show_on_homepage: params.show_on_homepage ?? undefined,
-            }
+            ...params,
+            // BE tarafı 0/1 bekliyorsa backend uyumlu; boolean destekliyorsa olduğu gibi gider
+            is_active: params.is_active ?? undefined,
+            show_on_homepage: params.show_on_homepage ?? undefined,
+          }
           : undefined,
       }),
       transformResponse: (res: unknown): ProductAdmin[] => {
@@ -70,9 +70,9 @@ export const productsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "Product" as const, id: p.id })),
-              { type: "Products" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "Product" as const, id: p.id })),
+            { type: "Products" as const, id: "LIST" },
+          ]
           : [{ type: "Products" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

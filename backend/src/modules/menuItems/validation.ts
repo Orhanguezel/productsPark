@@ -1,3 +1,4 @@
+// src/modules/menuItems/validation.ts
 import { z } from 'zod';
 
 const boolLike = z.union([
@@ -44,6 +45,44 @@ export const menuItemListQuerySchema = z.object({
   limit: z.union([z.string(), z.number()]).optional(),
   offset: z.union([z.string(), z.number()]).optional(),
 });
+
+export const adminMenuItemListQuerySchema = z.object({
+  q: z.string().optional(),
+  location: z.enum(["header", "footer"]).optional(),
+  section_id: z.string().uuid().nullable().optional(),
+  parent_id: z.string().uuid().nullable().optional(),
+  is_active: boolLike.optional(),
+  sort: z.enum(["display_order", "created_at", "title"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+export const adminMenuItemUpsertSchema = z.object({
+  title: z.string().min(1).max(100),
+  url: z.string().nullable(),                       // FE 'url' — DB: url
+  type: z.enum(["page", "custom"]),
+  page_id: z.string().uuid().nullable().optional(), // (DB’de opsiyonel)
+  parent_id: z.string().uuid().nullable().optional(),
+  location: z.enum(["header", "footer"]),
+  icon: z.string().max(64).nullable().optional(),
+  section_id: z.string().uuid().nullable().optional(),
+  is_active: boolLike.optional().default(true),
+  display_order: z.number().int().min(0).optional(),
+});
+
+export const adminMenuItemReorderSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().uuid(),
+      display_order: z.number().int().min(0),
+    })
+  ).min(1),
+});
+
+export type AdminMenuItemListQuery = z.infer<typeof adminMenuItemListQuerySchema>;
+export type AdminMenuItemUpsert = z.infer<typeof adminMenuItemUpsertSchema>;
+export type AdminMenuItemReorder = z.infer<typeof adminMenuItemReorderSchema>;
 
 export type MenuItemCreateInput = z.infer<typeof menuItemCreateSchema>;
 export type MenuItemUpdateInput = z.infer<typeof menuItemUpdateSchema>;

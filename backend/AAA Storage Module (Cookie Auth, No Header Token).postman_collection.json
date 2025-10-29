@@ -1,62 +1,33 @@
 {
   "info": {
-    "_postman_id": "c9cdb9f2-1e8a-4b2f-9b0b-pp-storage-updated",
-    "name": "AAA Storage Module (Cookie Auth, No Header Token) — UPDATED",
-    "description": "Storage public + admin uçları. Cookie-first auth; Authorization header kullanılmaz.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+    "name": "AAA ProductsPark — Menu Items API",
+    "_postman_id": "2f9f3c2a-8c6b-41f6-9c7a-pp-menu-items",
+    "description": "Public ve Admin Menu Items uçları için uçtan uca test koleksiyonu.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "// Cookie-first: Authorization header kullanma",
-          "pm.request.headers.remove('Authorization');",
-          "// (Opsiyonel) İstenirse header auth",
-          "const preferHeader = pm.environment.get('prefer_header_auth') === '1';",
-          "const at = pm.environment.get('access_token');",
-          "if (preferHeader && at) pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${at}` });"
-        ]
-      }
-    }
+  "variable": [
+    { "key": "baseUrl", "value": "https://test.guezelwebdesign.com" },
+    { "key": "access_token", "value": "" },
+    { "key": "public_menu_first_id", "value": "" },
+    { "key": "admin_menu_first_id", "value": "" },
+    { "key": "new_menu_id", "value": "" },
+    { "key": "timestamp", "value": "" }
   ],
   "item": [
     {
-      "name": "Storage Public",
+      "name": "Public Menu Items",
       "item": [
         {
-          "name": "Public Serve Redirect (GET /storage/:bucket/*)",
+          "name": "List Menu Items (public)",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
-            "url": "{{base_url}}/storage/{{bucket}}/{{public_path}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": ["pm.test('302 or 404', () => pm.expect([302,404]).to.include(pm.response.code));"]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Upload To Bucket (server-signed, multipart/form-data)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
             "url": {
-              "raw": "{{base_url}}/storage/{{bucket}}/upload?path={{upload_path}}",
-              "host": ["{{base_url}}"],
-              "path": ["storage", "{{bucket}}", "upload"],
-              "query": [{ "key": "path", "value": "{{upload_path}}" }]
-            },
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "file", "type": "file", "src": [] }
+              "raw": "{{baseUrl}}/menu_items?order=display_order.asc&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu_items"],
+              "query": [
+                { "key": "order", "value": "display_order.asc" },
+                { "key": "limit", "value": "5" }
               ]
             }
           },
@@ -64,93 +35,57 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const j = pm.response.json();",
-                  "if (j && j.path) pm.collectionVariables.set('public_path', j.path);"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Storage Upload Sign (Unsigned flow)",
-      "item": [
-        {
-          "name": "Sign Multipart (Cloudinary unsigned)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "url": "{{base_url}}/storage/uploads/sign-multipart",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"filename\": \"sample.jpg\",\n  \"content_type\": \"image/jpeg\",\n  \"folder\": \"{{folder}}\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const j = pm.response.json();",
-                  "pm.collectionVariables.set('cl_upload_url', j.upload_url || '');",
-                  "pm.collectionVariables.set('cl_public_url', j.public_url || '');",
-                  "pm.collectionVariables.set('cl_upload_preset', (j.fields && j.fields.upload_preset) || '');",
-                  "pm.collectionVariables.set('cl_folder', (j.fields && j.fields.folder) || '');",
-                  "pm.collectionVariables.set('cl_public_id', (j.fields && j.fields.public_id) || '');"
-                ]
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data).to.be.an('array');",
+                  "if (data.length) {",
+                  "  pm.environment.set('public_menu_first_id', data[0].id);",
+                  "  pm.test('Öğe alanları', () => {",
+                  "    const x = data[0];",
+                  "    pm.expect(x).to.have.property('id');",
+                  "    pm.expect(x).to.have.property('title');",
+                  "    pm.expect(x).to.have.property('url');",
+                  "    pm.expect(x).to.have.property('is_active');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ]
         },
         {
-          "name": "Cloudinary Direct Upload (use sign response)",
+          "name": "Get Menu Item by ID (public)",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "url": "{{cl_upload_url}}",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "file", "type": "file", "src": [] },
-                { "key": "upload_preset", "type": "text", "value": "{{cl_upload_preset}}" },
-                { "key": "folder", "type": "text", "value": "{{cl_folder}}" },
-                { "key": "public_id", "type": "text", "value": "{{cl_public_id}}" }
-              ]
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/menu_items/{{public_menu_first_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu_items", "{{public_menu_first_id}}"]
             }
           },
           "event": [
             {
               "listen": "prerequest",
               "script": {
-                "type": "text/javascript",
                 "exec": [
-                  "['cl_upload_url','cl_upload_preset','cl_public_id'].forEach(k=>{",
-                  "  if(!pm.variables.get(k)) throw new Error(`Missing variable: ${k}. Run 'Sign Multipart' first.`);",
-                  "});"
+                  "if (!pm.environment.get('public_menu_first_id')) {",
+                  "  postman.setNextRequest(null);",
+                  "}"
                 ]
               }
             },
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK (Cloudinary)', () => pm.response.to.have.status(200));",
-                  "const r = pm.response.json();",
-                  "// public_path: folder/public_id.format (backend redirect için)",
-                  "const folder = pm.variables.get('cl_folder');",
-                  "const pubid  = r.public_id || pm.variables.get('cl_public_id');",
-                  "const ext    = r.format ? ('.' + r.format) : '';",
-                  "const p = (folder ? (folder + '/') : '') + pubid + ext;",
-                  "pm.collectionVariables.set('public_path', p);",
-                  "pm.collectionVariables.set('cloudinary_secure_url', r.secure_url || '');"
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const x = pm.response.json();",
+                  "pm.expect(x).to.be.an('object');",
+                  "pm.expect(x).to.have.property('id', pm.environment.get('public_menu_first_id'));",
+                  "pm.expect(x).to.have.property('title');",
+                  "pm.expect(x).to.have.property('url');"
                 ]
               }
             }
@@ -159,57 +94,24 @@
       ]
     },
     {
-      "name": "Storage Admin",
+      "name": "Admin Menu Items",
       "item": [
         {
-          "name": "Create Asset (admin, multipart)",
+          "name": "Admin: List",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "url": "{{base_url}}/admin/storage/assets",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "file", "type": "file", "src": [] },
-                { "key": "bucket", "type": "text", "value": "{{bucket}}" },
-                { "key": "folder", "type": "text", "value": "{{folder}}" },
-                { "key": "metadata", "type": "text", "value": "{\"alt\":\"Sample image\",\"source\":\"postman\"}" }
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created or 200 Existing', () => pm.expect([200,201]).to.include(pm.response.code));",
-                  "const j = pm.response.json();",
-                  "if (j && j.id) pm.collectionVariables.set('admin_asset_id', j.id);",
-                  "if (j && j.path) pm.collectionVariables.set('public_path', j.path);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "List Assets (admin)",
-          "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" },
+              { "key": "Cookie", "value": "access_token={{access_token}}", "type": "text" }
+            ],
             "url": {
-              "raw": "{{base_url}}/admin/storage/assets?q={{q}}&bucket={{bucket}}&folder={{folder}}&mime={{mime}}&limit={{limit}}&offset={{offset}}&sort={{sort}}&order={{order}}",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "storage", "assets"],
+              "raw": "{{baseUrl}}/admin/menu_items?sort=display_order&order=asc&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "menu_items"],
               "query": [
-                { "key": "q", "value": "{{q}}" },
-                { "key": "bucket", "value": "{{bucket}}" },
-                { "key": "folder", "value": "{{folder}}" },
-                { "key": "mime", "value": "{{mime}}" },
-                { "key": "limit", "value": "{{limit}}" },
-                { "key": "offset", "value": "{{offset}}" },
-                { "key": "sort", "value": "{{sort}}" },
-                { "key": "order", "value": "{{order}}" }
+                { "key": "sort", "value": "display_order" },
+                { "key": "order", "value": "asc" },
+                { "key": "limit", "value": "10" }
               ]
             }
           },
@@ -217,67 +119,236 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Has x-total-count', () => pm.response.headers.has('x-total-count'));"
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data).to.be.an('array');",
+                  "if (data.length) {",
+                  "  pm.environment.set('admin_menu_first_id', data[0].id);",
+                  "  pm.test('Admin normalize alanları', () => {",
+                  "    const x = data[0];",
+                  "    pm.expect(x).to.have.property('id');",
+                  "    pm.expect(x).to.have.property('title');",
+                  "    pm.expect(x).to.have.property('url');",
+                  "    pm.expect(x).to.have.property('display_order');",
+                  "    pm.expect(x).to.have.property('is_active');",
+                  "  });",
+                  "}"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Get Asset (admin) by ID",
-          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/admin/storage/assets/{{admin_asset_id}}" }
-        },
-        {
-          "name": "Patch Asset (admin)",
+          "name": "Admin: Create",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "PATCH",
-            "url": "{{base_url}}/admin/storage/assets/{{admin_asset_id}}",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"renamed-{{$timestamp}}.jpg\",\n  \"folder\": \"{{folder}}\",\n  \"metadata\": {\"note\":\"updated via postman\"}\n}" }
-          }
-        },
-        {
-          "name": "Delete Asset (admin)",
-          "request": { "auth": { "type": "noauth" }, "method": "DELETE", "url": "{{base_url}}/admin/storage/assets/{{admin_asset_id}}" }
-        },
-        {
-          "name": "Bulk Delete (admin)",
-          "request": {
-            "auth": { "type": "noauth" },
             "method": "POST",
-            "url": "{{base_url}}/admin/storage/assets/bulk-delete",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"ids\": [\"{{admin_asset_id}}\"]\n}" }
-          }
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" },
+              { "key": "Cookie", "value": "access_token={{access_token}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Item {{timestamp}}\",\n  \"url\": \"/deneme-{{timestamp}}\",\n  \"type\": \"custom\",\n  \"location\": \"header\",\n  \"is_active\": true,\n  \"display_order\": 999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/menu_items",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "menu_items"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"201 Created\", () => pm.response.to.have.status(201));",
+                  "const x = pm.response.json();",
+                  "pm.expect(x).to.be.an('object');",
+                  "pm.expect(x).to.have.property('id');",
+                  "pm.environment.set('new_menu_id', x.id);",
+                  "pm.test('Alanlar doğru', () => {",
+                  "  pm.expect(x).to.have.property('title');",
+                  "  pm.expect(x).to.have.property('url');",
+                  "  pm.expect(x).to.have.property('display_order');",
+                  "  pm.expect(x).to.have.property('is_active');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "List Folders (admin)",
-          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/admin/storage/folders" }
+          "name": "Admin: Get by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" },
+              { "key": "Cookie", "value": "access_token={{access_token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/menu_items/{{new_menu_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "menu_items", "{{new_menu_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get('new_menu_id')) { postman.setNextRequest(null); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const x = pm.response.json();",
+                  "pm.expect(x.id).to.eql(pm.environment.get('new_menu_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: Update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" },
+              { "key": "Cookie", "value": "access_token={{access_token}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Item Updated {{timestamp}}\",\n  \"display_order\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/menu_items/{{new_menu_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "menu_items", "{{new_menu_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get('new_menu_id')) { postman.setNextRequest(null); }",
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const x = pm.response.json();",
+                  "pm.expect(x.title).to.include('Updated');",
+                  "pm.expect(x.display_order).to.eql(100);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: Reorder",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" },
+              { "key": "Cookie", "value": "access_token={{access_token}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"id\": \"{{new_menu_id}}\", \"display_order\": 0 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/menu_items/reorder",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "menu_items", "reorder"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get('new_menu_id')) { postman.setNextRequest(null); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const x = pm.response.json();",
+                  "pm.expect(x).to.have.property('ok', true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" },
+              { "key": "Cookie", "value": "access_token={{access_token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/menu_items/{{new_menu_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "menu_items", "{{new_menu_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "exec": [ "if (!pm.environment.get('new_menu_id')) { postman.setNextRequest(null); }" ] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"204 No Content\", () => pm.response.to.have.status(204));",
+                  "// Silinen kaydı tekrar GET ederek 404 doğrula",
+                  "pm.sendRequest({",
+                  "  url: pm.environment.get('baseUrl') + '/admin/menu_items/' + pm.environment.get('new_menu_id'),",
+                  "  method: 'GET',",
+                  "  header: {",
+                  "    'Authorization': 'Bearer ' + pm.environment.get('access_token'),",
+                  "    'Cookie': 'access_token=' + pm.environment.get('access_token')",
+                  "  }",
+                  "}, (err, res) => {",
+                  "  if (err) {",
+                  "    console.log('Follow-up GET error:', err);",
+                  "  } else {",
+                  "    pm.test('After delete → 404', () => pm.expect(res.code).to.be.oneOf([404]));",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
-  ],
-  "variable": [
-    { "key": "base_url", "value": "http://localhost:8081" },
-    { "key": "bucket", "value": "default" },
-    { "key": "folder", "value": "demo" },
-    { "key": "upload_path", "value": "demo/file.jpg" },
-    { "key": "public_path", "value": "demo/file.jpg" },
-    { "key": "q", "value": "" },
-    { "key": "mime", "value": "" },
-    { "key": "limit", "value": "50" },
-    { "key": "offset", "value": "0" },
-    { "key": "sort", "value": "created_at" },
-    { "key": "order", "value": "desc" },
-    { "key": "admin_asset_id", "value": "" },
-    { "key": "cl_upload_url", "value": "" },
-    { "key": "cl_public_url", "value": "" },
-    { "key": "cl_upload_preset", "value": "" },
-    { "key": "cl_folder", "value": "" },
-    { "key": "cl_public_id", "value": "" }
   ]
 }

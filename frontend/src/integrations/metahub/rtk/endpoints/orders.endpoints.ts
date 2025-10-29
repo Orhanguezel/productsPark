@@ -41,7 +41,7 @@ const normalizeOrder = (x: unknown): Order => {
 
   const subtotal = toNumber(pick<number | string>("total_amount", "subtotal", 0));
   const discount = toNumber(pick<number | string>("discount_amount", "discount", 0));
-  const total    = toNumber(pick<number | string>("final_amount", "total", 0));
+  const total = toNumber(pick<number | string>("final_amount", "total", 0));
 
   return {
     id: String(pick("id", "", "")),
@@ -83,9 +83,9 @@ export const ordersApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result && result.length
           ? [
-              ...result.map((o) => ({ type: "Order" as const, id: o.id })),
-              { type: "Orders" as const, id: "LIST" },
-            ]
+            ...result.map((o) => ({ type: "Order" as const, id: o.id })),
+            { type: "Orders" as const, id: "LIST" },
+          ]
           : [{ type: "Orders" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
