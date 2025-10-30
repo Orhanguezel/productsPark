@@ -39,6 +39,7 @@ import { registerMenuItemsAdmin } from "@/modules/menuItems/admin.routes";
 import { registerCustomPagesAdmin } from "@/modules/customPages/admin.routes";
 import { registerSiteSettingsAdmin } from '@/modules/siteSettings/admin.routes';
 import { registerAdminOrders } from '@/modules/orders/admin.routes';
+import { registerPaymentsAdmin } from "@/modules/payments/admin.routes";
 import { registerApiProviders } from "@/modules/api_providers/router";
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
@@ -116,6 +117,7 @@ export async function createApp() {
   await registerCustomPagesAdmin(app);
   await registerSiteSettingsAdmin(app);
   await registerAdminOrders(app);
+  await registerPaymentsAdmin(app);
   await registerAuth(app);
   await registerRest(app);
   await registerStorage(app);

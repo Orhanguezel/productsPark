@@ -3,7 +3,7 @@
 // =============================================================
 import type { UnknownRow } from "../types";
 
-/** payment method mapper */
+/** payment method mapper (FE → BE) */
 export function mapPaymentMethod(v: unknown): string | unknown {
   const s = String(v ?? "");
   if (s === "havale" || s === "eft") return "bank_transfer";
@@ -11,25 +11,27 @@ export function mapPaymentMethod(v: unknown): string | unknown {
   return v;
 }
 
-/** Para normalize: number/"1 234,50"/"1.234,50" → "1234.50" */
+/** Para normalize: number/"1 234,50"/"1.234,50" → "1234.50" (string) */
 export function asMoney(v: unknown): string {
   if (typeof v === "number") return v.toFixed(2);
   if (typeof v === "string") {
     const n = v
       .trim()
       .replace(/\s+/g, "")
-      .replace(/\.(?=\d{3}(?:[.,]|$))/g, "")
+      .replace(/\.(?=\d{3}(?:[.,]|$))/g, "") // 1.234.567,89 → 1234567,89
       .replace(",", ".");
     const num = Number(n);
     return Number.isFinite(num) ? num.toFixed(2) : "0.00";
   }
-  return "0.00";
+  const num = Number(v ?? 0);
+  return Number.isFinite(num) ? num.toFixed(2) : "0.00";
 }
 
-/** orders: FE→BE dönüşüm + eksik items’ı sessionStorage’tan üret */
+/** orders: FE → BE outbound normalize */
 export function transformOrdersOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
+  // FE → BE alan adları
   if ("total_amount" in rec) {
     if (!("subtotal" in rec)) rec["subtotal"] = rec["total_amount"];
     delete rec["total_amount"];
@@ -43,23 +45,27 @@ export function transformOrdersOut(obj: Record<string, unknown>): void {
     delete rec["final_amount"];
   }
 
-  if ("payment_method" in rec) rec["payment_method"] = mapPaymentMethod(rec["payment_method"]);
+  // payment method normalize
+  if ("payment_method" in rec) {
+    rec["payment_method"] = mapPaymentMethod(rec["payment_method"]);
+  }
 
+  // BE create şeması bunları kabul etmiyor → gönderme
   delete rec["user_id"];
   delete rec["customer_name"];
   delete rec["customer_email"];
   delete rec["customer_phone"];
   delete rec["coupon_id"];
+  delete rec["status"]; // çoğu create şeması set etmeye izin vermez
 
+  // parasal alanları string'e çevir
   if (rec["subtotal"] != null) rec["subtotal"] = asMoney(rec["subtotal"]);
   if (rec["discount"] != null) rec["discount"] = asMoney(rec["discount"]);
-  if (rec["total"] != null) rec["total"] = asMoney(rec["total"]);
+  if (rec["total"]    != null) rec["total"]    = asMoney(rec["total"]);
 
+  // items yoksa checkoutData’dan üret
   const itemsUnknown = rec["items"];
-  const hasNoItems =
-    !("items" in rec) ||
-    !Array.isArray(itemsUnknown) ||
-    (Array.isArray(itemsUnknown) && itemsUnknown.length === 0);
+  const hasNoItems = !("items" in rec) || !Array.isArray(itemsUnknown) || itemsUnknown.length === 0;
 
   if (hasNoItems) {
     try {
@@ -73,9 +79,7 @@ export function transformOrdersOut(obj: Record<string, unknown>): void {
           selected_options?: Record<string, unknown> | null;
           products: { id: string; name: string; price: number };
         };
-        type CheckoutData = { cartItems?: CheckoutItem[] } | null;
-
-        const cd: CheckoutData = JSON.parse(raw) as CheckoutData;
+        const cd = JSON.parse(raw) as { cartItems?: CheckoutItem[] } | null;
         const cartItems: CheckoutItem[] = cd?.cartItems ?? [];
         if (cartItems.length > 0) {
           rec["items"] = cartItems.map((ci) => {
@@ -93,13 +97,12 @@ export function transformOrdersOut(obj: Record<string, unknown>): void {
           });
         }
       }
-    } catch {
-      /* sessiz geç */
-    }
+    } catch { /* noop */ }
   }
 }
 
-/** order_items: FE→BE */
+
+/** order_items: FE → BE */
 export function transformOrderItemsOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
@@ -119,13 +122,15 @@ export function transformOrderItemsOut(obj: Record<string, unknown>): void {
   if (rec["total"] != null) rec["total"] = asMoney(rec["total"]);
 }
 
-/** payment_requests: FE→BE */
+/** payment_requests: FE → BE */
 export function transformPaymentRequestsOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
-  if ("payment_method" in rec) rec["payment_method"] = mapPaymentMethod(rec["payment_method"]);
+  if ("payment_method" in rec) {
+    rec["payment_method"] = mapPaymentMethod(rec["payment_method"]);
+  }
 }
 
-/** categories: FE→BE — UI local alanları at, tip/nullable düzelt */
+/** categories: FE → BE — UI local alanları at, tip/nullable düzelt */
 export function transformCategoriesOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
@@ -138,7 +143,13 @@ export function transformCategoriesOut(obj: Record<string, unknown>): void {
   if (typeof rec["slug"] === "string") rec["slug"] = (rec["slug"] as string).trim();
 
   // Boş stringleri null’a çevir
-  const nullableStrings = ["description", "image_url", "icon", "seo_title", "seo_description"];
+  const nullableStrings = [
+    "description",
+    "image_url",
+    "icon",
+    "seo_title",
+    "seo_description",
+  ];
   for (const k of nullableStrings) {
     if (rec[k] === "") rec[k] = null;
   }
@@ -153,30 +164,67 @@ export function transformCategoriesOut(obj: Record<string, unknown>): void {
   if ("is_featured" in rec) rec["is_featured"] = !!rec["is_featured"];
   if ("is_active" in rec) rec["is_active"] = !!rec["is_active"];
 
-  // Bazı ortamlarda NULL kabul etmeyen kolonlara null göndermeyelim
+  // Bazı ortamlarda NOT NULL kolonlar için null göndermeyelim
   const maybeNotNullInDb = ["image_url", "parent_id"];
   for (const k of maybeNotNullInDb) {
     if (rec[k] === null) delete rec[k];
   }
 }
 
-/** products: FE→BE — UI-only alanları at, tip normalize */
+/** products: FE → BE — UI-only alanları at, tip normalize */
 export function transformProductsOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
   const ALLOWED = new Set<string>([
-    "name","slug","price","original_price","stock_quantity","category_id","image_url",
-    "short_description","description","is_active","show_on_homepage","delivery_type",
-    "file_url","api_provider_id","api_product_id","api_quantity",
-    "demo_url","demo_embed_enabled","demo_button_text",
-    "epin_game_id","epin_product_id","auto_delivery_enabled",
-    "min_order","max_order","min_barem","max_barem","barem_step","pre_order_enabled",
-    "tax_type","review_count","article_content","article_enabled",
-    "custom_fields","badges","quantity_options"
+    "name",
+    "slug",
+    "price",
+    "original_price",
+    "stock_quantity",
+    "category_id",
+    "image_url",
+    "short_description",
+    "description",
+    "is_active",
+    "show_on_homepage",
+    "delivery_type",
+    "file_url",
+    "api_provider_id",
+    "api_product_id",
+    "api_quantity",
+    "demo_url",
+    "demo_embed_enabled",
+    "demo_button_text",
+    "epin_game_id",
+    "epin_product_id",
+    "auto_delivery_enabled",
+    "min_order",
+    "max_order",
+    "min_barem",
+    "max_barem",
+    "barem_step",
+    "pre_order_enabled",
+    "tax_type",
+    "review_count",
+    "article_content",
+    "article_enabled",
+    "custom_fields",
+    "badges",
+    "quantity_options",
   ]);
 
-  const DROP = ["stock_list","gallery_urls","features","images","usedStock","categories","demo_enabled"];
-  DROP.forEach((k) => { if (k in rec) delete rec[k]; });
+  const DROP = [
+    "stock_list",
+    "gallery_urls",
+    "features",
+    "images",
+    "usedStock",
+    "categories",
+    "demo_enabled",
+  ];
+  DROP.forEach((k) => {
+    if (k in rec) delete rec[k];
+  });
 
   for (const k of Object.keys(rec)) {
     if (!ALLOWED.has(k)) delete rec[k];
@@ -185,7 +233,17 @@ export function transformProductsOut(obj: Record<string, unknown>): void {
   if (typeof rec["name"] === "string") rec["name"] = (rec["name"] as string).trim();
   if (typeof rec["slug"] === "string") rec["slug"] = (rec["slug"] as string).trim();
 
-  const NULLABLE = ["image_url","file_url","short_description","description","demo_url","demo_button_text","epin_game_id","epin_product_id","article_content"];
+  const NULLABLE = [
+    "image_url",
+    "file_url",
+    "short_description",
+    "description",
+    "demo_url",
+    "demo_button_text",
+    "epin_game_id",
+    "epin_product_id",
+    "article_content",
+  ];
   for (const k of NULLABLE) {
     if (rec[k] === "") rec[k] = null;
   }
@@ -196,10 +254,12 @@ export function transformProductsOut(obj: Record<string, unknown>): void {
     const n = toNum(v, fb);
     return Number.isFinite(n) ? Math.trunc(n) : fb;
   };
-  const toBool = (v: unknown) => v === true || v === 1 || v === "1" || v === "true";
+  const toBool = (v: unknown) =>
+    v === true || v === 1 || v === "1" || v === "true";
 
   if ("price" in rec) rec["price"] = toNum(rec["price"], 0);
-  if ("original_price" in rec && rec["original_price"] != null) rec["original_price"] = toNum(rec["original_price"], 0);
+  if ("original_price" in rec && rec["original_price"] != null)
+    rec["original_price"] = toNum(rec["original_price"], 0);
   if ("stock_quantity" in rec) rec["stock_quantity"] = toInt(rec["stock_quantity"], 0);
   if ("api_quantity" in rec) rec["api_quantity"] = toInt(rec["api_quantity"], 1);
   if ("min_order" in rec) rec["min_order"] = toInt(rec["min_order"], 1);
@@ -210,21 +270,23 @@ export function transformProductsOut(obj: Record<string, unknown>): void {
   if ("tax_type" in rec) rec["tax_type"] = toInt(rec["tax_type"], 0);
   if ("review_count" in rec) rec["review_count"] = toInt(rec["review_count"], 0);
 
-  ["is_active","show_on_homepage","demo_embed_enabled","auto_delivery_enabled","pre_order_enabled","article_enabled"].forEach(
+  ["is_active", "show_on_homepage", "demo_embed_enabled", "auto_delivery_enabled", "pre_order_enabled", "article_enabled"].forEach(
     (k) => {
       if (k in rec) rec[k] = toBool(rec[k]);
     }
   );
 
-  if (typeof rec["delivery_type"] !== "string" || !rec["delivery_type"]) rec["delivery_type"] = "manual";
+  if (typeof rec["delivery_type"] !== "string" || !rec["delivery_type"])
+    rec["delivery_type"] = "manual";
 
   const arrayOrNull = (v: unknown) => (Array.isArray(v) ? v : v == null ? null : v);
   if ("custom_fields" in rec) rec["custom_fields"] = arrayOrNull(rec["custom_fields"]);
   if ("badges" in rec) rec["badges"] = arrayOrNull(rec["badges"]);
-  if ("quantity_options" in rec) rec["quantity_options"] = arrayOrNull(rec["quantity_options"]);
+  if ("quantity_options" in rec)
+    rec["quantity_options"] = arrayOrNull(rec["quantity_options"]);
 }
 
-/** blog_posts: FE→BE — küçük normalize */
+/** blog_posts: FE → BE — küçük normalize */
 export function transformBlogPostsOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
@@ -242,7 +304,7 @@ export function transformBlogPostsOut(obj: Record<string, unknown>): void {
   if ("read_time" in rec) delete rec["read_time"];
 }
 
-/** custom_pages: FE→BE — public path için (gerekirse) */
+/** custom_pages: FE → BE — public path için (gerekirse) */
 export function transformCustomPagesOut(obj: Record<string, unknown>): void {
   const rec: Record<string, unknown> = obj;
 
@@ -277,7 +339,7 @@ export function transformCustomPagesOut(obj: Record<string, unknown>): void {
   }
 }
 
-/** custom_pages: FE→BE — ADMIN path için özel dönüşüm */
+/** custom_pages: FE → BE — ADMIN path için özel dönüşüm */
 export function transformCustomPagesAdminOut(obj: Record<string, unknown>): void {
   const p: Record<string, unknown> = obj;
 
@@ -294,7 +356,8 @@ export function transformCustomPagesAdminOut(obj: Record<string, unknown>): void
 
   // meta_* undefined/"" ise null gönder
   if (p["meta_title"] === undefined || p["meta_title"] === "") p["meta_title"] = null;
-  if (p["meta_description"] === undefined || p["meta_description"] === "") p["meta_description"] = null;
+  if (p["meta_description"] === undefined || p["meta_description"] === "")
+    p["meta_description"] = null;
 
   // boolean → 0/1
   if ("is_published" in p) {
@@ -311,21 +374,45 @@ export function transformOutgoingPayload(
   path: string,
   payload: UnknownRow | UnknownRow[]
 ): UnknownRow | UnknownRow[] {
+  // path eşitliği + alt yol desteği
+  const is = (target: string) => path === target || path.startsWith(`${target}/`);
+
   const apply = (o: UnknownRow): UnknownRow => {
     const obj: Record<string, unknown> = { ...o };
-    if (path === "/orders") transformOrdersOut(obj);
-    if (path === "/order_items") transformOrderItemsOut(obj);
-    if (path === "/payment_requests") transformPaymentRequestsOut(obj);
-    if (path === "/categories") transformCategoriesOut(obj);
-    if (path === "/products") transformProductsOut(obj);
-    if (path === "/blog_posts") transformBlogPostsOut(obj);
 
-    // public vs admin path ayrımı
-    if (path === "/custom_pages") {
+    // --- orders (public + admin) ---
+    if (is("/orders") || is("/admin/orders")) {
+      transformOrdersOut(obj);
+    }
+
+    // --- order_items / payment_requests (olası admin varyantlarıyla birlikte) ---
+    if (is("/order_items") || is("/admin/order_items")) {
+      transformOrderItemsOut(obj);
+    }
+    if (is("/payment_requests") || is("/admin/payment_requests")) {
+      transformPaymentRequestsOut(obj);
+    }
+
+    // --- categories / products (admin yazımları için de dönüştür) ---
+    if (is("/categories") || is("/admin/categories")) {
+      transformCategoriesOut(obj);
+    }
+    if (is("/products") || is("/admin/products")) {
+      transformProductsOut(obj);
+    }
+
+    // --- blog_posts (mevcut BE path’i public) ---
+    if (is("/blog_posts")) {
+      transformBlogPostsOut(obj);
+    }
+
+    // --- custom_pages: public vs admin özel kurallar ---
+    if (is("/custom_pages") && !is("/admin/custom_pages")) {
       transformCustomPagesOut(obj);
-    } else if (path === "/admin/custom_pages" || path.startsWith("/admin/custom_pages/")) {
+    } else if (is("/admin/custom_pages")) {
       transformCustomPagesAdminOut(obj);
     }
+
     return obj;
   };
 
