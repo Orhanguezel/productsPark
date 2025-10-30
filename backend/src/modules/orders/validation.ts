@@ -9,13 +9,17 @@ export const paymentMethods = [
   'shopier',
 ] as const;
 
+
 export const orderStatuses = [
   'pending',
   'processing',
+  'shipped',
   'completed',
   'cancelled',
   'refunded',
+  'failed',
 ] as const;
+
 
 export const deliveryStatuses = [
   'pending',
