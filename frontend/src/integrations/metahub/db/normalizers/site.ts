@@ -1,16 +1,19 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/normalizers/site.ts
 // =============================================================
-import type { SiteSettingRow, SettingValue, ValueType } from "../types";
+import type { SiteSettingRow, SettingValue, ValueType, UnknownRow } from "../types";
 
+/* ---------------- value parse helpers ---------------- */
 const toNum = (x: unknown): number =>
   typeof x === "number" ? x : Number(String(x).replace(",", "."));
+
 const toBool = (x: unknown): boolean => {
   if (typeof x === "boolean") return x;
   if (typeof x === "number") return x !== 0;
   const s = String(x).trim().toLowerCase();
   return s === "true" || s === "1" || s === "yes";
 };
+
 const tryParseJson = (s: string): SettingValue => {
   try { return JSON.parse(s) as SettingValue; } catch { return s; }
 };
@@ -26,7 +29,6 @@ export function normalizeSettingValue(
     if (value && typeof value === "object") return value as SettingValue;
     return null;
   }
-  // Heuristik: "true/false", numeric str, JSON str
   if (typeof value === "string") {
     const s = value.trim();
     if (s === "true" || s === "false" || s === "1" || s === "0" || s === "yes" || s === "no")
@@ -41,13 +43,57 @@ export function normalizeSettingValue(
   return value as SettingValue;
 }
 
-export function normalizeSiteSettingRows(rows: SiteSettingRow[]): SiteSettingRow[] {
-  return rows.map((r) => ({
-    ...r,
-    key: String(r.key ?? ""),
-    group: r.group ?? null,
-    description: r.description ?? null,
-    value_type: (r.value_type ?? null) as ValueType | null,
-    value: normalizeSettingValue(r.value, r.value_type ?? null),
-  }));
+/* ---------------- type guards ---------------- */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+
+const pick = <T extends string>(obj: Record<string, unknown>, key: T) =>
+  (obj[key] as unknown);
+
+/* ---------------- SELECT normalizer ---------------- */
+/** UnknownRow[] + SiteSettingRow[] kabul eder, güvenli dönüştürür. */
+export function normalizeSiteSettingRows(
+  rows: Array<SiteSettingRow | UnknownRow>
+): SiteSettingRow[] {
+  return rows.map((r) => {
+    const rec = isRecord(r) ? r : ({} as Record<string, unknown>);
+
+    const key = String((rec.key ?? "") as string);
+    const group = (rec.group ?? null) as string | null;
+    const description = (rec.description ?? null) as string | null;
+    const valueType = ((rec.value_type ?? null) as ValueType | null);
+
+    const rawValue = pick(rec, "value");
+    const value = normalizeSettingValue(rawValue, valueType);
+
+    // Varsa diğer alanları (id, created_at vb.) koru
+    const base = r as SiteSettingRow;
+    return {
+      ...base,
+      key,
+      group,
+      description,
+      value_type: valueType,
+      value,
+    };
+  });
+}
+
+/* ---------------- INSERT yardımcıları ---------------- */
+export function inferValueType(v: unknown): ValueType {
+  if (typeof v === "boolean") return "boolean";
+  if (typeof v === "number")  return "number";
+  if (v && typeof v === "object") return "json";
+  return "string";
+}
+
+/** FE -> BE: tek satırı insert’e uygun hale getirir */
+export function coerceSettingForInsert(row: { key: string; value: unknown }): {
+  key: string;
+  value: SettingValue;
+  value_type: ValueType;
+} {
+  const key = String(row.key ?? "");
+  const value_type = inferValueType(row.value);
+  return { key, value: row.value as SettingValue, value_type };
 }

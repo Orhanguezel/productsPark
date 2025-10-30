@@ -76,6 +76,13 @@ export type ShopierPaymentFormResult = {
   error?: string;
 };
 
+// ✅ SMTP test sonucu (export EDİLİYOR)
+export type TestSmtpResult = {
+  success: boolean;
+  message?: string;
+  error?: string;
+};
+
 export interface FunctionsFacade {
   invoke(
     name: "paytr-get-token",
@@ -92,6 +99,13 @@ export interface FunctionsFacade {
     args?: Readonly<{ body?: unknown }>
   ): InvokeResult<ShopierPaymentFormResult>;
 
+  // ✅ SMTP test overload
+  invoke(
+    name: "test-smtp",
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<TestSmtpResult>;
+
+  // fallback generic
   invoke<T = unknown>(name: string, args?: Readonly<{ body?: unknown }>): InvokeResult<T>;
 }
 

@@ -44,7 +44,7 @@ export type CartItemRow = {
     image_url: string | null;
     delivery_type?: string | null;
     stock_quantity?: number | null;
-    custom_fields?: ReadonlyArray<Record<string, unknown>> | null;
+    custom_fields?: { [k: string]: unknown }[] | null; // mutable array (FE uyumlu)
     quantity_options?: { quantity: number; price: number }[] | null;
     api_provider_id?: string | null;
     api_product_id?: string | null;
@@ -73,18 +73,43 @@ export interface OrderView {
 
 export interface OrderItemView {
   id: string;
+
+  // FE tablo alanları
   product_name: string;
   quantity: number;
-  product_price: number;
+  product_price: number; // unit price
   total_price: number;
+
   activation_code: string | null;
   delivery_status: string | null;
+
+  // FE’de options paneli (readonly değil — FE mutasyona izin veriyor)
   selected_options?: Record<string, string> | null;
+
+  // API/sağlayıcı bilgileri (FE kullanıyor)
+  api_order_id?: string | null;
+  turkpin_order_no?: string | null;
+
   product_id: string | null;
-  products?: { file_url: string | null; delivery_type: string | null };
+
+  products?: {
+    file_url: string | null;
+    delivery_type: string | null;
+    // FE OrderDetail’de .find() ile gezilen alanlar — mutable array olmalı
+    custom_fields?: {
+      id: string;
+      label: string;
+      type: string;
+      placeholder: string;
+      required: boolean;
+    }[] | null;
+  };
+
+  // Manuel teslimat içeriği
   delivery_content?: string | null;
 }
 
+/* DB yazım tarafında kullanılan ham satırlar */
 export interface OrderRow {
   id: string;
   order_number: string;
@@ -106,11 +131,14 @@ export interface OrderItemRow {
   id: string;
   product_name: string;
   quantity: number;
-  price: number;
+  price: number; // unit price
   total: number;
   activation_code: string | null;
   delivery_status: string | null;
   options?: Record<string, string> | null;
   product_id: string | null;
-  products?: { file_url: string | null; delivery_type: string | null };
+  products?: {
+    file_url: string | null;
+    delivery_type: string | null;
+  };
 }

@@ -1,22 +1,36 @@
+// ===================================================================
+// FILE: src/modules/orders/schema.ts   (GÜNCEL)
+// ===================================================================
 import {
-  mysqlTable, char, varchar, mysqlEnum, decimal, int, text, datetime,
+  mysqlTable, char, varchar, mysqlEnum, decimal, int, text, datetime, json
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
 
 // -------------------- ORDERS --------------------
+// FE/BE hizası için müşteri sütunları eklendi ve status enum'ı genişletildi.
 export const orders = mysqlTable('orders', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   order_number: varchar('order_number', { length: 50 }).notNull(),
   user_id: char('user_id', { length: 36 }).notNull(),
 
-  status: mysqlEnum('status', ['pending', 'processing', 'completed', 'cancelled', 'refunded'])
-    .notNull().default('pending'),
+  // Admin tarafında kullandığımız durumlar:
+  // pending | processing | shipped | completed | cancelled | refunded | failed
+  status: mysqlEnum('status', [
+    'pending', 'processing', 'shipped', 'completed', 'cancelled', 'refunded', 'failed'
+  ]).notNull().default('pending'),
 
-  payment_method: mysqlEnum('payment_method', ['credit_card', 'bank_transfer', 'wallet', 'paytr', 'shopier'])
-    .notNull(),
+  payment_method: mysqlEnum('payment_method', [
+    'credit_card', 'bank_transfer', 'wallet', 'paytr', 'shopier'
+  ]).notNull(),
 
+  // "paid" bilgisini status yerine payment_status’da tutuyoruz.
   payment_status: varchar('payment_status', { length: 50 }).notNull().default('pending'),
+
+  // Müşteri bilgileri — FE OrderView ile 1-1
+  customer_name: varchar('customer_name', { length: 255 }),
+  customer_email: varchar('customer_email', { length: 255 }),
+  customer_phone: varchar('customer_phone', { length: 50 }),
 
   subtotal: decimal('subtotal', { precision: 10, scale: 2 }).notNull(),
   discount: decimal('discount', { precision: 10, scale: 2 }).notNull().default('0.00'),
@@ -31,11 +45,14 @@ export const orders = mysqlTable('orders', {
   payment_id: varchar('payment_id', { length: 255 }),
 
   created_at: datetime('created_at', { fsp: 0 }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  // <<< ek: otomatik güncelle
-  updated_at: datetime('updated_at', { fsp: 0 }).notNull().$onUpdateFn(() => new Date()),
+  updated_at: datetime('updated_at', { fsp: 0 })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`)
+    .$onUpdateFn(() => new Date()),
 });
 
 // -------------------- ORDER ITEMS --------------------
+// FE’nin okuduğu alanlar eklendi: delivery_content, turkpin_order_no
 export const order_items = mysqlTable('order_items', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   order_id: char('order_id', { length: 36 }).notNull(),
@@ -46,7 +63,7 @@ export const order_items = mysqlTable('order_items', {
   price: decimal('price', { precision: 10, scale: 2 }).notNull(),
   total: decimal('total', { precision: 10, scale: 2 }).notNull(),
 
-  // LONGTEXT + JSON_VALID → text içinde stringify
+  // FE selected_options — text(JSON)
   options: text('options').$type<any | null>(),
 
   delivery_status: mysqlEnum('delivery_status', ['pending', 'processing', 'delivered', 'failed'])
@@ -57,9 +74,15 @@ export const order_items = mysqlTable('order_items', {
   api_order_id: varchar('api_order_id', { length: 255 }),
   delivered_at: datetime('delivered_at', { fsp: 0 }),
 
+  // FE OrderDetail’de gösteriliyor
+  delivery_content: text('delivery_content'),
+  turkpin_order_no: varchar('turkpin_order_no', { length: 255 }),
+
   created_at: datetime('created_at', { fsp: 0 }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  // <<< ek: otomatik güncelle
-  updated_at: datetime('updated_at', { fsp: 0 }).notNull().$onUpdateFn(() => new Date()),
+  updated_at: datetime('updated_at', { fsp: 0 })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`)
+    .$onUpdateFn(() => new Date()),
 });
 
 // -------------------- RELATIONS --------------------

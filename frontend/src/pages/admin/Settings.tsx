@@ -238,42 +238,52 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
-    try {
-      setSaving(true);
-
-      console.log("Saving settings:", settings);
-      console.log("Maintenance mode value:", settings.maintenance_mode, "Type:", typeof settings.maintenance_mode);
-
-      await metahub.from("site_settings").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-
-      const settingsArray = Object.entries(settings).map(([key, value]) => {
-        // For telegram templates, store as plain string (not JSON object)
-        if (key.startsWith('telegram_template_')) {
-          return {
-            key,
-            value: value || ''
-          };
-        }
-        return {
-          key,
-          value,
-        };
-      });
-
-      console.log("Settings array to save:", settingsArray.find(s => s.key === 'maintenance_mode'));
-
-      const { error } = await metahub.from("site_settings").insert(settingsArray);
-
-      if (error) throw error;
-
-      toast.success("Ayarlar kaydedildi");
-    } catch (error: any) {
-      console.error("Error saving settings:", error);
-      toast.error("Ayarlar kaydedilirken hata oluştu");
-    } finally {
-      setSaving(false);
-    }
+  const toPersistable = (v: unknown): string | number | boolean | null => {
+    if (v === null || v === undefined) return null;
+    const t = typeof v;
+    if (t === "string" || t === "number" || t === "boolean") return v as string | number | boolean;
+    try { return JSON.stringify(v); } catch { return String(v); }
   };
+
+  type ValueType = "string" | "number" | "boolean" | "json" | null;
+  const guessType = (v: unknown): ValueType => {
+    if (v === null || v === undefined) return null;
+    const t = typeof v;
+    if (t === "string") return "string";
+    if (t === "number") return "number";
+    if (t === "boolean") return "boolean";
+    return "json";
+  };
+
+  try {
+    setSaving(true);
+
+    // Tüm kayıtları sil (endpoint’in delete filtresi destekliyorsa)
+    await metahub.from("site_settings")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+
+    // DÜZELTME: tüm değerleri string/primitive’e çevir + value_type ekle
+    const settingsArray = Object.entries(settings).map(([key, value]) => ({
+      key,
+      value: toPersistable(value),
+      value_type: guessType(value),
+    }));
+
+    const { error } = await metahub.from("site_settings").insert(settingsArray);
+    if (error) throw error;
+
+    toast.success("Ayarlar kaydedildi");
+  } catch (e: unknown) {
+    console.error("Error saving settings:", e);
+    const msg = typeof e === "object" && e && "message" in e && typeof (e as {message?: unknown}).message === "string"
+      ? (e as {message: string}).message
+      : "Ayarlar kaydedilirken hata oluştu";
+    toast.error(msg);
+  } finally {
+    setSaving(false);
+  }
+};
 
   // Email template functions
   const fetchEmailTemplates = async () => {
