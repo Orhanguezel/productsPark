@@ -10,81 +10,79 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Copy, CheckCircle } from "lucide-react";
 
+const toStringOrNull = (v: unknown): string | null =>
+  typeof v === "string" ? v : v == null ? null : String(v);
+
+const truthy = (v: unknown) => v === true || v === "true" || v === "1" || v === 1;
+
 const PaymentInfo = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const orderId = searchParams.get("orderId");
+
+  // orderId/order_id her ikisini de destekle
+  const orderIdParam = searchParams.get("order_id") ?? searchParams.get("orderId") ?? null;
+
   const [order, setOrder] = useState<any>(null);
-  const [bankInfo, setBankInfo] = useState<any>(null);
+  const [bankInfo, setBankInfo] = useState<string | null>(null); // <- state tipi net
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [paymentData, setPaymentData] = useState<any>(null);
 
   useEffect(() => {
-    // Eğer orderId varsa (eski akış - PayTR Havale), order bilgilerini çek
-    if (orderId) {
-      fetchOrderAndBankInfo();
+    if (orderIdParam) {
+      fetchOrderAndBankInfo(orderIdParam);
     } else {
-      // Yeni akış - Normal Havale/EFT (sipariş henüz oluşturulmadı)
       fetchBankInfoAndPaymentData();
     }
-  }, [orderId]);
+  }, [orderIdParam]);
 
   const fetchBankInfoAndPaymentData = async () => {
     try {
-      // sessionStorage'dan payment bilgilerini al
-      const savedData = sessionStorage.getItem('havalepaymentData');
+      const savedData = sessionStorage.getItem("havalepaymentData");
       if (!savedData) {
         toast.error("Ödeme bilgileri bulunamadı");
         navigate("/");
         return;
       }
-
       const data = JSON.parse(savedData);
       setPaymentData(data);
 
-      // Banka bilgilerini çek
       const { data: bankData } = await metahub
         .from("site_settings")
         .select("value")
         .eq("key", "bank_account_info")
         .single();
 
-      if (bankData?.value) {
-        setBankInfo(bankData.value);
-      }
-    } catch (error) {
-      console.error("Error fetching data:", error);
+      // ❗ unknown -> string|null
+      setBankInfo(toStringOrNull(bankData?.value));
+    } catch (err) {
+      console.error(err);
       toast.error("Bilgiler yüklenemedi");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchOrderAndBankInfo = async () => {
+  const fetchOrderAndBankInfo = async (orderId: string) => {
     try {
-      // Fetch order details
       const { data: orderData, error: orderError } = await metahub
         .from("orders")
         .select("*")
         .eq("id", orderId)
         .single();
-
       if (orderError) throw orderError;
       setOrder(orderData);
 
-      // Fetch bank transfer info
       const { data: bankData } = await metahub
         .from("site_settings")
         .select("value")
         .eq("key", "bank_account_info")
         .single();
 
-      if (bankData?.value) {
-        setBankInfo(bankData.value);
-      }
-    } catch (error) {
-      console.error("Error fetching data:", error);
+      // ❗ unknown -> string|null (parantezle öncelik net)
+      setBankInfo(toStringOrNull(bankData?.value));
+    } catch (err) {
+      console.error(err);
       toast.error("Bilgiler yüklenemedi");
     } finally {
       setLoading(false);
@@ -92,28 +90,19 @@ const PaymentInfo = () => {
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(String(text));
     toast.success("Panoya kopyalandı");
   };
 
   const handlePaymentConfirm = async () => {
-    // Eğer order varsa eski akış (PayTR Havale)
-    if (order) {
-      return handleOldFlowPaymentConfirm();
-    }
-
-    // Yeni akış - Normal Havale/EFT (sipariş şimdi oluşturulacak)
+    if (order) return handleOldFlowPaymentConfirm();
     if (!paymentData) return;
 
     setSubmitting(true);
     try {
-      console.log('Creating order for havale/eft payment...');
-
-      // Kullanıcı bilgisini al
-      const { data: { user } } = await metahub.auth.getUser();
-      console.log('Current user:', user?.id);
-
-      // Sipariş oluştur
+      const {
+        data: { user },
+      } = await metahub.auth.getUser();
       const orderNumber = `ORD${Date.now()}`;
 
       const { data: orderData, error: orderError } = await metahub
@@ -124,97 +113,69 @@ const PaymentInfo = () => {
           customer_name: paymentData.customerName,
           customer_email: paymentData.customerEmail,
           customer_phone: paymentData.customerPhone || null,
-          total_amount: paymentData.subtotal,
-          discount_amount: paymentData.discount,
-          final_amount: paymentData.total,
+          total_amount: Number(paymentData.subtotal ?? 0),
+          discount_amount: Number(paymentData.discount ?? 0),
+          final_amount: Number(paymentData.total ?? 0),
           status: "pending",
           payment_status: "pending",
-          payment_method: paymentData.paymentMethod,
+          payment_method: "havale",
           coupon_id: paymentData.appliedCoupon?.id || null,
         })
         .select()
         .single();
+      if (orderError) throw orderError;
 
-      if (orderError) {
-        console.error('Order creation error:', orderError);
-        throw orderError;
-      }
-
-      console.log('Order created successfully:', orderData);
-
-      // Update coupon if applied
-      if (paymentData.appliedCoupon) {
-        await metahub.rpc('exec_sql', {
-          sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${paymentData.appliedCoupon.id}'`
+      if (paymentData.appliedCoupon?.id) {
+        await metahub.rpc("exec_sql", {
+          sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${paymentData.appliedCoupon.id}'`,
         });
       }
 
-      console.log('Order created:', orderData.id);
-
-      // Sipariş kalemlerini oluştur
-      const orderItems = paymentData.cartItems.map((item: any) => ({
+      const orderItems = (paymentData.cartItems ?? []).map((item: any) => ({
         order_id: orderData.id,
         product_id: item.products.id,
         product_name: item.products.name,
         quantity: item.quantity,
-        product_price: item.products.price,
-        total_price: item.products.price * item.quantity,
+        product_price: Number(item.products.price ?? 0),
+        total_price: Number(item.products.price ?? 0) * Number(item.quantity ?? 0),
         selected_options: item.selected_options || null,
       }));
+      if (orderItems.length) await metahub.from("order_items").insert(orderItems);
 
-      await metahub.from("order_items").insert(orderItems);
-
-      console.log('Order items created');
-
-      // Payment request oluştur
-      const { data: paymentRequestData, error: prError } = await metahub
-        .from("payment_requests")
-        .insert({
-          order_id: orderData.id,
-          user_id: orderData.user_id,
-          amount: orderData.final_amount,
-          payment_method: "havale",
-          proof_image_url: null,
-          status: "pending",
-        })
-        .select()
-        .single();
-
+      const { error: prError } = await metahub.from("payment_requests").insert({
+        order_id: orderData.id,
+        user_id: orderData.user_id,
+        amount: Number(orderData.final_amount ?? 0),
+        currency: "TRY",
+        payment_method: "havale",
+        payment_proof: null,
+        status: "pending",
+      });
       if (prError) throw prError;
 
-      // Sepeti temizle
-      sessionStorage.removeItem('checkoutData');
-      sessionStorage.removeItem('havalepaymentData');
-      localStorage.removeItem('guestCart');
+      sessionStorage.removeItem("checkoutData");
+      sessionStorage.removeItem("havalepaymentData");
+      localStorage.removeItem("guestCart");
 
-      // Telegram bildirimi gönder
       try {
-        console.log('Checking telegram notification settings...');
         const { data: telegramSettings } = await metahub
           .from("site_settings")
           .select("value")
           .eq("key", "new_payment_request_telegram")
           .single();
-
-        const isEnabled = telegramSettings?.value === true || telegramSettings?.value === 'true';
-
-        if (isEnabled && paymentRequestData) {
-          console.log('Invoking telegram notification...');
+        if (truthy(telegramSettings?.value)) {
           await metahub.functions.invoke("send-telegram-notification", {
-            body: {
-              type: "new_payment_request",
-              paymentRequestId: paymentRequestData.id,
-            },
+            body: { type: "new_payment_request", orderId: orderData.id },
           });
         }
-      } catch (telegramError) {
-        console.error("Telegram notification error:", telegramError);
+      } catch (e) {
+        console.warn("Telegram notification error", e);
       }
 
-      toast.success("Ödeme bildirimi gönderildi");
+      toast.success("Ödeme bildiriminiz alındı");
       navigate("/odeme-beklemede");
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (err) {
+      console.error(err);
       toast.error("Bir hata oluştu");
     } finally {
       setSubmitting(false);
@@ -223,59 +184,42 @@ const PaymentInfo = () => {
 
   const handleOldFlowPaymentConfirm = async () => {
     if (!order) return;
-
     setSubmitting(true);
     try {
-      // Create payment request
-      const { data: paymentRequestData, error: prError } = await metahub
+      const { error: prError } = await metahub
         .from("payment_requests")
         .insert({
           order_id: order.id,
           user_id: order.user_id,
-          amount: order.final_amount,
+          amount: Number(order.final_amount ?? 0),
+          currency: "TRY",
           payment_method: "havale",
-          proof_image_url: null,
+          payment_proof: null,
           status: "pending",
         })
         .select()
         .single();
-
       if (prError) throw prError;
 
-      // Send telegram notification
       try {
-        console.log('Checking telegram notification settings...');
         const { data: telegramSettings } = await metahub
           .from("site_settings")
           .select("value")
           .eq("key", "new_payment_request_telegram")
           .single();
-
-        console.log('Telegram settings:', telegramSettings);
-        console.log('Payment request data:', paymentRequestData);
-
-        const isEnabled = telegramSettings?.value === true || telegramSettings?.value === 'true';
-
-        if (isEnabled && paymentRequestData) {
-          console.log('Invoking telegram notification...');
-          const result = await metahub.functions.invoke("send-telegram-notification", {
-            body: {
-              type: "new_payment_request",
-              paymentRequestId: paymentRequestData.id,
-            },
+        if (truthy(telegramSettings?.value)) {
+          await metahub.functions.invoke("send-telegram-notification", {
+            body: { type: "new_payment_request", orderId: order.id },
           });
-          console.log('Telegram notification result:', result);
-        } else {
-          console.log('Telegram notification not sent - Enabled:', isEnabled, 'Has data:', !!paymentRequestData);
         }
-      } catch (telegramError) {
-        console.error("Telegram notification error:", telegramError);
+      } catch (e) {
+        console.warn("Telegram notification error", e);
       }
 
-      toast.success("Ödeme bildirimi gönderildi");
+      toast.success("Ödeme bildiriminiz alındı");
       navigate("/odeme-beklemede");
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (err) {
+      console.error(err);
       toast.error("Bir hata oluştu");
     } finally {
       setSubmitting(false);
@@ -306,9 +250,8 @@ const PaymentInfo = () => {
     );
   }
 
-  // Tutar ve sipariş numarası bilgisini belirle
   const displayAmount = order ? order.final_amount : paymentData?.total;
-  const displayOrderNumber = order ? order.order_number : `Ödeme onaylandıktan sonra oluşturulacak`;
+  const displayOrderNumber = order ? order.order_number : "Ödeme onaylandıktan sonra oluşturulacak";
 
   return (
     <>
@@ -335,12 +278,8 @@ const PaymentInfo = () => {
                 <Label className="text-base font-semibold">Sipariş No</Label>
                 <div className="flex items-center gap-2 mt-1">
                   <p className="font-mono text-sm">{displayOrderNumber}</p>
-                  {order && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(order.order_number)}
-                    >
+                  {!!order && (
+                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(order.order_number)}>
                       <Copy className="h-4 w-4" />
                     </Button>
                   )}
@@ -350,11 +289,11 @@ const PaymentInfo = () => {
               <div>
                 <Label className="text-base font-semibold">Ödenecek Tutar</Label>
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-2xl font-bold text-primary">{displayAmount} ₺</p>
+                  <p className="text-2xl font-bold text-primary">{Number(displayAmount ?? 0)} ₺</p>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => copyToClipboard(displayAmount.toString())}
+                    onClick={() => copyToClipboard(Number(displayAmount ?? 0).toString())}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
@@ -376,16 +315,14 @@ const PaymentInfo = () => {
             <div className="space-y-4">
               <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <strong>Önemli:</strong> {order ? 'Ödeme açıklamasına mutlaka sipariş numaranızı yazın.' : 'Ödeme yaptıktan sonra "Ödemeyi Yaptım" butonuna basın. Siparişiniz oluşturulacak ve admin onayından sonra ürününüz teslim edilecektir.'}
+                  <strong>Önemli:</strong>{" "}
+                  {order
+                    ? "Ödeme açıklamasına mutlaka sipariş numaranızı yazın."
+                    : "Ödeme yaptıktan sonra 'Ödemeyi Yaptım' butonuna basın. Siparişiniz oluşturulacak ve admin onayından sonra ürününüz teslim edilecektir."}
                 </p>
               </div>
 
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handlePaymentConfirm}
-                disabled={submitting}
-              >
+              <Button className="w-full" size="lg" onClick={handlePaymentConfirm} disabled={submitting}>
                 {submitting ? "Gönderiliyor..." : "Ödemeyi Yaptım"}
               </Button>
             </div>

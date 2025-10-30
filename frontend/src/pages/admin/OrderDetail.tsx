@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { metahub } from "@/integrations/metahub/client";
 import { Button } from "@/components/ui/button";
@@ -62,16 +62,18 @@ interface OrderItem {
   api_order_id: string | null;
   selected_options?: Record<string, string> | null;
   products?: {
-    delivery_type: string;
+    delivery_type: string | null;
     custom_fields: Array<{
       id: string;
       label: string;
       type: string;
       placeholder: string;
       required: boolean;
-    }>;
+    }> | null;
   };
 }
+
+const COL_COUNT = 7;
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -90,24 +92,24 @@ export default function OrderDetail() {
   }>({ open: false, itemId: null, productName: "" });
 
   useEffect(() => {
-    if (id) {
-      fetchOrderDetails();
-    }
+    if (id) fetchOrderDetails();
   }, [id]);
 
   const fetchOrderDetails = async () => {
     if (!id) return;
+    setLoading(true);
 
     try {
+      // Order
       const { data: orderData, error: orderError } = await metahub
         .from("orders")
         .select("*")
         .eq("id", id)
         .single();
-
       if (orderError) throw orderError;
-      setOrder(orderData);
+      setOrder(orderData as Order);
 
+      // Items
       const { data: itemsData, error: itemsError } = await metahub
         .from("order_items")
         .select(`
@@ -125,16 +127,40 @@ export default function OrderDetail() {
           products(delivery_type, custom_fields)
         `)
         .eq("order_id", id);
+      if (itemsError) throw itemsError;
 
-      if (itemsError) {
-        console.error("Error fetching order items:", itemsError);
-        throw itemsError;
-      }
-      console.log("Order items data:", itemsData);
-      console.log("Selected options:", itemsData?.map(item => ({ id: item.id, options: item.selected_options })));
-      setOrderItems((itemsData || []) as OrderItem[]);
-    } catch (error) {
-      console.error("Error fetching order details:", error);
+      const normalized: OrderItem[] = (itemsData || []).map((it: any) => ({
+        ...it,
+        selected_options:
+          typeof it.selected_options === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(it.selected_options);
+                } catch {
+                  return {};
+                }
+              })()
+            : it.selected_options ?? {},
+        products: it.products
+          ? {
+              delivery_type: it.products.delivery_type ?? null,
+              custom_fields:
+                typeof it.products.custom_fields === "string"
+                  ? (() => {
+                      try {
+                        return JSON.parse(it.products.custom_fields);
+                      } catch {
+                        return null;
+                      }
+                    })()
+                  : it.products.custom_fields ?? null,
+            }
+          : undefined,
+      }));
+
+      setOrderItems(normalized);
+    } catch (err) {
+      console.error("Error fetching order details:", err);
       toast({
         title: "Hata",
         description: "Sipariş detayları yüklenirken bir hata oluştu.",
@@ -149,14 +175,9 @@ export default function OrderDetail() {
     if (!id) return;
 
     try {
-      const { error } = await metahub
-        .from("orders")
-        .update({ status: newStatus })
-        .eq("id", id);
-
+      const { error } = await metahub.from("orders").update({ status: newStatus }).eq("id", id);
       if (error) throw error;
 
-      // Eğer sipariş "completed" durumuna alınıyorsa, tüm order_items'ların delivery_status'unu da güncelle
       if (newStatus === "completed") {
         const { error: itemsError } = await metahub
           .from("order_items")
@@ -164,80 +185,60 @@ export default function OrderDetail() {
           .eq("order_id", id)
           .neq("delivery_status", "delivered")
           .neq("delivery_status", "failed");
+        if (itemsError) console.error("Error updating order items:", itemsError);
 
-        if (itemsError) {
-          console.error("Error updating order items:", itemsError);
-        }
-
-        // Send order completed email
+        // tamamlandı maili
         if (order?.customer_email) {
           try {
-            console.log('Attempting to send order completed email to:', order.customer_email);
-
             const { data: siteSetting } = await metahub
               .from("site_settings")
               .select("value")
               .eq("key", "site_title")
               .single();
 
-            const emailResult = await metahub.functions.invoke('send-email', {
+            const emailResult = await metahub.functions.invoke("send-email", {
               body: {
                 to: order.customer_email,
-                template_key: 'order_completed',
+                template_key: "order_completed",
                 variables: {
                   customer_name: order.customer_name,
                   order_number: order.order_number,
-                  final_amount: order.final_amount?.toString() || '0',
-                  site_name: siteSetting?.value || 'Dijital Market'
-                }
-              }
+                  final_amount: order.final_amount?.toString() || "0",
+                  site_name: siteSetting?.value || "Dijital Market",
+                },
+              },
             });
-
-            console.log('Order completed email result:', emailResult);
-
-            if (emailResult.error) {
-              console.error('Order completed email invocation error:', emailResult.error);
-            }
+            if ((emailResult as any).error) console.error("Order completed email error:", (emailResult as any).error);
           } catch (emailError) {
-            console.error('Order completed email error:', emailError);
+            console.error("Order completed email error:", emailError);
           }
-        } else {
-          console.log('No customer email found, skipping order completed email');
         }
       }
 
-      // Send order cancelled email
       if (newStatus === "cancelled" && order?.customer_email) {
         try {
-          console.log('Attempting to send order cancelled email to:', order.customer_email);
-
           const { data: siteSetting } = await metahub
             .from("site_settings")
             .select("value")
             .eq("key", "site_title")
             .single();
 
-          const emailResult = await metahub.functions.invoke('send-email', {
+          const emailResult = await metahub.functions.invoke("send-email", {
             body: {
               to: order.customer_email,
-              template_key: 'order_cancelled',
+              template_key: "order_cancelled",
               variables: {
                 customer_name: order.customer_name,
                 order_number: order.order_number,
-                final_amount: order.final_amount?.toString() || '0',
-                cancellation_reason: order.notes || 'Belirtilmedi',
-                site_name: siteSetting?.value || 'Dijital Market'
-              }
-            }
+                final_amount: order.final_amount?.toString() || "0",
+                cancellation_reason: order.notes || "Belirtilmedi",
+                site_name: siteSetting?.value || "Dijital Market",
+              },
+            },
           });
-
-          console.log('Order cancelled email result:', emailResult);
-
-          if (emailResult.error) {
-            console.error('Order cancelled email invocation error:', emailResult.error);
-          }
+          if ((emailResult as any).error) console.error("Order cancelled email error:", (emailResult as any).error);
         } catch (emailError) {
-          console.error('Order cancelled email error:', emailError);
+          console.error("Order cancelled email error:", emailError);
         }
       }
 
@@ -255,40 +256,24 @@ export default function OrderDetail() {
 
   const handleManualDelivery = async (content: string) => {
     if (!content || !content.trim()) {
-      toast({
-        title: "Hata",
-        description: "Lütfen teslimat içeriğini girin.",
-        variant: "destructive",
-      });
+      toast({ title: "Hata", description: "Lütfen teslimat içeriğini girin.", variant: "destructive" });
       return;
     }
 
     try {
       setSubmitting(deliveryDialog.itemId);
 
-      const { error } = await metahub.functions.invoke('manual-delivery-email', {
-        body: {
-          orderItemId: deliveryDialog.itemId,
-          deliveryContent: content
-        }
+      const { error } = await metahub.functions.invoke("manual-delivery-email", {
+        body: { orderItemId: deliveryDialog.itemId, deliveryContent: content },
       });
-
       if (error) throw error;
 
-      toast({
-        title: "Başarılı",
-        description: "Teslimat tamamlandı ve email gönderildi.",
-      });
-
+      toast({ title: "Başarılı", description: "Teslimat tamamlandı ve email gönderildi." });
       setDeliveryDialog({ open: false, itemId: null, productName: "" });
       fetchOrderDetails();
     } catch (error) {
       console.error("Error delivering order item:", error);
-      toast({
-        title: "Hata",
-        description: "Teslimat sırasında bir hata oluştu.",
-        variant: "destructive",
-      });
+      toast({ title: "Hata", description: "Teslimat sırasında bir hata oluştu.", variant: "destructive" });
     } finally {
       setSubmitting(null);
     }
@@ -306,87 +291,49 @@ export default function OrderDetail() {
 
   const handleSaveEdit = async (itemId: string) => {
     if (!editContent.trim()) {
-      toast({
-        title: "Hata",
-        description: "Teslimat içeriği boş olamaz.",
-        variant: "destructive",
-      });
+      toast({ title: "Hata", description: "Teslimat içeriği boş olamaz.", variant: "destructive" });
       return;
     }
 
     try {
       setSubmitting(itemId);
-
       const { error: updateError } = await metahub
         .from("order_items")
-        .update({
-          delivery_content: editContent,
-        })
+        .update({ delivery_content: editContent })
         .eq("id", itemId);
-
       if (updateError) throw updateError;
 
-      toast({
-        title: "Başarılı",
-        description: "Teslimat içeriği güncellendi.",
-      });
-
+      toast({ title: "Başarılı", description: "Teslimat içeriği güncellendi." });
       setEditingItem(null);
       setEditContent("");
       fetchOrderDetails();
     } catch (error) {
       console.error("Error updating delivery content:", error);
-      toast({
-        title: "Hata",
-        description: "Güncelleme sırasında bir hata oluştu.",
-        variant: "destructive",
-      });
+      toast({ title: "Hata", description: "Güncelleme sırasında bir hata oluştu.", variant: "destructive" });
     } finally {
       setSubmitting(null);
     }
   };
 
   const handleRefreshApiStatus = async () => {
-    toast({
-      title: "API Durumu Kontrol Ediliyor",
-      description: "Lütfen bekleyin...",
-    });
+    toast({ title: "API Durumu Kontrol Ediliyor", description: "Lütfen bekleyin..." });
 
     try {
-      // First update the API order ID manually for this specific order
       const { error: updateError } = await metahub
-        .from('order_items')
-        .update({ api_order_id: '6595837', delivery_status: 'processing' })
-        .eq('order_id', id);
+        .from("order_items")
+        .update({ api_order_id: "6595837", delivery_status: "processing" })
+        .eq("order_id", id);
+      if (updateError) throw updateError;
 
-      if (updateError) {
-        console.error("Error updating order item:", updateError);
-        throw updateError;
-      }
-
-      console.log("Updated API order ID to 6595837");
-
-      // Then call the sync function
-      const { data, error } = await metahub.functions.invoke("smm-api-status", {
-        body: { orderId: id },
-      });
-
+      const { data, error } = await metahub.functions.invoke("smm-api-status", { body: { orderId: id } });
       console.log("API sync result:", data);
-
       if (error) throw error;
 
-      toast({
-        title: "Başarılı",
-        description: "API durumu güncellendi.",
-      });
+      toast({ title: "Başarılı", description: "API durumu güncellendi." });
       fetchOrderDetails();
     } catch (error) {
       console.error("API status refresh error:", error);
-      toast({
-        title: "Hata",
-        description: "API durumu güncellenirken hata oluştu.",
-        variant: "destructive",
-      });
+      toast({ title: "Hata", description: "API durumu güncellenirken hata oluştu.", variant: "destructive" });
     }
   };
 
@@ -401,8 +348,18 @@ export default function OrderDetail() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  if (loading) return <AdminLayout title="Sipariş Detayı"><div>Yükleniyor...</div></AdminLayout>;
-  if (!order) return <AdminLayout title="Sipariş Detayı"><div>Sipariş bulunamadı</div></AdminLayout>;
+  if (loading)
+    return (
+      <AdminLayout title="Sipariş Detayı">
+        <div>Yükleniyor...</div>
+      </AdminLayout>
+    );
+  if (!order)
+    return (
+      <AdminLayout title="Sipariş Detayı">
+        <div>Sipariş bulunamadı</div>
+      </AdminLayout>
+    );
 
   const hasApiDelivery = orderItems.some(
     (item) => item.delivery_status === "pending" || item.delivery_status === "processing"
@@ -486,9 +443,13 @@ export default function OrderDetail() {
               <div>
                 <p className="text-sm text-muted-foreground">Ödeme Durumu</p>
                 <p className="font-medium">
-                  {order.payment_status === "paid" ? "Ödendi" :
-                    order.payment_status === "pending" ? "Beklemede" :
-                      order.payment_status === "failed" ? "Başarısız" : order.payment_status}
+                  {order.payment_status === "paid"
+                    ? "Ödendi"
+                    : order.payment_status === "pending"
+                    ? "Beklemede"
+                    : order.payment_status === "failed"
+                    ? "Başarısız"
+                    : order.payment_status}
                 </p>
               </div>
               <div>
@@ -517,16 +478,16 @@ export default function OrderDetail() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orderItems.map((item, index) => (
-                  <>
-                    <TableRow key={index}>
+                {orderItems.map((item) => (
+                  <Fragment key={item.id}>
+                    <TableRow>
                       <TableCell>
                         <div>
                           <div className="font-medium">{item.product_name}</div>
                           {item.selected_options && Object.keys(item.selected_options).length > 0 && (
                             <div className="mt-1 text-xs text-muted-foreground space-y-1">
                               {Object.entries(item.selected_options).map(([key, value]) => (
-                                <div key={key} className="flex items-start gap-1">
+                                <div key={`${item.id}-${key}`} className="flex items-start gap-1">
                                   <span className="font-medium">•</span>
                                   <span>{value}</span>
                                 </div>
@@ -548,13 +509,13 @@ export default function OrderDetail() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {item.delivery_status === 'delivered' ? (
+                        {item.delivery_status === "delivered" ? (
                           <Badge variant="default">Teslim Edildi</Badge>
-                        ) : item.delivery_status === 'processing' ? (
+                        ) : item.delivery_status === "processing" ? (
                           <Badge variant="default">İşleniyor</Badge>
-                        ) : item.delivery_status === 'failed' ? (
+                        ) : item.delivery_status === "failed" ? (
                           <Badge variant="destructive">Başarısız</Badge>
-                        ) : item.delivery_status === 'pending' ? (
+                        ) : item.delivery_status === "pending" ? (
                           <Badge variant="secondary">Beklemede</Badge>
                         ) : (
                           <Badge variant="outline">-</Badge>
@@ -570,11 +531,7 @@ export default function OrderDetail() {
                               className="font-mono text-sm"
                             />
                             <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleSaveEdit(item.id)}
-                                disabled={submitting === item.id}
-                              >
+                              <Button size="sm" onClick={() => handleSaveEdit(item.id)} disabled={submitting === item.id}>
                                 <Check className="w-3 h-3 mr-1" />
                                 Kaydet
                               </Button>
@@ -594,43 +551,38 @@ export default function OrderDetail() {
                             <pre className="text-xs whitespace-pre-wrap font-mono bg-muted p-2 rounded">
                               {item.delivery_content}
                             </pre>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleStartEdit(item.id, item.delivery_content!)}
-                            >
+                            <Button size="sm" variant="outline" onClick={() => handleStartEdit(item.id, item.delivery_content!)}>
                               <Edit className="w-3 h-3 mr-1" />
                               Düzenle
                             </Button>
                           </div>
                         ) : item.activation_code ? (
-                          <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
-                            {item.activation_code}
-                          </code>
+                          <code className="text-xs font-mono bg-muted px-2 py-1 rounded">{item.activation_code}</code>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                     </TableRow>
+
                     {(() => {
-                      console.log(`Item ${item.id} selected_options:`, item.selected_options);
-                      const hasOptions = item.selected_options && typeof item.selected_options === 'object' && Object.keys(item.selected_options).length > 0;
-                      console.log(`Item ${item.id} has options:`, hasOptions);
+                      const hasOptions =
+                        item.selected_options &&
+                        typeof item.selected_options === "object" &&
+                        Object.keys(item.selected_options).length > 0;
 
-                      // Get custom field labels
+                      if (!hasOptions) return null;
+
                       const customFields = item.products?.custom_fields || [];
-                      const getFieldLabel = (fieldId: string) => {
-                        const field = customFields.find(f => f.id === fieldId);
-                        return field ? field.label : fieldId;
-                      };
+                      const getFieldLabel = (fieldId: string) =>
+                        customFields?.find((f) => f.id === fieldId)?.label || fieldId;
 
-                      return hasOptions ? (
-                        <TableRow key={`${index}-options`}>
-                          <TableCell colSpan={6} className="bg-muted/50 py-2">
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={COL_COUNT} className="bg-muted/50 py-2">
                             <div className="text-sm space-y-1">
                               <p className="font-semibold text-muted-foreground mb-1">Ürün Özelleştirme Bilgileri:</p>
                               {Object.entries(item.selected_options as Record<string, string>).map(([key, value]) => (
-                                <div key={key} className="flex gap-2">
+                                <div key={`${item.id}-detail-${key}`} className="flex gap-2">
                                   <span className="font-medium">{getFieldLabel(key)}:</span>
                                   <span>{value}</span>
                                 </div>
@@ -638,9 +590,9 @@ export default function OrderDetail() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ) : null;
+                      );
                     })()}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -691,11 +643,13 @@ export default function OrderDetail() {
                       <Badge variant="secondary">Adet: {item.quantity}</Badge>
                     </div>
                     <Button
-                      onClick={() => setDeliveryDialog({
-                        open: true,
-                        itemId: item.id,
-                        productName: item.product_name
-                      })}
+                      onClick={() =>
+                        setDeliveryDialog({
+                          open: true,
+                          itemId: item.id,
+                          productName: item.product_name,
+                        })
+                      }
                       disabled={submitting === item.id}
                       className="w-full"
                     >
@@ -709,24 +663,28 @@ export default function OrderDetail() {
         )}
 
         {/* Manuel Teslimat Dialog */}
-        <Dialog open={deliveryDialog.open} onOpenChange={(open) => {
-          if (!open) {
-            setDeliveryDialog({ open: false, itemId: null, productName: "" });
-            setDeliveryContent({});
-          }
-        }}>
+        <Dialog
+          open={deliveryDialog.open}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeliveryDialog({ open: false, itemId: null, productName: "" });
+              setDeliveryContent({});
+            }
+          }}
+        >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Manuel Teslimat</DialogTitle>
               <DialogDescription>
-                {deliveryDialog.productName} için teslimat içeriğini girin. Bu bilgiler müşteriye email ile gönderilecektir.
+                {deliveryDialog.productName} için teslimat içeriğini girin. Bu bilgiler müşteriye email ile
+                gönderilecektir.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               <Label htmlFor="delivery-content">Teslimat İçeriği</Label>
               <Textarea
                 id="delivery-content"
-                placeholder="Örnek:&#10;Aktivasyon Kodu: ABC-123-XYZ&#10;Kullanım Talimatı: ...&#10;&#10;veya&#10;&#10;Kullanıcı Adı: user@example.com&#10;Şifre: ********&#10;Giriş URL'si: https://..."
+                placeholder={`Örnek:\nAktivasyon Kodu: ABC-123-XYZ\nKullanım Talimatı: ...\n\nveya\n\nKullanıcı Adı: user@example.com\nŞifre: ********\nGiriş URL'si: https://...`}
                 value={deliveryContent[deliveryDialog.itemId || ""] || ""}
                 onChange={(e) =>
                   setDeliveryContent((prev) => ({
@@ -737,9 +695,7 @@ export default function OrderDetail() {
                 rows={10}
                 className="font-mono text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                ℹ️ Bu içerik müşterinin email adresine otomatik olarak gönderilecektir.
-              </p>
+              <p className="text-xs text-muted-foreground">ℹ️ Bu içerik müşterinin email adresine otomatik olarak gönderilecektir.</p>
             </div>
             <DialogFooter>
               <Button
@@ -753,7 +709,9 @@ export default function OrderDetail() {
                 İptal
               </Button>
               <Button
-                onClick={() => handleManualDelivery(deliveryContent[deliveryDialog.itemId || ""] || "")}
+                onClick={() =>
+                  handleManualDelivery(deliveryContent[deliveryDialog.itemId || ""] || "")
+                }
                 disabled={submitting !== null || !deliveryContent[deliveryDialog.itemId || ""]?.trim()}
               >
                 <Send className="w-4 h-4 mr-2" />

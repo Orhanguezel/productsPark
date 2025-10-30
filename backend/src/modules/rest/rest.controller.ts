@@ -18,10 +18,9 @@ import { setContentRange } from '@/common/utils/contentRange';
 
 import { siteSettings } from '@/modules/siteSettings/schema';
 import { categories } from '@/modules/categories/schema';
-import { products } from '@/modules/products/schema';
+import { products,productOptions } from '@/modules/products/schema';
 import { cartItems } from '@/modules/cart/schema';
 import { orders, order_items } from '@/modules/orders/schema';
-import { productOptions } from '@/modules/productOptions/schema';
 import { blog_posts } from '@/modules/blog/schema';
 import { customPages } from '@/modules/customPages/schema';
 import { popups } from '@/modules/popups/schema';

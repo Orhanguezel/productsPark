@@ -23,5 +23,6 @@ export { normalizeProfileRows } from "./profiles";
 export { normalizeProductStockRows } from "./productStock";
 export { normalizeApiProviderRows } from "./apiProviders";
 export { normalizeSiteSettingRows } from "./site";
+export { normalizePaymentRequestRows } from "./paymentRequests";
 
 export { isProductsPath } from "./_shared";

@@ -39,11 +39,10 @@ export async function runUpdate<TRow>(
     Prefer: `return=${preferReturn ?? "minimal"}`,
   });
 
-  // ---- Güvenli payload hazırlığı + blog_posts için alan map'i (gerekirse) ----
+  // ---- Güvenli payload hazırlığı + alan map'leri ----
   const prePayload: Record<string, unknown> = { ...(originalPayload ?? {}) };
 
   if (built.path === "/blog_posts") {
-    // FE isimleri geldiyse BE isimlerine non-destructive map
     if (prePayload.author === undefined && prePayload.author_name !== undefined) {
       prePayload.author = prePayload.author_name;
     }
@@ -60,11 +59,12 @@ export async function runUpdate<TRow>(
 
   // 🔧 PUT gereken path'ler
   const mustPut = new Set<string>(["/categories", "/blog_posts"]);
-  const methodForThis =
-    built.methodOverride ?? (mustPut.has(built.path) ? "PUT" : "PATCH");
+  const methodForThis = built.methodOverride ?? (mustPut.has(built.path) ? "PUT" : "PATCH");
 
-  // --- admin/custom_pages için ?id= → /:id hot-fix ---
+  // ---- URL hazırlığı (fetch'ten ÖNCE mutlak) ----
   let requestUrl = built.url;
+
+  // admin/custom_pages için ?id= → /:id hot-fix
   if (built.path === "/admin/custom_pages") {
     const idQ = extractIdFromSearch(requestUrl);
     if (idQ) {
@@ -74,12 +74,34 @@ export async function runUpdate<TRow>(
         u.searchParams.delete("id");
         u.searchParams.delete("custom_pages.id");
         requestUrl = u.toString();
-      } catch {
-        /* no-op */
-      }
+      } catch { /* no-op */ }
     }
   }
 
+  // ✅ /orders update → /admin/orders/:id/status yönlendirmesi
+  if (built.path === "/orders") {
+    const idFromUrl   = extractIdFromUrl(requestUrl);
+    const idFromQuery = extractIdFromSearch(requestUrl);
+    const id = idFromUrl || idFromQuery;
+
+    // Durum/nota dönük update ise status endpoint'i kullan
+    if (id && ("status" in prePayload || "note" in prePayload || "payment_status" in prePayload)) {
+      try {
+        const u = new URL(requestUrl, BASE_URL);
+        u.pathname = `/admin/orders/${encodeURIComponent(id)}/status`;
+        u.search = ""; // gereksiz select/qs yok
+        requestUrl = u.toString();
+
+        // BE zod: { status, note } -> güvenli body gönder
+        const safe: Record<string, unknown> = {};
+        if (prePayload.status !== undefined) safe.status = prePayload.status;
+        if (prePayload.note   !== undefined) safe.note   = prePayload.note;
+        bodyPayload = safe;
+      } catch { /* no-op */}
+    }
+  }
+
+  // ---- İSTEK ----
   let res = await fetch(requestUrl, {
     method: methodForThis,
     credentials: "include",
@@ -87,7 +109,27 @@ export async function runUpdate<TRow>(
     body: JSON.stringify(bodyPayload),
   });
 
-  // ---- categories özel retry mantığı (mevcut davranışı koru) ----
+
+   // ✅ NEW: /payment_requests → /admin/payment_requests/:id/status
+  if (built.path === "/payment_requests") {
+    const id = extractIdFromUrl(requestUrl) || extractIdFromSearch(requestUrl);
+    // sadece durum/not güncellemeleri status endpoint’ine gider
+    if (id && ("status" in prePayload || "admin_note" in prePayload)) {
+      try {
+        const u = new URL(requestUrl, BASE_URL);
+        u.pathname = `/admin/payment_requests/${encodeURIComponent(id)}/status`;
+        u.search = "";
+        requestUrl = u.toString();
+
+        const safe: Record<string, unknown> = {};
+        if (prePayload.status     !== undefined) safe.status     = prePayload.status;
+        if (prePayload.admin_note !== undefined) safe.admin_note = prePayload.admin_note;
+        bodyPayload = safe;
+      } catch {/* no-op */ }
+    }
+  }
+
+  // ---- /categories için mevcut retry mantığı ----
   if (built.path === "/categories" && !res.ok) {
     const status = res.status;
 
@@ -104,6 +146,7 @@ export async function runUpdate<TRow>(
         });
         if (res2.ok) res = res2;
       }
+
       if (!res.ok) {
         const id = extractIdFromUrl(built.url);
         if (id) {
@@ -114,17 +157,9 @@ export async function runUpdate<TRow>(
           });
           if (verify.ok) {
             let json: unknown = null;
-            try {
-              json = await verify.json();
-            } catch {
-              json = null;
-            }
+            try { json = await verify.json(); } catch { json = null; }
             let data = parseBodyToRows(json) as TRow[] | null;
-            if (data)
-              data = normalizeTableRows(
-                built.path,
-                data as unknown as UnknownRow[]
-              ) as unknown as TRow[];
+            if (data) data = normalizeTableRows(built.path, data as unknown as UnknownRow[]) as unknown as TRow[];
             return { data, error: null };
           }
         }
@@ -137,7 +172,6 @@ export async function runUpdate<TRow>(
         const p1 = { ...(originalPayload as Record<string, unknown>) };
         delete p1.is_featured;
         delete p1.display_order;
-
         const b1: unknown = transformOutgoingPayload(built.path, p1);
         res = await fetch(built.url, {
           method: "PUT",
@@ -150,7 +184,6 @@ export async function runUpdate<TRow>(
       if (!res.ok && res.status === 400 && "slug" in (originalPayload as Record<string, unknown>)) {
         const p2 = { ...(originalPayload as Record<string, unknown>) };
         delete p2.slug;
-
         const b2: unknown = transformOutgoingPayload(built.path, p2);
         res = await fetch(built.url, {
           method: "PUT",
@@ -161,30 +194,23 @@ export async function runUpdate<TRow>(
       }
 
       if (!res.ok) {
-        if (res.status === 409)
-          return { data: null, error: { message: "duplicate_slug", status: 409 } };
+        if (res.status === 409) return { data: null, error: { message: "duplicate_slug", status: 409 } };
         return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
       }
     }
   }
 
+  // ---- Genel hata ----
   if (!res.ok) {
-    if (res.status === 409)
-      return { data: null, error: { message: "duplicate_slug", status: 409 } };
+    if (res.status === 409) return { data: null, error: { message: "duplicate_slug", status: 409 } };
     return { data: null, error: { message: `request_failed_${res.status}`, status: res.status } };
   }
 
+  // ---- Cevabı normalize et ----
   let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    json = null;
-  }
+  try { json = await res.json(); } catch { json = null; }
+
   let data = parseBodyToRows(json) as TRow[] | null;
-  if (data)
-    data = normalizeTableRows(
-      built.path,
-      data as unknown as UnknownRow[]
-    ) as unknown as TRow[];
+  if (data) data = normalizeTableRows(built.path, data as unknown as UnknownRow[]) as unknown as TRow[];
   return { data, error: null };
 }

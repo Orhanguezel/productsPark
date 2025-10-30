@@ -1,4 +1,3 @@
-// src/modules/orders/validation.ts
 import { z } from 'zod';
 
 export const paymentMethods = [
@@ -9,17 +8,14 @@ export const paymentMethods = [
   'shopier',
 ] as const;
 
-
+// DB ENUM ile birebir (DDL: ('pending','processing','completed','cancelled','refunded'))
 export const orderStatuses = [
   'pending',
   'processing',
-  'shipped',
   'completed',
   'cancelled',
   'refunded',
-  'failed',
 ] as const;
-
 
 export const deliveryStatuses = [
   'pending',
@@ -28,12 +24,12 @@ export const deliveryStatuses = [
   'failed',
 ] as const;
 
-/** numbers: 10, 10.5, "10.50", "1.234,50", "1 234,50" hepsi kabul → "1234.50" */
+/** numbers: 10, 10.5, "10.50", "1.234,50", "1 234,50" hepsi kabul → "1234.50"/"10.50" */
 const moneyNormalizer = (v: unknown) => {
   if (typeof v === 'number') return v.toFixed(2);
   if (typeof v === 'string') {
     const s = v.trim().replace(/\s+/g, '');
-    // "1.234,50" -> "1234.50"
+    // "1.234,50" -> "1234,50" -> "1234.50"
     const normalized = s.replace(/\./g, '').replace(',', '.');
     return normalized;
   }
@@ -42,9 +38,9 @@ const moneyNormalizer = (v: unknown) => {
 
 const dec2 = z.preprocess(
   moneyNormalizer,
-  z
-    .union([z.string().regex(/^-?\d+(\.\d{1,2})?$/), z.number().finite()])
-    .transform((vv) => (typeof vv === 'number' ? vv.toFixed(2) : vv))
+  z.union([z.string().regex(/^-?\d+(\.\d{1,2})?$/), z.number().finite()]).transform((vv) =>
+    typeof vv === 'number' ? vv.toFixed(2) : vv
+  )
 );
 
 // ---- createOrder
@@ -57,35 +53,42 @@ export const orderItemCreateSchema = z.object({
   options: z.any().optional().nullable(),
 });
 
-export const orderCreateSchema = z.object({
-  order_number: z.string().max(50).optional(),
-  payment_method: z.enum(paymentMethods),
-  payment_status: z.string().max(50).default('pending').optional(),
-  coupon_code: z.string().max(50).optional().nullable(),
-  notes: z.string().optional().nullable(),
-  items: z.array(orderItemCreateSchema).min(1), // zorunlu
-  subtotal: dec2.optional(),
-  discount: dec2.optional().default('0.00'),
-  total: dec2.optional(),
-});
+export const orderCreateSchema = z
+  .object({
+    order_number: z.string().max(50).optional(),
+    payment_method: z.enum(paymentMethods),
+    payment_status: z.string().max(50).default('pending').optional(),
+    coupon_code: z.string().max(50).optional().nullable(),
+    notes: z.string().optional().nullable(),
+    items: z.array(orderItemCreateSchema).min(1), // zorunlu
+    subtotal: dec2.optional(),
+    discount: dec2.optional().default('0.00'),
+    total: dec2.optional(),
+  })
+  .strict();
 
 // ---- updateOrder / updateOrderItem
-export const orderUpdateSchema = z.object({
-  status: z.enum(orderStatuses).optional(),
-  payment_status: z.string().max(50).optional(),
-  payment_provider: z.string().max(50).optional().nullable(),
-  payment_id: z.string().max(255).optional().nullable(),
-  notes: z.string().optional().nullable(),
-});
+export const orderUpdateSchema = z
+  .object({
+    status: z.enum(orderStatuses).optional(),
+    payment_status: z.string().max(50).optional(),
+    payment_provider: z.string().max(50).optional().nullable(),
+    payment_id: z.string().max(255).optional().nullable(),
+    notes: z.string().optional().nullable(),
+    coupon_code: z.string().max(50).optional().nullable(), // ← eklendi
+  })
+  .strict();
 
-export const orderItemUpdateSchema = z.object({
-  delivery_status: z.enum(deliveryStatuses).optional(),
-  activation_code: z.string().optional().nullable(),
-  stock_code: z.string().optional().nullable(),
-  api_order_id: z.string().optional().nullable(),
-  delivered_at: z.coerce.date().optional().nullable(),
-  options: z.any().optional().nullable(),
-});
+export const orderItemUpdateSchema = z
+  .object({
+    delivery_status: z.enum(deliveryStatuses).optional(),
+    activation_code: z.string().optional().nullable(),
+    stock_code: z.string().optional().nullable(),
+    api_order_id: z.string().optional().nullable(),
+    delivered_at: z.coerce.date().optional().nullable(),
+    options: z.any().optional().nullable(),
+  })
+  .strict();
 
 // ---- checkout (cart → order)
 const pricingItemSchema = z.object({
@@ -94,18 +97,21 @@ const pricingItemSchema = z.object({
   price: dec2,
 });
 
-export const checkoutFromCartSchema = z.object({
-  cart_item_ids: z.array(z.string().uuid()).optional(), // yoksa tüm sepet
-  pricing: z.array(pricingItemSchema).optional(),       // ürün tablon yoksa zorunlu (BE kontrol eder)
-  order_number: z.string().max(50).optional(),
-  payment_method: z.enum(paymentMethods),
-  payment_status: z.string().max(50).default('pending').optional(),
-  coupon_code: z.string().max(50).optional().nullable(),
-  notes: z.string().optional().nullable(),
-  subtotal: dec2.optional(),
-  discount: dec2.optional().default('0.00'),
-  total: dec2.optional(),
-});
+export const checkoutFromCartSchema = z
+  .object({
+    cart_item_ids: z.array(z.string().uuid()).optional(), // yoksa tüm sepet
+    pricing: z.array(pricingItemSchema).optional(), // ürün tablon yoksa zorunlu (BE kontrol eder)
+    order_number: z.string().max(50).optional(),
+    payment_method: z.enum(paymentMethods),
+    payment_status: z.string().max(50).default('pending').optional(),
+    coupon_code: z.string().max(50).optional().nullable(),
+    notes: z.string().optional().nullable(),
+    subtotal: dec2.optional(),
+    discount: dec2.optional().default('0.00'),
+    total: dec2.optional(),
+  })
+  .strict();
 
 export type OrderCreateInput = z.infer<typeof orderCreateSchema>;
+export type OrderUpdateInput = z.infer<typeof orderUpdateSchema>;
 export type CheckoutFromCartInput = z.infer<typeof checkoutFromCartSchema>;

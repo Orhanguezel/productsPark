@@ -1,0 +1,687 @@
+{
+  "info": {
+    "_postman_id": "e5a3c9b1-2c9b-4a4c-9a9f-pp-admin-0001",
+    "name": "AAAA Payments — ADMIN (Fastify/Drizzle)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+    "_exporter_id": "20528167"
+  },
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Payment Providers (Admin)",
+          "item": [
+            {
+              "name": "List providers (filters: is_active,q)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('Array', () => Array.isArray(j));",
+                      "if (Array.isArray(j) && j.length) {",
+                      "  pm.environment.set('admin_provider_id', j[0].id);",
+                      "  pm.environment.set('provider_key', j[0].key || pm.environment.get('provider_key'));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/payment_providers?is_active=1&q=",
+                  "host": [ "{{base_url}}" ],
+                  "path": [ "admin", "payment_providers" ],
+                  "query": [
+                    { "key": "is_active", "value": "1" },
+                    { "key": "q", "value": "" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get provider by id",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('has key/display_name', () => {",
+                      "  pm.expect(j).to.have.property('key');",
+                      "  pm.expect(j).to.have.property('display_name');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_providers/{{admin_provider_id}}"
+              },
+              "response": []
+            },
+            {
+              "name": "Create provider",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "pm.test('has id & key', () => {",
+                      "  pm.expect(j).to.have.property('id');",
+                      "  pm.expect(j).to.have.property('key');",
+                      "});",
+                      "pm.environment.set('admin_provider_id', j.id);",
+                      "pm.environment.set('provider_key', j.key);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"key\": \"paytr\",\n  \"display_name\": \"PayTR\",\n  \"is_active\": true,\n  \"public_config\": {\"mode\":\"test\"},\n  \"secret_config\": {\"merchant_id\":\"xxx\"}\n}"
+                },
+                "url": "{{base_url}}/admin/payment_providers"
+              },
+              "response": []
+            },
+            {
+              "name": "Update provider (patch)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('is_active toggled', () => pm.expect(pm.response.json().is_active).to.be.a('boolean'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{ \"display_name\": \"PayTR (Updated)\", \"is_active\": true }"
+                },
+                "url": "{{base_url}}/admin/payment_providers/{{admin_provider_id}}"
+              },
+              "response": []
+            },
+            {
+              "name": "Delete provider",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('success true', () => pm.expect(pm.response.json().success).to.eql(true));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_providers/{{admin_provider_id}}"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payment Requests (Admin)",
+          "item": [
+            {
+              "name": "List (filters: user_id,order_id,status,q,limit,offset)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('Array', () => Array.isArray(j));",
+                      "if (Array.isArray(j) && j.length) {",
+                      "  pm.environment.set('admin_payment_request_id', j[0].id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/payment_requests?limit=20&offset=0&q=",
+                  "host": [ "{{base_url}}" ],
+                  "path": [ "admin", "payment_requests" ],
+                  "query": [
+                    { "key": "limit", "value": "20" },
+                    { "key": "offset", "value": "0" },
+                    { "key": "q", "value": "" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get by id",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('id matches type', () => pm.expect(pm.response.json()).to.have.property('id'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_requests/{{admin_payment_request_id}}"
+              },
+              "response": []
+            },
+            {
+              "name": "Update (status/admin_note)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('status updated', () => pm.expect(pm.response.json()).to.have.property('status'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{ \"status\": \"approved\", \"admin_note\": \"ok\" }"
+                },
+                "url": "{{base_url}}/admin/payment_requests/{{admin_payment_request_id}}"
+              },
+              "response": []
+            },
+            {
+              "name": "Set status (shortcut)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('status set', () => pm.expect(pm.response.json()).to.have.property('status'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": { "mode": "raw", "raw": "{ \"status\": \"cancelled\" }" },
+                "url": "{{base_url}}/admin/payment_requests/{{admin_payment_request_id}}/status"
+              },
+              "response": []
+            },
+            {
+              "name": "Delete payment request",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('success true', () => pm.expect(pm.response.json().success).to.eql(true));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_requests/{{admin_payment_request_id}}"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payment Sessions (Admin)",
+          "item": [
+            {
+              "name": "List sessions (filters: order_id,provider_key,status,q,limit,offset)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('Array', () => Array.isArray(j));",
+                      "if (Array.isArray(j) && j.length) {",
+                      "  pm.environment.set('admin_payment_session_id', j[0].id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/payment_sessions?limit=20&offset=0&q=",
+                  "host": [ "{{base_url}}" ],
+                  "path": [ "admin", "payment_sessions" ],
+                  "query": [
+                    { "key": "limit", "value": "20" },
+                    { "key": "offset", "value": "0" },
+                    { "key": "q", "value": "" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get session by id",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('id matches', () => pm.expect(pm.response.json().id).to.eql(pm.environment.get('admin_payment_session_id')));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_sessions/{{admin_payment_session_id}}"
+              },
+              "response": []
+            },
+            {
+              "name": "Capture session",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('success true & captured', () => {",
+                      "  pm.expect(j.success).to.eql(true);",
+                      "  pm.expect(j.status).to.eql('captured');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_sessions/{{admin_payment_session_id}}/capture"
+              },
+              "response": []
+            },
+            {
+              "name": "Cancel session",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('success true', () => pm.expect(pm.response.json().success).to.eql(true));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_sessions/{{admin_payment_session_id}}/cancel"
+              },
+              "response": []
+            },
+            {
+              "name": "Sync session (no-op stub)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('has status', () => pm.expect(pm.response.json()).to.have.property('status'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payment_sessions/{{admin_payment_session_id}}/sync"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payments (Admin)",
+          "item": [
+            {
+              "name": "List payments (filters + sort)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('Array', () => Array.isArray(j));",
+                      "if (Array.isArray(j) && j.length) {",
+                      "  pm.environment.set('admin_payment_id', j[0].id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/payments?limit=20&offset=0&q=&sort=created_at&order=desc",
+                  "host": [ "{{base_url}}" ],
+                  "path": [ "admin", "payments" ],
+                  "query": [
+                    { "key": "limit", "value": "20" },
+                    { "key": "offset", "value": "0" },
+                    { "key": "q", "value": "" },
+                    { "key": "sort", "value": "created_at" },
+                    { "key": "order", "value": "desc" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get payment by id",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('has id/status', () => {",
+                      "  const j = pm.response.json();",
+                      "  pm.expect(j).to.have.property('id');",
+                      "  pm.expect(j).to.have.property('status');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payments/{{admin_payment_id}}"
+              },
+              "response": []
+            },
+            {
+              "name": "Capture payment (optional amount)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('captured/partial', () => {",
+                      "  const st = pm.response.json().status;",
+                      "  pm.expect(['captured','authorized','partially_refunded','refunded','voided','failed']).to.include(st);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": { "mode": "raw", "raw": "{ \"amount\": 10.00 }" },
+                "url": "{{base_url}}/admin/payments/{{admin_payment_id}}/capture"
+              },
+              "response": []
+            },
+            {
+              "name": "Refund payment (amount,reason optional)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('refunded or partial', () => {",
+                      "  const st = pm.response.json().status;",
+                      "  pm.expect(['refunded','partially_refunded','captured','authorized','voided']).to.include(st);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": { "mode": "raw", "raw": "{ \"amount\": 5.00, \"reason\": \"customer_request\" }" },
+                "url": "{{base_url}}/admin/payments/{{admin_payment_id}}/refund"
+              },
+              "response": []
+            },
+            {
+              "name": "Void payment (reason optional)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('status voided', () => pm.expect(pm.response.json().status).to.eql('voided'));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "body": { "mode": "raw", "raw": "{ \"reason\": \"fraud_check\" }" },
+                "url": "{{base_url}}/admin/payments/{{admin_payment_id}}/void"
+              },
+              "response": []
+            },
+            {
+              "name": "Sync payment (stub)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('has id/status', () => {",
+                      "  const j = pm.response.json();",
+                      "  pm.expect(j).to.have.property('id');",
+                      "  pm.expect(j).to.have.property('status');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payments/{{admin_payment_id}}/sync"
+              },
+              "response": []
+            },
+            {
+              "name": "List payment events",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('array of events', () => Array.isArray(pm.response.json()));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+                  { "key": "X-Tenant", "value": "{{tenant}}", "disabled": true }
+                ],
+                "url": "{{base_url}}/admin/payments/{{admin_payment_id}}/events"
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "let bu = pm.environment.get('base_url') || '';",
+          "if (typeof bu === 'string') { pm.environment.set('base_url', bu.replace(/\\/+$/, '')); }",
+          "",
+          "function uuid(){return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});}",
+          "if (!pm.environment.get('provider_key')) pm.environment.set('provider_key', 'paytr');",
+          "if (!pm.environment.get('currency')) pm.environment.set('currency', 'TRY');",
+          "if (!pm.environment.get('admin_token')) pm.environment.set('admin_token', '<PUT_YOUR_ADMIN_JWT>');",
+          "if (!pm.environment.get('tenant')) pm.environment.set('tenant', '');",
+          "if (!pm.environment.get('order_id')) pm.environment.set('order_id', uuid());"
+        ]
+      }
+    }
+  ]
+}

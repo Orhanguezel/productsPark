@@ -57,7 +57,6 @@ export default function PageForm() {
 
   useEffect(() => {
     if (id) void fetchPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchPage = async () => {

@@ -87,6 +87,7 @@ import { rbacAdmin } from "./client/admin/rbac";
 import { billingAdmin } from "./client/admin/billing";
 import { inventoryAdmin } from "./client/admin/inventory";
 import { storageAdmin } from "./client/admin/storage";
+import { paymentRequestsAdmin } from "./client/admin/paymentRequests";
 
 import { baseApi } from "./rtk/baseApi";
 import * as rtk from "./rtk";
@@ -177,6 +178,7 @@ export const metahub = {
     billing: billingAdmin,
     inventory: inventoryAdmin,
     storage: storageAdmin,
+    paymentRequests: paymentRequestsAdmin,
   },
 
   // RTK + helpers
