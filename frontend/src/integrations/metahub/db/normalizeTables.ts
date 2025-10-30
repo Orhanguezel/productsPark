@@ -27,6 +27,7 @@ import {
   normalizeProductStockRows,
   normalizeApiProviderRows,
   isProductsPath,
+  normalizeSiteSettingRows,
 } from "./normalizers";
 
 /**
@@ -99,6 +100,10 @@ export function normalizeTableRows(path: string, rows: UnknownRow[]): UnknownRow
 
     case "/api_providers":
       return normalizeApiProviderRows(rows);
+
+    case "/site_settings":
+      // Site settings için özel bir normalizer yok
+      return normalizeSiteSettingRows(rows);
 
     default:
       return rows;

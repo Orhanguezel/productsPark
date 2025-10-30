@@ -80,8 +80,8 @@ export class QB<TRow = unknown> implements PromiseLike<FetchResult<TRow[]>> {
     if (!built) return Promise.resolve({ data: null, error: { message: `unknown_table_${this.table}` } });
 
     if (this._op === "select")  return runSelect<TRow>(built, this._selectOpts);
-    if (this._op === "insert")  return runInsert<TRow>(built, this._insertPayload, this._preferReturn);
-    if (this._op === "update")  return runUpdate<TRow>(built, (this._updatePayload ?? {}) as Record<string, unknown>, this._preferReturn);
+    if (this._op === "insert")  return runInsert<TRow>(built, (this._insertPayload ?? []) as UnknownRow | UnknownRow[]);
+    if (this._op === "update")  return runUpdate<TRow>(built, (this._updatePayload ?? {}) as Record<string, unknown>);
     if (this._op === "delete")  return runDelete<TRow>(built);
 
     return Promise.resolve({ data: null, error: { message: "unsupported_operation" } });
