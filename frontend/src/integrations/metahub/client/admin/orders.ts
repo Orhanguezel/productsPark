@@ -5,7 +5,9 @@
 import { store } from "@/store";
 import { normalizeError } from "@/integrations/metahub/core/errors";
 import {
-  ordersAdminApi,
+  ordersAdminApi
+} from "@/integrations/metahub/rtk/endpoints/admin/orders_admin.endpoints";
+import {
   type Order,
   type ListParams,
   type UpdateStatusBody,
@@ -14,7 +16,7 @@ import {
   type FulfillmentBody,
   type OrderTimelineEvent,
   type AddNoteBody,
-} from "@/integrations/metahub/rtk/endpoints/admin/orders_admin.endpoints";
+} from "@/integrations/metahub/db/types";
 
 export const ordersAdmin = {
   async list(params?: ListParams) {

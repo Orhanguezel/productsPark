@@ -121,7 +121,13 @@ export const productStock = mysqlTable('product_stock', {
   order_item_id: char('order_item_id', { length: 36 }),
 });
 
-export { productOptions } from '../productOptions/schema';
+export const productOptions = mysqlTable('product_options', {
+  id: varchar('id', { length: 36 }).primaryKey().notNull(),
+  product_id: varchar('product_id', { length: 36 }).notNull(), // FK: products.id
+  option_name: text('option_name').notNull(),
+  option_values: json('option_values').$type<string[]>().notNull(), // TEXT[] -> JSON
+  created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
 
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;

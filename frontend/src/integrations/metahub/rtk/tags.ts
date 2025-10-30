@@ -58,7 +58,10 @@ export const metahubTags = [
   "StorageAssets","StorageAsset",
   "StorageFolders","StorageFolder",
   "ApiProviders","ApiProvider",
-  "Settings","Setting"
+  "Settings","Setting",
+  "PaymentProvidersAdmin",
+  "PaymentRequestsAdmin",
+  "PaymentSessionsAdmin"
 ] as const;
 
 export type MetahubTag = typeof metahubTags[number];

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { metahub } from "@/integrations/metahub/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import type { TestSmtpResult } from "@/integrations/metahub/core/public-api";
+import { useGetPaymentProviderByKeyQuery } from "@/integrations/metahub/rtk/endpoints/payment_providers.endpoints";
+import {
+  useGetPaymentProviderAdminByIdQuery,
+  useUpdatePaymentProviderAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/payment_providers_admin.endpoints";
+
+/**
+ * NOT: Bu sayfa artık PayTR ayarlarını `site_settings` yerine
+ * Payment Provider (admin) ile yönetiyor. Güvenlik için merchant_id/key/salt
+ * gibi sırlar provider'ın `secret_config` alanında tutulur.
+ */
 
 interface SiteSettings {
   site_title: string;
@@ -36,7 +47,7 @@ interface SiteSettings {
   guest_order_enabled: boolean;
   maintenance_mode: boolean;
   maintenance_message: string;
-  theme_mode: 'user_choice' | 'dark_only' | 'light_only';
+  theme_mode: "user_choice" | "dark_only" | "light_only";
   light_logo: string;
   dark_logo: string;
   favicon_url: string;
@@ -52,6 +63,7 @@ interface SiteSettings {
   stripe_enabled: boolean;
   stripe_public_key: string;
   stripe_secret_key: string;
+  // PayTR alanları (UI state)
   paytr_enabled: boolean;
   paytr_merchant_id: string;
   paytr_merchant_key: string;
@@ -60,14 +72,18 @@ interface SiteSettings {
   paytr_commission: number;
   paytr_havale_enabled: boolean;
   paytr_havale_commission: number;
+  // Shopier
   shopier_enabled: boolean;
   shopier_client_id: string;
   shopier_client_secret: string;
   shopier_commission: number;
+  // Papara
   papara_enabled: boolean;
   papara_api_key: string;
+  // Banka Transfer
   bank_transfer_enabled: boolean;
   bank_account_info: string;
+  // Analytics & Sosyal
   google_analytics_id: string;
   facebook_pixel_id: string;
   telegram_bot_token: string;
@@ -122,7 +138,7 @@ const defaultSettings: SiteSettings = {
   guest_order_enabled: false,
   maintenance_mode: false,
   maintenance_message: "",
-  theme_mode: 'user_choice',
+  theme_mode: "user_choice",
   light_logo: "",
   dark_logo: "",
   favicon_url: "",
@@ -163,11 +179,16 @@ const defaultSettings: SiteSettings = {
   deposit_approved_telegram: false,
   new_payment_request_telegram: false,
   new_deposit_request_telegram: false,
-  telegram_template_new_order: '🛒 *Yeni Sipariş Alındı!*\n\n📋 Sipariş No: {{order_number}}\n👤 Müşteri: {{customer_name}}\n📧 Email: {{customer_email}}\n{{customer_phone}}\n\n💰 Toplam Tutar: {{final_amount}} TL\n{{discount}}\n\n📦 Ürünler:\n{{order_items}}\n\n⏰ Sipariş Tarihi: {{created_at}}',
-  telegram_template_new_payment_request: '💳 *Yeni Ödeme Talebi!*\n\n📋 Sipariş No: {{order_number}}\n👤 Müşteri: {{customer_name}}\n📧 Email: {{customer_email}}\n{{customer_phone}}\n\n💰 Tutar: {{amount}} TL\n💳 Ödeme Yöntemi: {{payment_method}}\n\n📦 Ürünler:\n{{order_items}}\n\n⏰ Talep Tarihi: {{created_at}}',
-  telegram_template_new_ticket: '🎫 *Yeni Destek Talebi Açıldı!*\n\n👤 Kullanıcı: {{user_name}}\n📋 Konu: {{subject}}\n📊 Öncelik: {{priority}}\n{{category}}\n\n💬 Mesaj:\n{{message}}\n\n⏰ Talep Tarihi: {{created_at}}',
-  telegram_template_deposit_approved: '💰 *Bakiye Yükleme Onaylandı!*\n\n👤 Kullanıcı: {{user_name}}\n💵 Tutar: {{amount}} TL\n\n⏰ Onay Tarihi: {{created_at}}',
-  telegram_template_new_deposit_request: '💰 *Yeni Bakiye Yükleme Talebi!*\n\n👤 Kullanıcı: {{user_name}}\n💵 Tutar: {{amount}} TL\n💳 Ödeme Yöntemi: {{payment_method}}\n\n⏰ Talep Tarihi: {{created_at}}',
+  telegram_template_new_order:
+    '🛒 *Yeni Sipariş Alındı!*\n\n📋 Sipariş No: {{order_number}}\n👤 Müşteri: {{customer_name}}\n📧 Email: {{customer_email}}\n{{customer_phone}}\n\n💰 Toplam Tutar: {{final_amount}} TL\n{{discount}}\n\n📦 Ürünler:\n{{order_items}}\n\n⏰ Sipariş Tarihi: {{created_at}}',
+  telegram_template_new_payment_request:
+    '💳 *Yeni Ödeme Talebi!*\n\n📋 Sipariş No: {{order_number}}\n👤 Müşteri: {{customer_name}}\n📧 Email: {{customer_email}}\n{{customer_phone}}\n\n💰 Tutar: {{amount}} TL\n💳 Ödeme Yöntemi: {{payment_method}}\n\n📦 Ürünler:\n{{order_items}}\n\n⏰ Talep Tarihi: {{created_at}}',
+  telegram_template_new_ticket:
+    '🎫 *Yeni Destek Talebi Açıldı!*\n\n👤 Kullanıcı: {{user_name}}\n📋 Konu: {{subject}}\n📊 Öncelik: {{priority}}\n{{category}}\n\n💬 Mesaj:\n{{message}}\n\n⏰ Talep Tarihi: {{created_at}}',
+  telegram_template_deposit_approved:
+    '💰 *Bakiye Yükleme Onaylandı!*\n\n👤 Kullanıcı: {{user_name}}\n💵 Tutar: {{amount}} TL\n\n⏰ Onay Tarihi: {{created_at}}',
+  telegram_template_new_deposit_request:
+    '💰 *Yeni Bakiye Yükleme Talebi!*\n\n👤 Kullanıcı: {{user_name}}\n💵 Tutar: {{amount}} TL\n💳 Ödeme Yöntemi: {{payment_method}}\n\n⏰ Talep Tarihi: {{created_at}}',
   discord_webhook_url: "",
   facebook_url: "",
   twitter_url: "",
@@ -182,6 +203,11 @@ const defaultSettings: SiteSettings = {
   },
   auto_update_rates: false,
 };
+
+const PAYTR_KEY = "paytr" as const;
+
+// site_settings içine yazmayacağımız anahtarlar (PayTR artık provider üzerinden yönetiliyor)
+const PAYTR_SITESETTING_PREFIX = "paytr_";
 
 export default function Settings() {
   const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
@@ -201,32 +227,64 @@ export default function Settings() {
     is_active: true,
   });
 
+  // ---- Payment Provider (PayTR) köprüsü ----
+  const { data: paytrPublic, isFetching: fetchingPaytrPub } = useGetPaymentProviderByKeyQuery(PAYTR_KEY);
+  const paytrId = paytrPublic?.id;
+  const { data: paytrAdmin, isFetching: fetchingPaytrAdm } = useGetPaymentProviderAdminByIdQuery(paytrId!, {
+    skip: !paytrId,
+  });
+  const [updatePaytr, { isLoading: savingPaytr }] = useUpdatePaymentProviderAdminMutation();
+
+  // SSR güvenliği için origin hesaplama
+  const origin = useMemo(() => (typeof window !== "undefined" ? window.location.origin : ""), []);
+
   useEffect(() => {
     fetchSettings();
     fetchEmailTemplates();
   }, []);
 
+  // Provider → UI state yansıtma (PayTR)
+  useEffect(() => {
+    if (!paytrAdmin) return;
+    const pub = (paytrAdmin as any)?.public_config ?? {};
+    const sec = (paytrAdmin as any)?.secret_config ?? {};
+    setSettings((prev) => ({
+      ...prev,
+      paytr_enabled: !!pub.enabled,
+      paytr_test_mode: pub.test_mode !== false,
+      paytr_commission: Number(pub.card_commission ?? 0) || 0,
+      paytr_havale_enabled: !!pub.havale_enabled,
+      paytr_havale_commission: Number(pub.havale_commission ?? 0) || 0,
+      paytr_merchant_id: String(sec.merchant_id ?? ""),
+      paytr_merchant_key: String(sec.merchant_key ?? ""),
+      paytr_merchant_salt: String(sec.merchant_salt ?? ""),
+    }));
+  }, [paytrAdmin]);
+
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const { data, error } = await metahub
-        .from("site_settings")
-        .select("*");
-
+      const { data, error } = await metahub.from("site_settings").select("*");
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const settingsObj = data.reduce((acc, item) => {
-          // Parse telegram template values if they're JSON objects
-          if (item.key.startsWith('telegram_template_') && typeof item.value === 'object' && item.value !== null) {
+        const settingsObj = data.reduce((acc: Record<string, any>, item: any) => {
+          // telegram template değerleri obje ise `template` alanını al
+          if (
+            typeof item?.key === "string" &&
+            item.key.startsWith("telegram_template_") &&
+            typeof item.value === "object" &&
+            item.value !== null
+          ) {
             const valueObj = item.value as { template?: string };
-            acc[item.key] = valueObj.template || '';
+            acc[item.key] = valueObj.template || "";
           } else {
             acc[item.key] = item.value;
           }
           return acc;
-        }, {} as any);
+        }, {});
 
+        // site_settings + default birleştir
         setSettings({ ...defaultSettings, ...settingsObj });
       }
     } catch (error: any) {
@@ -237,12 +295,15 @@ export default function Settings() {
     }
   };
 
-  const handleSave = async () => {
   const toPersistable = (v: unknown): string | number | boolean | null => {
     if (v === null || v === undefined) return null;
     const t = typeof v;
     if (t === "string" || t === "number" || t === "boolean") return v as string | number | boolean;
-    try { return JSON.stringify(v); } catch { return String(v); }
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
   };
 
   type ValueType = "string" | "number" | "boolean" | "json" | null;
@@ -255,44 +316,70 @@ export default function Settings() {
     return "json";
   };
 
-  try {
-    setSaving(true);
+  const buildPaytrUpdateBody = (s: SiteSettings) => ({
+    public_config: {
+      enabled: !!s.paytr_enabled,
+      test_mode: s.paytr_test_mode !== false,
+      card_commission: Number(s.paytr_commission || 0),
+      havale_enabled: !!s.paytr_havale_enabled,
+      havale_commission: Number(s.paytr_havale_commission || 0),
+    },
+    secret_config: {
+      merchant_id: s.paytr_merchant_id?.trim() || "",
+      merchant_key: s.paytr_merchant_key?.trim() || "",
+      merchant_salt: s.paytr_merchant_salt?.trim() || "",
+    },
+  });
 
-    // Tüm kayıtları sil (endpoint’in delete filtresi destekliyorsa)
-    await metahub.from("site_settings")
-      .delete()
-      .neq("id", "00000000-0000-0000-0000-000000000000");
+  const handleSave = async () => {
+    try {
+      setSaving(true);
 
-    // DÜZELTME: tüm değerleri string/primitive’e çevir + value_type ekle
-    const settingsArray = Object.entries(settings).map(([key, value]) => ({
-      key,
-      value: toPersistable(value),
-      value_type: guessType(value),
-    }));
+      // 1) PayTR provider güncelle (varsa)
+      if (paytrId) {
+        try {
+          await updatePaytr({ id: paytrId, body: buildPaytrUpdateBody(settings) }).unwrap();
+        } catch (err: any) {
+          console.error("PayTR güncelleme hatası:", err);
+          toast.error("PayTR ayarları kaydedilemedi: " + (err?.data?.message || err?.message || "Hata"));
+        }
+      }
 
-    const { error } = await metahub.from("site_settings").insert(settingsArray);
-    if (error) throw error;
+      // 2) site_settings güncelle (PayTR anahtarlarını hariç tut)
+      //    (artık PayTR bilgileri provider tarafında tutuluyor)
+      await metahub
+        .from("site_settings")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
 
-    toast.success("Ayarlar kaydedildi");
-  } catch (e: unknown) {
-    console.error("Error saving settings:", e);
-    const msg = typeof e === "object" && e && "message" in e && typeof (e as {message?: unknown}).message === "string"
-      ? (e as {message: string}).message
-      : "Ayarlar kaydedilirken hata oluştu";
-    toast.error(msg);
-  } finally {
-    setSaving(false);
-  }
-};
+      const settingsArray = Object.entries(settings)
+        .filter(([k]) => !k.startsWith(PAYTR_SITESETTING_PREFIX))
+        .map(([key, value]) => ({
+          key,
+          value: toPersistable(value),
+          value_type: guessType(value),
+        }));
+
+      const { error } = await metahub.from("site_settings").insert(settingsArray);
+      if (error) throw error;
+
+      toast.success("Ayarlar kaydedildi");
+    } catch (e: unknown) {
+      console.error("Error saving settings:", e);
+      const msg =
+        typeof e === "object" && e && "message" in (e as any) && typeof (e as any).message === "string"
+          ? (e as any).message
+          : "Ayarlar kaydedilirken hata oluştu";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Email template functions
   const fetchEmailTemplates = async () => {
     try {
-      const { data, error } = await metahub
-        .from("email_templates")
-        .select("*")
-        .order("template_name");
-
+      const { data, error } = await metahub.from("email_templates").select("*").order("template_name");
       if (error) throw error;
       setEmailTemplates(data || []);
     } catch (error) {
@@ -377,11 +464,7 @@ export default function Settings() {
     if (!confirm("Bu şablonu silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await metahub
-        .from("email_templates")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await metahub.from("email_templates").delete().eq("id", id);
       if (error) throw error;
       toast.success("Şablon silindi");
       fetchEmailTemplates();
@@ -417,6 +500,7 @@ export default function Settings() {
           <TabsTrigger value="footer">Footer</TabsTrigger>
         </TabsList>
 
+        {/* GENEL */}
         <TabsContent value="general" className="space-y-4">
           <Card>
             <CardHeader>
@@ -448,9 +532,7 @@ export default function Settings() {
                   id="min_balance_limit"
                   type="number"
                   value={settings.min_balance_limit}
-                  onChange={(e) =>
-                    setSettings({ ...settings, min_balance_limit: parseFloat(e.target.value) })
-                  }
+                  onChange={(e) => setSettings({ ...settings, min_balance_limit: parseFloat(e.target.value) })}
                 />
               </div>
 
@@ -469,9 +551,7 @@ export default function Settings() {
                   <Switch
                     id="guest_order_enabled"
                     checked={settings.guest_order_enabled}
-                    onCheckedChange={(checked) =>
-                      setSettings({ ...settings, guest_order_enabled: checked })
-                    }
+                    onCheckedChange={(checked) => setSettings({ ...settings, guest_order_enabled: checked })}
                   />
                   <Label htmlFor="guest_order_enabled">Üyeliksiz Sipariş</Label>
                 </div>
@@ -483,9 +563,7 @@ export default function Settings() {
                   <Switch
                     id="maintenance_mode"
                     checked={settings.maintenance_mode}
-                    onCheckedChange={(checked) =>
-                      setSettings({ ...settings, maintenance_mode: checked })
-                    }
+                    onCheckedChange={(checked) => setSettings({ ...settings, maintenance_mode: checked })}
                   />
                   <Label htmlFor="maintenance_mode">Bakım Modu</Label>
                 </div>
@@ -497,9 +575,7 @@ export default function Settings() {
                   <Textarea
                     id="maintenance_message"
                     value={settings.maintenance_message}
-                    onChange={(e) =>
-                      setSettings({ ...settings, maintenance_message: e.target.value })
-                    }
+                    onChange={(e) => setSettings({ ...settings, maintenance_message: e.target.value })}
                     rows={3}
                   />
                 </div>
@@ -509,7 +585,7 @@ export default function Settings() {
                 <Label htmlFor="theme_mode">Dark/Light Mod Ayarı</Label>
                 <Select
                   value={settings.theme_mode}
-                  onValueChange={(value: 'user_choice' | 'dark_only' | 'light_only') =>
+                  onValueChange={(value: "user_choice" | "dark_only" | "light_only") =>
                     setSettings({ ...settings, theme_mode: value })
                   }
                 >
@@ -523,9 +599,9 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {settings.theme_mode === 'user_choice' && 'Kullanıcılar header\'daki buton ile tema değiştirebilir'}
-                  {settings.theme_mode === 'dark_only' && 'Site her zaman dark mod\'da açılır, kullanıcı değiştiremez'}
-                  {settings.theme_mode === 'light_only' && 'Site her zaman light mod\'da açılır, kullanıcı değiştiremez'}
+                  {settings.theme_mode === "user_choice" && "Kullanıcılar header'daki buton ile tema değiştirebilir"}
+                  {settings.theme_mode === "dark_only" && "Site her zaman dark mod'da açılır, kullanıcı değiştiremez"}
+                  {settings.theme_mode === "light_only" && "Site her zaman light mod'da açılır, kullanıcı değiştiremez"}
                 </p>
               </div>
 
@@ -568,21 +644,18 @@ export default function Settings() {
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const fileExt = file.name.split('.').pop();
+                      const fileExt = file.name.split(".").pop();
                       const filePath = `light-logo.${fileExt}`;
 
-                      const { error: uploadError } = await metahub.storage
-                        .from('logos')
-                        .upload(filePath, file, { upsert: true });
-
+                      const { error: uploadError } = await metahub.storage.from("logos").upload(filePath, file, { upsert: true });
                       if (uploadError) {
-                        toast.error('Logo yüklenirken hata oluştu');
+                        toast.error("Logo yüklenirken hata oluştu");
                         return;
                       }
 
-                      const { data } = metahub.storage.from('logos').getPublicUrl(filePath);
+                      const { data } = metahub.storage.from("logos").getPublicUrl(filePath);
                       setSettings({ ...settings, light_logo: data.publicUrl });
-                      toast.success('Logo yüklendi');
+                      toast.success("Logo yüklendi");
                     }}
                   />
                   <p className="text-xs text-muted-foreground">PNG, JPG veya SVG (maks. 2MB)</p>
@@ -598,21 +671,18 @@ export default function Settings() {
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const fileExt = file.name.split('.').pop();
+                      const fileExt = file.name.split(".").pop();
                       const filePath = `dark-logo.${fileExt}`;
 
-                      const { error: uploadError } = await metahub.storage
-                        .from('logos')
-                        .upload(filePath, file, { upsert: true });
-
+                      const { error: uploadError } = await metahub.storage.from("logos").upload(filePath, file, { upsert: true });
                       if (uploadError) {
-                        toast.error('Logo yüklenirken hata oluştu');
+                        toast.error("Logo yüklenirken hata oluştu");
                         return;
                       }
 
-                      const { data } = metahub.storage.from('logos').getPublicUrl(filePath);
+                      const { data } = metahub.storage.from("logos").getPublicUrl(filePath);
                       setSettings({ ...settings, dark_logo: data.publicUrl });
-                      toast.success('Logo yüklendi');
+                      toast.success("Logo yüklendi");
                     }}
                   />
                   <p className="text-xs text-muted-foreground">PNG, JPG veya SVG (maks. 2MB)</p>
@@ -628,21 +698,18 @@ export default function Settings() {
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      const fileExt = file.name.split('.').pop();
+                      const fileExt = file.name.split(".").pop();
                       const filePath = `favicon.${fileExt}`;
 
-                      const { error: uploadError } = await metahub.storage
-                        .from('logos')
-                        .upload(filePath, file, { upsert: true });
-
+                      const { error: uploadError } = await metahub.storage.from("logos").upload(filePath, file, { upsert: true });
                       if (uploadError) {
-                        toast.error('Favicon yüklenirken hata oluştu');
+                        toast.error("Favicon yüklenirken hata oluştu");
                         return;
                       }
 
-                      const { data } = metahub.storage.from('logos').getPublicUrl(filePath);
+                      const { data } = metahub.storage.from("logos").getPublicUrl(filePath);
                       setSettings({ ...settings, favicon_url: data.publicUrl });
-                      toast.success('Favicon yüklendi');
+                      toast.success("Favicon yüklendi");
                     }}
                   />
                   <p className="text-xs text-muted-foreground">ICO, PNG (önerilen: 32x32px)</p>
@@ -652,6 +719,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* SEO */}
         <TabsContent value="seo" className="space-y-4">
           <Card>
             <CardHeader>
@@ -753,6 +821,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* SMTP */}
         <TabsContent value="smtp" className="space-y-4">
           <Card>
             <CardHeader>
@@ -777,9 +846,7 @@ export default function Settings() {
                     type="number"
                     placeholder="465"
                     value={settings.smtp_port}
-                    onChange={(e) =>
-                      setSettings({ ...settings, smtp_port: parseInt(e.target.value) })
-                    }
+                    onChange={(e) => setSettings({ ...settings, smtp_port: parseInt(e.target.value) })}
                   />
                 </div>
 
@@ -788,9 +855,7 @@ export default function Settings() {
                     <Switch
                       id="smtp_ssl"
                       checked={settings.smtp_ssl}
-                      onCheckedChange={(checked) =>
-                        setSettings({ ...settings, smtp_ssl: checked })
-                      }
+                      onCheckedChange={(checked) => setSettings({ ...settings, smtp_ssl: checked })}
                     />
                     <Label htmlFor="smtp_ssl">SSL Etkin</Label>
                   </div>
@@ -847,11 +912,11 @@ export default function Settings() {
                   onClick={async () => {
                     try {
                       const { data, error } = await metahub.functions.invoke<TestSmtpResult>("test-smtp");
-                      if (error) throw new Error(error.message);
+                      if (error) throw new Error((error as any).message || "Invoke error");
                       if (data?.success) {
                         toast.success(data.message ?? "SMTP testi başarılı");
                       } else {
-                        toast.error(data?.error ?? "SMTP testi başarısız");
+                        toast.error((data as any)?.error ?? "SMTP testi başarısız");
                       }
                     } catch (err: any) {
                       toast.error("SMTP testi başarısız: " + (err?.message ?? String(err)));
@@ -865,6 +930,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* EMAIL TEMPLATES */}
         <TabsContent value="email-templates" className="space-y-4">
           <Card>
             <CardHeader>
@@ -890,35 +956,21 @@ export default function Settings() {
                 <TableBody>
                   {emailTemplates.map((template) => (
                     <TableRow key={template.id}>
-                      <TableCell className="font-medium">
-                        {template.template_name}
-                      </TableCell>
+                      <TableCell className="font-medium">{template.template_name}</TableCell>
                       <TableCell>
-                        <code className="px-2 py-1 bg-muted rounded text-xs">
-                          {template.template_key}
-                        </code>
+                        <code className="px-2 py-1 bg-muted rounded text-xs">{template.template_key}</code>
                       </TableCell>
-                      <TableCell className="max-w-md truncate">
-                        {template.subject}
-                      </TableCell>
+                      <TableCell className="max-w-md truncate">{template.subject}</TableCell>
                       <TableCell>
                         <Badge variant={template.is_active ? "default" : "secondary"}>
                           {template.is_active ? "Aktif" : "Pasif"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditTemplate(template)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => handleEditTemplate(template)}>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteTemplate(template.id)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template.id)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </TableCell>
@@ -930,17 +982,17 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* PAYMENT */}
         <TabsContent value="payment" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Ödeme Yöntemleri</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* PayTR */}
               <div className="space-y-4 border-b pb-4">
                 <h3 className="text-lg font-semibold">PayTR Entegrasyonu</h3>
-                <p className="text-sm text-muted-foreground">
-                  Aynı mağaza bilgileriyle hem kredi kartı hem havale/EFT ödemesi alabilirsiniz
-                </p>
+                <p className="text-sm text-muted-foreground">Aynı mağaza bilgileriyle hem kredi kartı hem havale/EFT ödemesi alabilirsiniz</p>
 
                 <div className="space-y-4 pl-4 border-l-2 border-muted">
                   <h4 className="font-medium">Mağaza Bilgileri</h4>
@@ -949,9 +1001,7 @@ export default function Settings() {
                       <Label>Merchant ID</Label>
                       <Input
                         value={settings.paytr_merchant_id}
-                        onChange={(e) =>
-                          setSettings({ ...settings, paytr_merchant_id: e.target.value })
-                        }
+                        onChange={(e) => setSettings({ ...settings, paytr_merchant_id: e.target.value })}
                         placeholder="PayTR Mağaza No"
                       />
                     </div>
@@ -960,9 +1010,7 @@ export default function Settings() {
                       <Input
                         type="password"
                         value={settings.paytr_merchant_key}
-                        onChange={(e) =>
-                          setSettings({ ...settings, paytr_merchant_key: e.target.value })
-                        }
+                        onChange={(e) => setSettings({ ...settings, paytr_merchant_key: e.target.value })}
                         placeholder="PayTR Merchant Key"
                       />
                     </div>
@@ -971,9 +1019,7 @@ export default function Settings() {
                       <Input
                         type="password"
                         value={settings.paytr_merchant_salt}
-                        onChange={(e) =>
-                          setSettings({ ...settings, paytr_merchant_salt: e.target.value })
-                        }
+                        onChange={(e) => setSettings({ ...settings, paytr_merchant_salt: e.target.value })}
                         placeholder="PayTR Merchant Salt"
                       />
                     </div>
@@ -982,9 +1028,7 @@ export default function Settings() {
                     <Switch
                       id="paytr_test_mode"
                       checked={settings.paytr_test_mode !== false}
-                      onCheckedChange={(checked) =>
-                        setSettings({ ...settings, paytr_test_mode: checked })
-                      }
+                      onCheckedChange={(checked) => setSettings({ ...settings, paytr_test_mode: checked })}
                     />
                     <Label htmlFor="paytr_test_mode">Test Modu</Label>
                   </div>
@@ -995,9 +1039,7 @@ export default function Settings() {
                     <Switch
                       id="paytr_enabled"
                       checked={settings.paytr_enabled}
-                      onCheckedChange={(checked) =>
-                        setSettings({ ...settings, paytr_enabled: checked })
-                      }
+                      onCheckedChange={(checked) => setSettings({ ...settings, paytr_enabled: checked })}
                     />
                     <Label htmlFor="paytr_enabled" className="font-medium">
                       Kredi Kartı ile Ödeme
@@ -1013,14 +1055,10 @@ export default function Settings() {
                         max="100"
                         step="0.01"
                         value={settings.paytr_commission}
-                        onChange={(e) =>
-                          setSettings({ ...settings, paytr_commission: parseFloat(e.target.value) || 0 })
-                        }
+                        onChange={(e) => setSettings({ ...settings, paytr_commission: parseFloat(e.target.value) || 0 })}
                         placeholder="Örn: 2.5"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        PayTR kredi kartı ödemelerde uygulanacak komisyon yüzdesi
-                      </p>
+                      <p className="text-xs text-muted-foreground">PayTR kredi kartı ödemelerde uygulanacak komisyon yüzdesi</p>
                     </div>
                   )}
                 </div>
@@ -1030,9 +1068,7 @@ export default function Settings() {
                     <Switch
                       id="paytr_havale_enabled"
                       checked={settings.paytr_havale_enabled}
-                      onCheckedChange={(checked) =>
-                        setSettings({ ...settings, paytr_havale_enabled: checked })
-                      }
+                      onCheckedChange={(checked) => setSettings({ ...settings, paytr_havale_enabled: checked })}
                     />
                     <Label htmlFor="paytr_havale_enabled" className="font-medium">
                       Havale/EFT ile Ödeme
@@ -1054,9 +1090,7 @@ export default function Settings() {
                           }
                           placeholder="Örn: 1.5"
                         />
-                        <p className="text-xs text-muted-foreground">
-                          PayTR havale/EFT ödemelerde uygulanacak komisyon yüzdesi
-                        </p>
+                        <p className="text-xs text-muted-foreground">PayTR havale/EFT ödemelerde uygulanacak komisyon yüzdesi</p>
                       </div>
                       <p className="text-sm text-muted-foreground pl-6">
                         PayTR Havale/EFT iframe API ile çalışır. Müşteri banka bilgilerini görüntüleyip ödeme dekontunu yükleyebilir.
@@ -1066,22 +1100,25 @@ export default function Settings() {
                 </div>
 
                 <p className="text-sm text-muted-foreground mt-4">
-                  PayTR Bildirim URL'si: <code className="bg-muted px-2 py-1 rounded">{window.location.origin}/functions/v1/paytr-callback</code>
+                  PayTR Bildirim URL'si: <code className="bg-muted px-2 py-1 rounded">{origin}/functions/v1/paytr-callback</code>
                   <br />
-                  PayTR Havale Bildirim URL'si: <code className="bg-muted px-2 py-1 rounded">{window.location.origin}/functions/v1/paytr-havale-callback</code>
+                  PayTR Havale Bildirim URL'si: <code className="bg-muted px-2 py-1 rounded">{origin}/functions/v1/paytr-havale-callback</code>
                   <br />Bu URL'leri PayTR Mağaza Paneli {">"} Destek & Kurulum {">"} Ayarlar {">"} Bildirim URL Ayarları bölümünden ayarlayın.
                 </p>
+
+                {(fetchingPaytrPub || fetchingPaytrAdm || savingPaytr) && (
+                  <p className="text-xs text-muted-foreground">PayTR durumu yükleniyor…</p>
+                )}
               </div>
 
+              {/* Shopier */}
               <div className="space-y-4 border-b pb-4">
                 <h3 className="text-lg font-semibold">Shopier Entegrasyonu</h3>
                 <div className="flex items-center gap-2">
                   <Switch
                     id="shopier_enabled"
                     checked={settings.shopier_enabled}
-                    onCheckedChange={(checked) =>
-                      setSettings({ ...settings, shopier_enabled: checked })
-                    }
+                    onCheckedChange={(checked) => setSettings({ ...settings, shopier_enabled: checked })}
                   />
                   <Label htmlFor="shopier_enabled">Shopier ile Ödeme Aktif</Label>
                 </div>
@@ -1118,23 +1155,18 @@ export default function Settings() {
                         max="100"
                         step="0.01"
                         value={settings.shopier_commission}
-                        onChange={(e) =>
-                          setSettings({ ...settings, shopier_commission: parseFloat(e.target.value) || 0 })
-                        }
+                        onChange={(e) => setSettings({ ...settings, shopier_commission: parseFloat(e.target.value) || 0 })}
                         placeholder="Örn: 3.5"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Shopier ile yapılan ödemelerde uygulanacak komisyon yüzdesi
-                      </p>
+                      <p className="text-xs text-muted-foreground">Shopier ile yapılan ödemelerde uygulanacak komisyon yüzdesi</p>
                     </div>
 
-                    <p className="text-sm text-muted-foreground">
-                      Shopier Direct API ile çalışır. Ödeme tamamlandığında otomatik olarak webhook ile bildirim alınır.
-                    </p>
+                    <p className="text-sm text-muted-foreground">Shopier Direct API ile çalışır. Ödeme tamamlandığında otomatik olarak webhook ile bildirim alınır.</p>
                   </>
                 )}
               </div>
 
+              {/* Cüzdan */}
               <div className="space-y-4 border-b pb-4">
                 <div className="flex items-center gap-2">
                   <Switch
@@ -1145,8 +1177,8 @@ export default function Settings() {
                         ...settings,
                         payment_methods: {
                           ...(settings.payment_methods || {}),
-                          wallet_enabled: checked
-                        }
+                          wallet_enabled: checked,
+                        },
                       })
                     }
                   />
@@ -1156,6 +1188,7 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Havale */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Switch
@@ -1166,8 +1199,8 @@ export default function Settings() {
                         ...settings,
                         payment_methods: {
                           ...(settings.payment_methods || {}),
-                          havale_enabled: checked
-                        }
+                          havale_enabled: checked,
+                        },
                       })
                     }
                   />
@@ -1186,8 +1219,8 @@ export default function Settings() {
                             ...settings,
                             payment_methods: {
                               ...(settings.payment_methods || {}),
-                              havale_bank_name: e.target.value
-                            }
+                              havale_bank_name: e.target.value,
+                            },
                           })
                         }
                         placeholder="Örn: Ziraat Bankası"
@@ -1202,8 +1235,8 @@ export default function Settings() {
                             ...settings,
                             payment_methods: {
                               ...(settings.payment_methods || {}),
-                              havale_iban: e.target.value
-                            }
+                              havale_iban: e.target.value,
+                            },
                           })
                         }
                         placeholder="TR00 0000 0000 0000 0000 0000 00"
@@ -1218,8 +1251,8 @@ export default function Settings() {
                             ...settings,
                             payment_methods: {
                               ...(settings.payment_methods || {}),
-                              havale_account_holder: e.target.value
-                            }
+                              havale_account_holder: e.target.value,
+                            },
                           })
                         }
                         placeholder="Ad Soyad / Şirket Adı"
@@ -1232,6 +1265,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* TELEGRAM */}
         <TabsContent value="telegram" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1244,14 +1278,10 @@ export default function Settings() {
                   <Input
                     id="telegram_bot_token"
                     value={settings.telegram_bot_token}
-                    onChange={(e) =>
-                      setSettings({ ...settings, telegram_bot_token: e.target.value })
-                    }
+                    onChange={(e) => setSettings({ ...settings, telegram_bot_token: e.target.value })}
                     placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    BotFather'dan aldığınız bot token'ını girin
-                  </p>
+                  <p className="text-xs text-muted-foreground">BotFather'dan aldığınız bot token'ını girin</p>
                 </div>
 
                 <div className="space-y-2">
@@ -1259,14 +1289,10 @@ export default function Settings() {
                   <Input
                     id="telegram_chat_id"
                     value={settings.telegram_chat_id}
-                    onChange={(e) =>
-                      setSettings({ ...settings, telegram_chat_id: e.target.value })
-                    }
+                    onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
                     placeholder="-1001234567890"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Bildirimlerin gönderileceği chat/grup ID'si
-                  </p>
+                  <p className="text-xs text-muted-foreground">Bildirimlerin gönderileceği chat/grup ID'si</p>
                 </div>
 
                 <div className="bg-muted p-4 rounded-lg space-y-2 mb-4">
@@ -1289,16 +1315,12 @@ export default function Settings() {
                         <Label htmlFor="new_order_telegram" className="text-base font-medium">
                           Yeni Sipariş Bildirimleri
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Yeni sipariş geldiğinde Telegram bildirimi gönder
-                        </p>
+                        <p className="text-xs text-muted-foreground">Yeni sipariş geldiğinde Telegram bildirimi gönder</p>
                       </div>
                       <Switch
                         id="new_order_telegram"
                         checked={settings.new_order_telegram}
-                        onCheckedChange={(checked) =>
-                          setSettings({ ...settings, new_order_telegram: checked })
-                        }
+                        onCheckedChange={(checked) => setSettings({ ...settings, new_order_telegram: checked })}
                       />
                     </div>
 
@@ -1306,14 +1328,31 @@ export default function Settings() {
                       <Label htmlFor="telegram_template_new_order">Mesaj Şablonu</Label>
                       <Textarea
                         id="telegram_template_new_order"
-                        value={settings.telegram_template_new_order || ''}
+                        value={settings.telegram_template_new_order || ""}
                         onChange={(e) => setSettings({ ...settings, telegram_template_new_order: e.target.value })}
                         rows={8}
                         className="font-mono text-sm"
                         placeholder="Mesaj şablonunu girin..."
                       />
                       <p className="text-xs text-muted-foreground">
-                        Kullanılabilir değişkenler: {'{'}{'{'}<code>order_number</code>{'}'}{'}'},  {'{'}{'{'}<code>customer_name</code>{'}'}{'}'},  {'{'}{'{'}<code>customer_email</code>{'}'}{'}'},  {'{'}{'{'}<code>customer_phone</code>{'}'}{'}'},  {'{'}{'{'}<code>final_amount</code>{'}'}{'}'},  {'{'}{'{'}<code>discount</code>{'}'}{'}'},  {'{'}{'{'}<code>order_items</code>{'}'}{'}'},  {'{'}{'{'}<code>created_at</code>{'}'}{'}'}
+                        Kullanılabilir değişkenler: 
+                        {"{{"}
+                        <code>order_number</code>
+                        {"}}"}, {"{{"}
+                        <code>customer_name</code>
+                        {"}}"}, {"{{"}
+                        <code>customer_email</code>
+                        {"}}"}, {"{{"}
+                        <code>customer_phone</code>
+                        {"}}"}, {"{{"}
+                        <code>final_amount</code>
+                        {"}}"}, {"{{"}
+                        <code>discount</code>
+                        {"}}"}, {"{{"}
+                        <code>order_items</code>
+                        {"}}"}, {"{{"}
+                        <code>created_at</code>
+                        {"}}"}
                       </p>
                     </div>
                   </div>
@@ -1324,16 +1363,12 @@ export default function Settings() {
                         <Label htmlFor="new_payment_request_telegram" className="text-base font-medium">
                           Ödeme Talebi Bildirimleri
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Yeni ödeme talebi oluşturulduğunda Telegram bildirimi gönder
-                        </p>
+                        <p className="text-xs text-muted-foreground">Yeni ödeme talebi oluşturulduğunda Telegram bildirimi gönder</p>
                       </div>
                       <Switch
                         id="new_payment_request_telegram"
                         checked={settings.new_payment_request_telegram}
-                        onCheckedChange={(checked) =>
-                          setSettings({ ...settings, new_payment_request_telegram: checked })
-                        }
+                        onCheckedChange={(checked) => setSettings({ ...settings, new_payment_request_telegram: checked })}
                       />
                     </div>
 
@@ -1341,14 +1376,31 @@ export default function Settings() {
                       <Label htmlFor="telegram_template_new_payment_request">Mesaj Şablonu</Label>
                       <Textarea
                         id="telegram_template_new_payment_request"
-                        value={settings.telegram_template_new_payment_request || ''}
+                        value={settings.telegram_template_new_payment_request || ""}
                         onChange={(e) => setSettings({ ...settings, telegram_template_new_payment_request: e.target.value })}
                         rows={8}
                         className="font-mono text-sm"
                         placeholder="Mesaj şablonunu girin..."
                       />
                       <p className="text-xs text-muted-foreground">
-                        Kullanılabilir değişkenler: {'{'}{'{'}<code>order_number</code>{'}'}{'}'},  {'{'}{'{'}<code>customer_name</code>{'}'}{'}'},  {'{'}{'{'}<code>customer_email</code>{'}'}{'}'},  {'{'}{'{'}<code>customer_phone</code>{'}'}{'}'},  {'{'}{'{'}<code>amount</code>{'}'}{'}'},  {'{'}{'{'}<code>payment_method</code>{'}'}{'}'},  {'{'}{'{'}<code>order_items</code>{'}'}{'}'},  {'{'}{'{'}<code>created_at</code>{'}'}{'}'}
+                        Kullanılabilir değişkenler:
+                        {"{{"}
+                        <code>order_number</code>
+                        {"}}"}, {"{{"}
+                        <code>customer_name</code>
+                        {"}}"}, {"{{"}
+                        <code>customer_email</code>
+                        {"}}"}, {"{{"}
+                        <code>customer_phone</code>
+                        {"}}"}, {"{{"}
+                        <code>amount</code>
+                        {"}}"}, {"{{"}
+                        <code>payment_method</code>
+                        {"}}"}, {"{{"}
+                        <code>order_items</code>
+                        {"}}"}, {"{{"}
+                        <code>created_at</code>
+                        {"}}"}
                       </p>
                     </div>
                   </div>
@@ -1359,16 +1411,12 @@ export default function Settings() {
                         <Label htmlFor="new_ticket_telegram" className="text-base font-medium">
                           Destek Talebi Bildirimleri
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Yeni destek talebi açıldığında Telegram bildirimi gönder
-                        </p>
+                        <p className="text-xs text-muted-foreground">Yeni destek talebi açıldığında Telegram bildirimi gönder</p>
                       </div>
                       <Switch
                         id="new_ticket_telegram"
                         checked={settings.new_ticket_telegram}
-                        onCheckedChange={(checked) =>
-                          setSettings({ ...settings, new_ticket_telegram: checked })
-                        }
+                        onCheckedChange={(checked) => setSettings({ ...settings, new_ticket_telegram: checked })}
                       />
                     </div>
 
@@ -1376,14 +1424,27 @@ export default function Settings() {
                       <Label htmlFor="telegram_template_new_ticket">Mesaj Şablonu</Label>
                       <Textarea
                         id="telegram_template_new_ticket"
-                        value={settings.telegram_template_new_ticket || ''}
+                        value={settings.telegram_template_new_ticket || ""}
                         onChange={(e) => setSettings({ ...settings, telegram_template_new_ticket: e.target.value })}
                         rows={8}
                         className="font-mono text-sm"
                         placeholder="Mesaj şablonunu girin..."
                       />
                       <p className="text-xs text-muted-foreground">
-                        Kullanılabilir değişkenler: {'{'}{'{'}<code>user_name</code>{'}'}{'}'},  {'{'}{'{'}<code>subject</code>{'}'}{'}'},  {'{'}{'{'}<code>priority</code>{'}'}{'}'},  {'{'}{'{'}<code>category</code>{'}'}{'}'},  {'{'}{'{'}<code>message</code>{'}'}{'}'},  {'{'}{'{'}<code>created_at</code>{'}'}{'}'}
+                        Kullanılabilir değişkenler: 
+                        {"{{"}
+                        <code>user_name</code>
+                        {"}}"}, {"{{"}
+                        <code>subject</code>
+                        {"}}"}, {"{{"}
+                        <code>priority</code>
+                        {"}}"}, {"{{"}
+                        <code>category</code>
+                        {"}}"}, {"{{"}
+                        <code>message</code>
+                        {"}}"}, {"{{"}
+                        <code>created_at</code>
+                        {"}}"}
                       </p>
                     </div>
                   </div>
@@ -1394,16 +1455,12 @@ export default function Settings() {
                         <Label htmlFor="deposit_approved_telegram" className="text-base font-medium">
                           Bakiye Yükleme Bildirimleri
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Bakiye yükleme onaylandığında Telegram bildirimi gönder
-                        </p>
+                        <p className="text-xs text-muted-foreground">Bakiye yükleme onaylandığında Telegram bildirimi gönder</p>
                       </div>
                       <Switch
                         id="deposit_approved_telegram"
                         checked={settings.deposit_approved_telegram}
-                        onCheckedChange={(checked) =>
-                          setSettings({ ...settings, deposit_approved_telegram: checked })
-                        }
+                        onCheckedChange={(checked) => setSettings({ ...settings, deposit_approved_telegram: checked })}
                       />
                     </div>
 
@@ -1411,14 +1468,21 @@ export default function Settings() {
                       <Label htmlFor="telegram_template_deposit_approved">Mesaj Şablonu</Label>
                       <Textarea
                         id="telegram_template_deposit_approved"
-                        value={settings.telegram_template_deposit_approved || ''}
+                        value={settings.telegram_template_deposit_approved || ""}
                         onChange={(e) => setSettings({ ...settings, telegram_template_deposit_approved: e.target.value })}
                         rows={6}
                         className="font-mono text-sm"
                         placeholder="Mesaj şablonunu girin..."
                       />
                       <p className="text-xs text-muted-foreground">
-                        Kullanılabilir değişkenler: {'{'}{'{'}<code>user_name</code>{'}'}{'}'},  {'{'}{'{'}<code>amount</code>{'}'}{'}'},  {'{'}{'{'}<code>created_at</code>{'}'}{'}'}
+                        Kullanılabilir değişkenler:
+                        {"{{"}
+                        <code>user_name</code>
+                        {"}}"}, {"{{"}
+                        <code>amount</code>
+                        {"}}"}, {"{{"}
+                        <code>created_at</code>
+                        {"}}"}
                       </p>
                     </div>
                   </div>
@@ -1429,16 +1493,12 @@ export default function Settings() {
                         <Label htmlFor="new_deposit_request_telegram" className="text-base font-medium">
                           Cüzdan Yükleme Talebi Bildirimleri
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Yeni cüzdan yükleme talebi oluşturulduğunda Telegram bildirimi gönder
-                        </p>
+                        <p className="text-xs text-muted-foreground">Yeni cüzdan yükleme talebi oluşturulduğunda Telegram bildirimi gönder</p>
                       </div>
                       <Switch
                         id="new_deposit_request_telegram"
                         checked={settings.new_deposit_request_telegram || false}
-                        onCheckedChange={(checked) =>
-                          setSettings({ ...settings, new_deposit_request_telegram: checked })
-                        }
+                        onCheckedChange={(checked) => setSettings({ ...settings, new_deposit_request_telegram: checked })}
                       />
                     </div>
 
@@ -1446,14 +1506,23 @@ export default function Settings() {
                       <Label htmlFor="telegram_template_new_deposit_request">Mesaj Şablonu</Label>
                       <Textarea
                         id="telegram_template_new_deposit_request"
-                        value={settings.telegram_template_new_deposit_request || ''}
+                        value={settings.telegram_template_new_deposit_request || ""}
                         onChange={(e) => setSettings({ ...settings, telegram_template_new_deposit_request: e.target.value })}
                         rows={7}
                         className="font-mono text-sm"
                         placeholder="Mesaj şablonunu girin..."
                       />
                       <p className="text-xs text-muted-foreground">
-                        Kullanılabilir değişkenler: {'{'}{'{'}<code>user_name</code>{'}'}{'}'},  {'{'}{'{'}<code>amount</code>{'}'}{'}'},  {'{'}{'{'}<code>payment_method</code>{'}'}{'}'},  {'{'}{'{'}<code>created_at</code>{'}'}{'}'}
+                        Kullanılabilir değişkenler: 
+                        {"{{"}
+                        <code>user_name</code>
+                        {"}}"}, {"{{"}
+                        <code>amount</code>
+                        {"}}"}, {"{{"}
+                        <code>payment_method</code>
+                        {"}}"}, {"{{"}
+                        <code>created_at</code>
+                        {"}}"}
                       </p>
                     </div>
                   </div>
@@ -1463,6 +1532,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* ENTEGRASYONLAR */}
         <TabsContent value="integrations" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1475,9 +1545,7 @@ export default function Settings() {
                   <Input
                     id="google_analytics_id"
                     value={settings.google_analytics_id}
-                    onChange={(e) =>
-                      setSettings({ ...settings, google_analytics_id: e.target.value })
-                    }
+                    onChange={(e) => setSettings({ ...settings, google_analytics_id: e.target.value })}
                     placeholder="G-XXXXXXXXXX"
                   />
                 </div>
@@ -1487,13 +1555,9 @@ export default function Settings() {
                   <Input
                     id="facebook_pixel_id"
                     value={settings.facebook_pixel_id}
-                    onChange={(e) =>
-                      setSettings({ ...settings, facebook_pixel_id: e.target.value })
-                    }
+                    onChange={(e) => setSettings({ ...settings, facebook_pixel_id: e.target.value })}
                   />
                 </div>
-
-
               </div>
 
               <div className="space-y-4 border-t pt-4 mt-4">
@@ -1504,9 +1568,7 @@ export default function Settings() {
                     <Input
                       id="facebook_url"
                       value={settings.facebook_url}
-                      onChange={(e) =>
-                        setSettings({ ...settings, facebook_url: e.target.value })
-                      }
+                      onChange={(e) => setSettings({ ...settings, facebook_url: e.target.value })}
                     />
                   </div>
 
@@ -1515,9 +1577,7 @@ export default function Settings() {
                     <Input
                       id="twitter_url"
                       value={settings.twitter_url}
-                      onChange={(e) =>
-                        setSettings({ ...settings, twitter_url: e.target.value })
-                      }
+                      onChange={(e) => setSettings({ ...settings, twitter_url: e.target.value })}
                     />
                   </div>
 
@@ -1526,9 +1586,7 @@ export default function Settings() {
                     <Input
                       id="instagram_url"
                       value={settings.instagram_url}
-                      onChange={(e) =>
-                        setSettings({ ...settings, instagram_url: e.target.value })
-                      }
+                      onChange={(e) => setSettings({ ...settings, instagram_url: e.target.value })}
                     />
                   </div>
 
@@ -1537,9 +1595,7 @@ export default function Settings() {
                     <Input
                       id="linkedin_url"
                       value={settings.linkedin_url}
-                      onChange={(e) =>
-                        setSettings({ ...settings, linkedin_url: e.target.value })
-                      }
+                      onChange={(e) => setSettings({ ...settings, linkedin_url: e.target.value })}
                     />
                   </div>
                 </div>
@@ -1548,14 +1604,17 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* POPUPS */}
         <TabsContent value="popups" className="space-y-4">
           <PopupManagement />
         </TabsContent>
 
+        {/* TOPBAR */}
         <TabsContent value="topbar" className="space-y-4">
           <TopbarManagement />
         </TabsContent>
 
+        {/* FOOTER */}
         <TabsContent value="footer" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1623,7 +1682,7 @@ export default function Settings() {
                     id="footer_address"
                     value={settings.footer_address || ""}
                     onChange={(e) => setSettings({ ...settings, footer_address: e.target.value })}
-                    placeholder="Atatürk Cad. No:123&#10;İstanbul, Türkiye"
+                    placeholder={"Atatürk Cad. No:123\nİstanbul, Türkiye"}
                     rows={2}
                   />
                 </div>
@@ -1634,9 +1693,9 @@ export default function Settings() {
       </Tabs>
 
       <div className="flex justify-end mt-6">
-        <Button onClick={handleSave} disabled={saving} className="gap-2">
+        <Button onClick={handleSave} disabled={saving || savingPaytr} className="gap-2">
           <Save className="w-4 h-4" />
-          {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}
+          {saving || savingPaytr ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}
         </Button>
       </div>
 
@@ -1644,9 +1703,7 @@ export default function Settings() {
       <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {editingTemplate ? "Mail Şablonu Düzenle" : "Yeni Mail Şablonu"}
-            </DialogTitle>
+            <DialogTitle>{editingTemplate ? "Mail Şablonu Düzenle" : "Yeni Mail Şablonu"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1655,9 +1712,7 @@ export default function Settings() {
                 <Input
                   id="template_name"
                   value={templateForm.template_name}
-                  onChange={(e) =>
-                    setTemplateForm({ ...templateForm, template_name: e.target.value })
-                  }
+                  onChange={(e) => setTemplateForm({ ...templateForm, template_name: e.target.value })}
                   placeholder="Örn: Hoşgeldin Maili"
                 />
               </div>
@@ -1676,9 +1731,7 @@ export default function Settings() {
                     }
                     placeholder="Örn: welcome"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Kod içinde kullanılacak benzersiz anahtar
-                  </p>
+                  <p className="text-xs text-muted-foreground">Kod içinde kullanılacak benzersiz anahtar</p>
                 </div>
               )}
 
@@ -1687,14 +1740,10 @@ export default function Settings() {
                 <Input
                   id="subject"
                   value={templateForm.subject}
-                  onChange={(e) =>
-                    setTemplateForm({ ...templateForm, subject: e.target.value })
-                  }
-                  placeholder="Örn: Hoş Geldiniz - {'{'}{'{'site_name}'}'}'"
+                  onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })}
+                  placeholder={"Örn: Hoş Geldiniz - {{site_name}}"}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Değişkenler için {'{{değişken_adı}}'} formatını kullanın
-                </p>
+                <p className="text-xs text-muted-foreground">Değişkenler için {'{{değişken_adı}}'} formatını kullanın</p>
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -1718,9 +1767,7 @@ export default function Settings() {
                     className="bg-background"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  HTML formatında yazabilirsiniz. Değişkenler: {'{{user_name}}, {{site_name}}'} vb.
-                </p>
+                <p className="text-xs text-muted-foreground">HTML formatında yazabilirsiniz. Değişkenler: {'{{user_name}}, {{site_name}}'} vb.</p>
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -1739,9 +1786,7 @@ export default function Settings() {
                   }
                   placeholder="user_name, user_email, site_name"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Virgülle ayırarak yazın
-                </p>
+                <p className="text-xs text-muted-foreground">Virgülle ayırarak yazın</p>
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -1749,15 +1794,11 @@ export default function Settings() {
                   <Switch
                     id="template_is_active"
                     checked={templateForm.is_active}
-                    onCheckedChange={(checked) =>
-                      setTemplateForm({ ...templateForm, is_active: checked })
-                    }
+                    onCheckedChange={(checked) => setTemplateForm({ ...templateForm, is_active: checked })}
                   />
                   <Label htmlFor="template_is_active">Aktif</Label>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Pasif şablonlar mail gönderiminde kullanılmaz
-                </p>
+                <p className="text-xs text-muted-foreground">Pasif şablonlar mail gönderiminde kullanılmaz</p>
               </div>
             </div>
 

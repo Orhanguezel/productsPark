@@ -63,7 +63,7 @@ export default function PageList() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setPages(data || []);
+      setPages((data || []) as CustomPage[]);
     } catch (error: any) {
       console.error("Error fetching pages:", error);
       toast.error("Sayfalar yüklenirken hata oluştu");

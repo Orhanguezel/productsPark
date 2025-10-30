@@ -1,4 +1,4 @@
--- 65_payment_requests_seed.sql
+-- 87_payment_requests_seed.sql
 -- Örnek/fixture veriler. `currency` kolonu şema default'u ile TRY olur.
 
 INSERT IGNORE INTO `payment_requests`

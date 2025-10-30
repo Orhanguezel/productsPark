@@ -3,24 +3,18 @@
 // =============================================================
 import { buildAuthHeaders, readJson } from "../../http";
 import { normalizeTableRows } from "../../../normalizeTables";
+import { transformOutgoingPayload } from "../../transforms";
 import type { BuiltUrl } from "../url";
 import type { FetchResult } from "../../types";
 import type { UnknownRow } from "../../../types";
 
-/** guards & helpers (no any) */
+/** guards */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
 
-const pickString = (obj: Record<string, unknown>, key: string): string | null => {
-  const v = obj[key];
-  return typeof v === "string" && v.trim() ? v : null;
-};
-
-const looksLikeValidationError = (j: unknown): boolean => {
-  if (!isRecord(j)) return false;
-  const errObj = isRecord(j.error) ? j.error : null;
-  const msg = (errObj && pickString(errObj, "message")) || pickString(j, "message");
-  return typeof msg === "string" && msg.toLowerCase().includes("validation");
+const pick = (o: Record<string, unknown>, k: string): string | null => {
+  const v = o[k];
+  return typeof v === "string" && v ? v : null;
 };
 
 async function postOnce(url: string, body: unknown): Promise<Response> {
@@ -32,7 +26,18 @@ async function postOnce(url: string, body: unknown): Promise<Response> {
   });
 }
 
-/** site_settings için value + value_type normalize et */
+const looksLikeValidationError = (j: unknown): boolean => {
+  if (!isRecord(j)) return false;
+  const err = isRecord(j.error) ? j.error : null;
+  const msg =
+    (err && pick(err, "message")) ||
+    pick(j, "message") ||
+    pick(j, "error") ||
+    pick(j, "detail");
+  return typeof msg === "string" && msg.toLowerCase().includes("validation");
+};
+
+/** site_settings: value/value_type normalize */
 type ValueType = "string" | "number" | "boolean" | "json" | null;
 const guessType = (v: unknown): ValueType => {
   if (v === null || v === undefined) return null;
@@ -42,143 +47,109 @@ const guessType = (v: unknown): ValueType => {
   if (t === "boolean") return "boolean";
   return "json";
 };
-const toPersistable = (v: unknown): string | number | boolean | null => {
+const toPersist = (v: unknown): string | number | boolean | null => {
   if (v === null || v === undefined) return null;
   if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v;
   try { return JSON.stringify(v); } catch { return String(v); }
 };
-
-function normalizeSiteSettingsPayload(payload: UnknownRow[]): UnknownRow[] {
-  return payload.map((r) => {
-    const key = String(r.key ?? "");
-    const valueRaw = (r as Record<string, unknown>).value;
-    const vt = guessType(valueRaw);
-    const value = toPersistable(valueRaw);
-    const out: Record<string, unknown> = { key, value };
-    if (vt) out.value_type = vt;
-    return out as UnknownRow;
+function normalizeSiteSettingsPayload(payload: UnknownRow | UnknownRow[]): UnknownRow | UnknownRow[] {
+  const arr = Array.isArray(payload) ? payload : [payload];
+  const out = arr.map((r) => {
+    const rec = r as Record<string, unknown>;
+    const key = String(rec.key ?? "");
+    const vt = guessType(rec.value);
+    const value = toPersist(rec.value);
+    const o: Record<string, unknown> = { key, value };
+    if (vt) o.value_type = vt;
+    return o as UnknownRow;
   });
+  return Array.isArray(payload) ? out : out[0];
 }
 
-/** Toplu istek başarısız olursa tek tek deneyip ilk hatayı detayla döndür */
-async function tryInsertIndividually(
-  url: string,
-  items: UnknownRow[],
-  allowArrayEnvelope: boolean
-): Promise<{ ok: boolean; res?: Response; errMsg?: string }> {
-  for (let i = 0; i < items.length; i++) {
-    const rec = items[i];
-    // 1) tekil obje dene
-    let r = await postOnce(url, rec);
-    if (!r.ok) {
-      // 2) bazı backend’ler tek elemanlı dizi ister
-      if (allowArrayEnvelope) {
-        r = await postOnce(url, [rec]);
-      }
-    }
-    if (!r.ok) {
-      let msg = `validation_error_at_${i}`;
-      try {
-        const j = await readJson(r);
-        if (isRecord(j)) {
-          const cand =
-            pickString(j, "message") ??
-            (isRecord(j.error) ? pickString(j.error, "message") : null) ??
-            pickString(j, "error") ??
-            pickString(j, "detail");
-          if (cand) msg = `${msg}:${cand}`;
-        }
-      } catch { /* noop */ }
-      // hata aldık → dur ve bildir
-      return { ok: false, res: r, errMsg: msg };
-    }
-  }
-  return { ok: true };
-}
+/** yalnızca object⇄[object] fallback; wrapper'lar devre dışı */
+const isStrictObjectEndpoint = (path: string): boolean =>
+  /^\/(orders|admin\/orders|order_items|admin\/order_items|payment_requests|admin\/payment_requests)(\/|$)/.test(
+    path
+  );
 
+const isOrdersEndpoint = (path: string): boolean =>
+  /^\/(orders|admin\/orders)(\/|$)/.test(path);
+
+/** asıl insert */
 export async function runInsert<TRow>(
   built: BuiltUrl,
   rows: UnknownRow | UnknownRow[]
 ): Promise<FetchResult<TRow[]>> {
-  const given = Array.isArray(rows) ? rows : [rows];
+  // 0) OUTBOUND DÖNÜŞÜM (kritik!)
+  let prepared = transformOutgoingPayload(built.path, rows);
 
-  // site_settings özel normalizasyonu (value_type + JSON stringify)
+  // 0.1) /orders POST her zaman **tek obje** bekler → array geldiyse ilk öğeyi al
+  if (isOrdersEndpoint(built.path) && Array.isArray(prepared)) {
+    prepared = prepared[0] ?? {};
+  }
+
+  // 0.2) site_settings özel normalize
   const isSiteSettings =
     built.path.includes("/site_settings") || built.url.includes("/site_settings");
-  const payload = isSiteSettings ? normalizeSiteSettingsPayload(given) : given;
+  const firstBody = isSiteSettings ? normalizeSiteSettingsPayload(prepared) : prepared;
 
-  // 1) İlk deneme: ham dizi
-  let res = await postOnce(built.url, payload);
+  // 1) İlk deneme: DÖNÜŞTÜRÜLMÜŞ hâli gönder
+  let res = await postOnce(built.url, firstBody);
 
+  // 2) Başarısızsa **yalnızca** object⇄[object] fallback dene
   if (!res.ok) {
-    let msg = `request_failed_${res.status}`;
     let j: unknown = null;
     try { j = await readJson(res); } catch { /* noop */ }
 
-    // 2) "validation" görünüyorsa wrapper denemeleri
-    if (j && looksLikeValidationError(j)) {
-      const wrappers: ReadonlyArray<Record<string, unknown>> = [
-        { settings: payload },
-        { records:  payload },
-        { items:    payload },
-        { data:     payload },
-      ];
+    if (looksLikeValidationError(j)) {
+      const attempts: unknown[] = [];
+      const wasArray = Array.isArray(firstBody);
 
-      for (const w of wrappers) {
-        const retry = await postOnce(built.url, w);
-        if (retry.ok) { res = retry; break; }
-
-        let jj: unknown = null;
-        try { jj = await readJson(retry); } catch { /* noop */ }
-
-        // 3) Hâlâ validation ise tek tek dene (tekil obje / tek elemanlı dizi)
-        if (jj && looksLikeValidationError(jj)) {
-          const indiv = await tryInsertIndividually(
-            built.url,
-            payload,
-            /* allowArrayEnvelope */ true
-          );
-          if (indiv.ok) {
-            // tek tek başarılı → “boş ama ok” dön (çıktıyı normalleyecek veri yoksa)
-            return { data: [] as unknown as TRow[], error: null };
-          }
-          // tek tekte de hata → bunu kullan
-          res = indiv.res ?? retry;
-          j = jj ?? j;
-          break;
-        } else {
-          // farklı hata → kır
-          res = retry;
-          j = jj ?? j;
-          break;
-        }
+      if (!wasArray) attempts.push([firstBody]);  // tekil → tek elemanlı dizi
+      if (wasArray && (firstBody as unknown[]).length > 0) {
+        attempts.push((firstBody as unknown[])[0]); // dizi → tekil
       }
-    }
 
-    if (!res.ok) {
-      // son hatayı mesajlaştır
-      try {
-        const last = j ?? (await readJson(res));
-        if (isRecord(last)) {
-          const cand =
-            pickString(last, "message") ??
-            (isRecord(last.error) ? pickString(last.error, "message") : null) ??
-            pickString(last, "error") ??
-            pickString(last, "detail");
-          if (cand) msg = cand;
-        }
-      } catch { /* noop */ }
-      return { data: null, error: { message: msg, status: res.status } };
+      for (const alt of attempts) {
+        const r = await postOnce(built.url, alt);
+        if (r.ok) { res = r; break; }
+        res = r; // son hatayı tut
+      }
     }
   }
 
-  // OK → JSON yükle ve normalize et
+  if (!res.ok) {
+    // son hatayı toparla
+    let msg = `request_failed_${res.status}`;
+    try {
+      const last = await readJson(res);
+      if (isRecord(last)) {
+        const cand =
+          pick(last, "message") ||
+          (isRecord(last.error) ? pick(last.error, "message") : null) ||
+          pick(last, "error") ||
+          pick(last, "detail");
+        if (cand) msg = cand;
+      }
+    } catch { /* noop */ }
+    return { data: null, error: { message: msg, status: res.status } };
+  }
+
+  // OK → JSON al & normalize et
   let json: unknown = null;
   try { json = await res.json(); } catch { json = null; }
 
-  let data = (Array.isArray(json) ? json : null) as TRow[] | null;
-  if (data) {
-    data = normalizeTableRows(built.path, data as unknown as UnknownRow[]) as unknown as TRow[];
+  let arr: UnknownRow[];
+  if (Array.isArray(json)) {
+    arr = json as UnknownRow[];
+  } else if (isRecord(json) && Array.isArray((json ).data)) {
+    arr = (json).data as UnknownRow[];
+  } else if (isRecord(json) && Object.keys(json).length) {
+    arr = [json as UnknownRow];
+  } else {
+    arr = [];
   }
+
+  const data = normalizeTableRows(built.path, arr) as unknown as TRow[];
   return { data, error: null };
 }

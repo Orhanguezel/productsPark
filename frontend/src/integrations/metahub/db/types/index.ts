@@ -37,6 +37,13 @@ export type { ProfileRow, UserRoleRow } from "./users";
 export type { WalletTransactionRow, WalletDepositRequestRow } from "./wallet";
 export type { SupportTicketView, TicketReplyView } from "./support";
 
+export type {
+  ApiPaymentRow, PaymentRow,
+  ApiPaymentRequestRow, PaymentRequestRow,
+  ApiPaymentSessionRow, PaymentSessionRow,
+  PaymentProviderRow,
+} from "./payments";
+
 /* ===========================
  * Known Tables & TableRow map
  * =========================== */
@@ -56,6 +63,9 @@ export type KnownTables =
   | "profiles"
   | "wallet_transactions"
   | "wallet_deposit_requests"
+  | "payment_providers"
+  | "payment_sessions"
+  | "payments"
   | "payment_requests"
   | "product_variants"
   | "product_options"
@@ -67,8 +77,7 @@ export type KnownTables =
   | "menu_items"
   | "footer_sections"
   | "custom_pages"
-  | "payment_providers"
-  | "payment_sessions"
+
   | "uploads"
   | "notifications"
   | "activity_logs"
@@ -101,6 +110,10 @@ export type TableRow<TName extends string> =
   TName extends "wallet_deposit_requests" ? import("./wallet").WalletDepositRequestRow :
   TName extends "profiles" ? import("./users").ProfileRow :
   TName extends "product_stock" ? import("./products").ProductStockRow :
+  TName extends "payments" ? import("./payments").PaymentRow :                 // NEW
+  TName extends "payment_requests" ? import("./payments").PaymentRequestRow :  // NEW
+  TName extends "payment_sessions" ? import("./payments").PaymentSessionRow :  // NEW
+  TName extends "payment_providers" ? import("./payments").PaymentProviderRow :
   TName extends "orders" ? import("./orders").OrderView :
   TName extends "order_items" ? import("./orders").OrderItemView :
   TName extends "api_providers" ? import("./apiProviders").ApiProviderRow :
