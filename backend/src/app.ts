@@ -40,6 +40,8 @@ import { registerCustomPagesAdmin } from "@/modules/customPages/admin.routes";
 import { registerSiteSettingsAdmin } from '@/modules/siteSettings/admin.routes';
 import { registerAdminOrders } from '@/modules/orders/admin.routes';
 import { registerPaymentsAdmin } from "@/modules/payments/admin.routes";
+import { registerUserAdmin } from "@/modules/auth/admin.routes";
+import { registerEmailTemplatesAdmin } from "@/modules/email-templates/admin.routes";
 import { registerApiProviders } from "@/modules/api_providers/router";
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
@@ -63,13 +65,21 @@ export async function createApp() {
 
   // --- CORS ---
   await app.register(cors, {
-    origin: parseCorsOrigins(env.CORS_ORIGIN as any),
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Prefer'],
-    exposedHeaders: ['x-total-count', 'content-range'],
-    // preflight varsayılanı true -> plugin kendi OPTIONS /* rotasını ekler
-  });
+  origin: parseCorsOrigins(env.CORS_ORIGIN as any),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Prefer',
+    'Accept',
+    'Accept-Language',
+    'x-skip-auth',
+    'Range',
+  ],
+  exposedHeaders: ['x-total-count', 'content-range', 'range'],
+});
+
 
 
 
@@ -118,6 +128,8 @@ export async function createApp() {
   await registerSiteSettingsAdmin(app);
   await registerAdminOrders(app);
   await registerPaymentsAdmin(app);
+  await registerUserAdmin(app);
+  await registerEmailTemplatesAdmin(app);
   await registerAuth(app);
   await registerRest(app);
   await registerStorage(app);

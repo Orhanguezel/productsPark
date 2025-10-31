@@ -1,5 +1,4 @@
 // src/integrations/metahub/rtk/endpoints/auth.endpoints.ts
-
 import { baseApi } from "../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
 import type { User } from "@/integrations/metahub/core/types";
@@ -36,7 +35,6 @@ export type StatusResp = {
  * ----------------------------- */
 export const authApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    /** Email/şifre ile giriş */
     token: b.mutation<TokenResp, { email: string; password: string }>({
       query: ({ email, password }): FetchArgs => ({
         url: "/auth/v1/token",
@@ -46,7 +44,6 @@ export const authApi = baseApi.injectEndpoints({
       invalidatesTags: ["Auth", "User"],
     }),
 
-    /** Kayıt (BE: TokenResp döner) */
     signUp: b.mutation<TokenResp, SignUpBody>({
       query: (body): FetchArgs => ({
         url: "/auth/v1/signup",
@@ -56,31 +53,26 @@ export const authApi = baseApi.injectEndpoints({
       invalidatesTags: ["Auth", "User"],
     }),
 
-    /** Oturum yenileme (cookie refresh) */
     refresh: b.mutation<{ access_token: string; token_type: "bearer" }, void>({
       query: (): FetchArgs => ({ url: "/auth/v1/token/refresh", method: "POST" }),
       invalidatesTags: ["Auth"],
     }),
 
-    /** Me */
     me: b.query<UserResp, void>({
       query: (): FetchArgs => ({ url: "/auth/v1/user", method: "GET" }),
       providesTags: ["Auth", "User"],
     }),
 
-    /** FE Navbar için basit durum */
     status: b.query<StatusResp, void>({
       query: (): FetchArgs => ({ url: "/auth/v1/status", method: "GET" }),
       providesTags: ["Auth", "User"],
     }),
 
-    /** Çıkış */
     logout: b.mutation<void, void>({
       query: (): FetchArgs => ({ url: "/auth/v1/logout", method: "POST" }),
       invalidatesTags: ["Auth", "User"],
     }),
 
-    /** Google — ID token ile direkt giriş */
     signInWithGoogle: b.mutation<TokenResp, { idToken: string }>({
       query: ({ idToken }): FetchArgs => ({
         url: "/auth/v1/google",
@@ -90,7 +82,6 @@ export const authApi = baseApi.injectEndpoints({
       invalidatesTags: ["Auth", "User"],
     }),
 
-    /** Google — redirect akışı başlat */
     googleStart: b.mutation<{ url: string }, { redirectTo?: string }>({
       query: ({ redirectTo }): FetchArgs => ({
         url: "/auth/v1/google/start",
@@ -99,7 +90,6 @@ export const authApi = baseApi.injectEndpoints({
       }),
     }),
 
-    /** Profil / hesap güncelleme */
     updateUser: b.mutation<UserResp, Partial<User> & { password?: string }>({
       query: (body): FetchArgs => ({
         url: "/auth/v1/user",
@@ -124,7 +114,6 @@ export const {
   useUpdateUserMutation,
 } = authApi;
 
-/* Eski isimlerle alias (UI uyumu) */
 export const useLoginMutation = useTokenMutation;
 export const useSignupMutation = useSignUpMutation;
 export const useGetSessionQuery = useMeQuery;

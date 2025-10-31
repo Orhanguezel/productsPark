@@ -39,6 +39,7 @@ export const userRoles = mysqlTable(
     // Arama performansı için indexler
     index("user_roles_user_id_idx").on(t.user_id),
     index("user_roles_role_idx").on(t.role),
+    index("user_roles_user_id_created_at_idx").on(t.user_id, t.created_at),
   ],
 );
 

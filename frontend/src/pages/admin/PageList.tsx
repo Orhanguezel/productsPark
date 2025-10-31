@@ -73,17 +73,23 @@ export default function PageList() {
   };
 
   const handleDelete = async (id: string) => {
-    try {
-      const { error } = await metahub.from("custom_pages").delete().eq("id", id);
+  try {
+    // optimistic
+    setPages(prev => prev.filter(p => p.id !== id));
 
-      if (error) throw error;
-      toast.success("Sayfa silindi");
-      fetchPages();
-    } catch (error: any) {
-      console.error("Error deleting page:", error);
-      toast.error("Sayfa silinirken hata oluştu");
-    }
-  };
+    const { error } = await metahub.from("custom_pages").delete().eq("id", id);
+    if (error) throw error;
+
+    toast.success("Sayfa silindi");
+    // güvence için arkadan yenile
+    fetchPages();
+  } catch (err) {
+    console.error("Error deleting page:", err);
+    toast.error("Sayfa silinirken hata oluştu");
+    // optimistic geri al
+    await fetchPages();
+  }
+};
 
   if (loading) {
     return (

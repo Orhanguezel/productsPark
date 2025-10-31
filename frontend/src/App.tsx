@@ -71,7 +71,6 @@ const PopupList = lazy(() => import("./pages/admin/PopupList"));
 const PopupForm = lazy(() => import("./pages/admin/PopupForm"));
 const EmailTemplateList = lazy(() => import("./pages/admin/EmailTemplateList"));
 const EmailTemplateForm = lazy(() => import("./pages/admin/EmailTemplateForm"));
-const UpdateManagement = lazy(() => import("./pages/admin/UpdateManagement"));
 const BackupManagement = lazy(() => import("./pages/admin/BackupManagement"));
 const DeleteUserOrders = lazy(() => import("./pages/admin/DeleteUserOrders"));
 
@@ -158,7 +157,6 @@ const AppContent = () => {
             <Route path="/admin/popups/edit/:id" element={<PopupForm />} />
             <Route path="/admin/email-templates" element={<EmailTemplateList />} />
             <Route path="/admin/email-templates/:id" element={<EmailTemplateForm />} />
-            <Route path="/admin/updates" element={<UpdateManagement />} />
             <Route path="/admin/backup" element={<BackupManagement />} />
             <Route path="/admin/delete-user-orders" element={<DeleteUserOrders />} />
             <Route path="/hesabim" element={<Dashboard />} />

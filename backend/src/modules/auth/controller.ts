@@ -6,6 +6,7 @@ import { randomUUID, createHash } from 'crypto';
 import { db } from '@/db/client';
 import { users, refresh_tokens } from './schema';
 import { userRoles } from '@/modules/userRoles/schema';
+import { getPrimaryRole } from '@/modules/userRoles/service';
 import { desc, eq, like, and } from 'drizzle-orm';
 import { hash as argonHash, verify as argonVerify } from 'argon2';
 import bcrypt from 'bcryptjs';
@@ -163,16 +164,6 @@ async function verifyPasswordSmart(storedHash: string, plain: string): Promise<b
   return argonVerify(storedHash, plain);
 }
 
-async function getUserRole(userId: string): Promise<Role> {
-  const rows = await db
-    .select({ role: userRoles.role })
-    .from(userRoles)
-    .where(eq(userRoles.user_id, userId))
-    .orderBy(desc(userRoles.created_at))
-    .limit(1);
-  return (rows[0]?.role ?? 'user') as Role;
-}
-
 /* -------------------- access + refresh üretimi / rotasyonu -------------------- */
 
 async function issueTokens(app: FastifyInstance, u: UserRow, role: Role) {
@@ -311,7 +302,7 @@ export function makeAuthController(app: FastifyInstance) {
 
       await ensureProfileRow(u.id);
 
-      const role = await getUserRole(u.id);
+      const role = await getPrimaryRole(u.id);
       const { access, refresh } = await issueTokens(app, u, role);
 
       setAccessCookie(reply, access);
@@ -348,7 +339,7 @@ export function makeAuthController(app: FastifyInstance) {
       const u = (await db.select().from(users).where(eq(users.id, row.user_id)).limit(1))[0];
       if (!u) return reply.status(401).send({ error: { message: 'invalid_user' } });
 
-      const role = await getUserRole(u.id);
+      const role = await getPrimaryRole(u.id);
       const access = jwt.sign({ sub: u.id, email: u.email ?? undefined, role }, { expiresIn: `${ACCESS_MAX_AGE}s` });
       const newRaw = await rotateRefresh(raw, u.id);
 
@@ -420,7 +411,7 @@ export function makeAuthController(app: FastifyInstance) {
         await ensureProfileRow(u.id, { full_name: full_name ?? null });
       }
 
-      const role = await getUserRole(u.id);
+      const role = await getPrimaryRole(u.id);
       const { access, refresh } = await issueTokens(app, u, role);
 
       setAccessCookie(reply, access);
@@ -490,7 +481,7 @@ export function makeAuthController(app: FastifyInstance) {
 
       try {
         const p = jwt.verify(token);
-        const role = await getUserRole(p.sub);
+        const role = await getPrimaryRole(p.sub);
         return reply.send({ user: { id: p.sub, email: p.email ?? null, role } });
       } catch {
         return reply.status(401).send({ error: { message: 'invalid_token' } });
@@ -503,7 +494,7 @@ export function makeAuthController(app: FastifyInstance) {
 
       try {
         const p = jwt.verify(token);
-        const role = await getUserRole(p.sub);
+        const role = await getPrimaryRole(p.sub);
         return reply.send({
           authenticated: true,
           is_admin: role === 'admin',
@@ -539,7 +530,7 @@ export function makeAuthController(app: FastifyInstance) {
         await db.update(users).set({ password_hash, updated_at: new Date() }).where(eq(users.id, p.sub));
       }
 
-      const role = await getUserRole(p.sub);
+      const role = await getPrimaryRole(p.sub);
       return reply.send({ user: { id: p.sub, email: p.email ?? null, role } });
     },
 
@@ -575,7 +566,7 @@ export function makeAuthController(app: FastifyInstance) {
 
       // rol bilgisini ekle
       const withRole = await Promise.all(
-        rows.map(async (u) => ({ ...u, role: await getUserRole(u.id) }))
+        rows.map(async (u) => ({ ...u, role: await getPrimaryRole(u.id) }))
       );
 
       return reply.send(withRole);
@@ -593,7 +584,7 @@ export function makeAuthController(app: FastifyInstance) {
       const u = rows[0];
       if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
 
-      const role = await getUserRole(u.id);
+      const role = await getPrimaryRole(u.id);
       return reply.send({
         user: {
           id: u.id,

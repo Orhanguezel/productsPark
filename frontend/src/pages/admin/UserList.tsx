@@ -1,101 +1,106 @@
-import { useEffect, useState } from "react";
+// src/pages/admin/UserList.tsx
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+  Pagination, PaginationContent, PaginationItem, PaginationLink,
+  PaginationNext, PaginationPrevious,
 } from "@/components/ui/pagination";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import {
+  useListUsersAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
+import type { User as AdminApiUser } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
+import type { UserRoleName } from "@/integrations/metahub/db/types/users";
 
-interface User {
+// UI tipi (tabloda gösterilecek alanlar)
+interface UIUser {
   id: string;
   email: string;
   full_name: string | null;
-  wallet_balance: number;
+  wallet_balance: number; // Admin API’de yoksa 0 gösteriyoruz
   is_active: boolean;
   created_at: string;
-  role: string;
+  role: UserRoleName;
+}
+
+// rol önceliği
+const ROLE_WEIGHT: Record<UserRoleName, number> = {
+  admin: 3,
+  moderator: 2,
+  user: 1,
+};
+
+function pickPrimaryRole(roles: ReadonlyArray<string> | undefined | null): UserRoleName {
+  if (!roles || roles.length === 0) return "user";
+  let best: UserRoleName = "user";
+  for (const r of roles) {
+    const rr = String(r).toLowerCase() as UserRoleName;
+    if (rr in ROLE_WEIGHT && ROLE_WEIGHT[rr] > ROLE_WEIGHT[best]) best = rr;
+  }
+  return best;
 }
 
 export default function UserList() {
   const navigate = useNavigate();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Server-side admin endpoint (RLS yok)
+  const {
+    data: adminData,
+    isFetching,
+    isError,
+    error,
+  } = useListUsersAdminQuery({
+    limit: 200,
+    sort: "created_at",
+    order: "desc",  
+  });
+  // Hata durumlarını kullanıcıya göster
+  useEffect(() => {
+    if (!isError) return;
+    const code = (error as { status?: number })?.status;
+    if (code === 401) toast.error("Giriş yapmalısınız.");
+    else if (code === 403) toast.error("Bu sayfayı görmek için yetkiniz (admin) yok.");
+    else toast.error("Kullanıcılar yüklenirken hata oluştu.");
+  }, [isError, error]);
+
+  // Admin API'den gelen veriyi UI modeline map et
+  const users: UIUser[] = useMemo(() => {
+    const rows = Array.isArray(adminData) ? adminData : [];
+    return rows.map((u: AdminApiUser): UIUser => ({
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name,
+      wallet_balance: 0, // backend’den şimdilik alınmıyor
+      is_active: u.is_active,
+      created_at: u.created_at,
+      role: pickPrimaryRole(u.roles),
+    }));
+  }, [adminData]);
+
+  // Arama + sayfalama
   const [searchTerm, setSearchTerm] = useState("");
-  const [totalUsers, setTotalUsers] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const filteredUsers = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.full_name && u.full_name.toLowerCase().includes(q))
+    );
+  }, [users, searchTerm]);
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const { data: profilesData, error: profilesError } = await metahub
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      // Get user roles
-      const usersWithDetails = await Promise.all(
-        profilesData.map(async (profile) => {
-          const { data: roleData } = await metahub
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", profile.id)
-            .maybeSingle();
-
-          return {
-            id: profile.id,
-            email: profile.email || "N/A",
-            full_name: profile.full_name,
-            wallet_balance: parseFloat(profile.wallet_balance?.toString() || "0"),
-            is_active: profile.is_active ?? true,
-            created_at: profile.created_at,
-            role: roleData?.role || "user",
-          };
-        })
-      );
-
-      setUsers(usersWithDetails);
-      setTotalUsers(usersWithDetails.length);
-    } catch (error: any) {
-      console.error("Error fetching users:", error);
-      toast.error("Kullanıcılar yüklenirken hata oluştu");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredUsers = users.filter(
-    (user) =>
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const totalUsers = filteredUsers.length;
+  const totalPages = Math.ceil(totalUsers / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedUsers = filteredUsers.slice(startIndex, startIndex + itemsPerPage);
 
@@ -116,17 +121,20 @@ export default function UserList() {
           <Input
             placeholder="Email veya isim ara..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
             className="max-w-sm"
           />
         </div>
 
-        {loading ? (
+        {isFetching ? (
           <div className="flex items-center justify-center py-8">
             <p>Yükleniyor...</p>
           </div>
         ) : (
-          <div className="border rounded-lg">
+          <div className="border rounded-lg overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -155,7 +163,7 @@ export default function UserList() {
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
                         <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                          {user.role === "admin" ? "Admin" : "Kullanıcı"}
+                          {user.role === "admin" ? "Admin" : user.role === "moderator" ? "Moderatör" : "Kullanıcı"}
                         </Badge>
                       </TableCell>
                       <TableCell>₺{user.wallet_balance.toFixed(2)}</TableCell>
@@ -193,7 +201,7 @@ export default function UserList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
+                    setCurrentPage((p) => Math.max(1, p - 1));
                   }}
                 />
               </PaginationItem>
@@ -216,7 +224,7 @@ export default function UserList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                    setCurrentPage((p) => Math.min(totalPages, p + 1));
                   }}
                 />
               </PaginationItem>
