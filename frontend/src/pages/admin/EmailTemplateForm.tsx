@@ -1,4 +1,7 @@
-import { useState, useEffect } from "react";
+// =============================================================
+// FILE: src/pages/admin/email-templates/EmailTemplateForm.tsx
+// =============================================================
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -6,118 +9,125 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { metahub } from "@/integrations/metahub/client";
 import { toast } from "sonner";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+import {
+  useGetEmailTemplateAdminByIdQuery,
+  useCreateEmailTemplateAdminMutation,
+  useUpdateEmailTemplateAdminMutation,
+  useDeleteEmailTemplateAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints";
 
-interface EmailTemplate {
-  template_key: string;
-  template_name: string;
+type FormState = {
+  key: string;
+  name: string;
   subject: string;
-  content: string;
+  content_html: string;
   variables: string[];
   is_active: boolean;
-}
+  locale?: string | null;
+};
 
-const defaultTemplate: EmailTemplate = {
-  template_key: "",
-  template_name: "",
+const defaultTemplate: FormState = {
+  key: "",
+  name: "",
   subject: "",
-  content: "",
+  content_html: "",
   variables: [],
   is_active: true,
+  locale: null,
 };
 
 export default function EmailTemplateForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [template, setTemplate] = useState<EmailTemplate>(defaultTemplate);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const isEdit = !!id && id !== "new";
+
+  const { data, isFetching } = useGetEmailTemplateAdminByIdQuery(id as string, {
+    skip: !isEdit,
+  });
+
+  const [createTemplate, { isLoading: isCreating }] = useCreateEmailTemplateAdminMutation();
+  const [updateTemplate, { isLoading: isUpdating }] = useUpdateEmailTemplateAdminMutation();
+  const [deleteTemplate, { isLoading: isDeleting }] = useDeleteEmailTemplateAdminMutation();
+
+  const [template, setTemplate] = useState<FormState>(defaultTemplate);
+  const saving = isCreating || isUpdating;
 
   useEffect(() => {
-    if (id && id !== "new") {
-      fetchTemplate();
+    if (isEdit && data) {
+      setTemplate({
+        key: data.key,
+        name: data.name,
+        subject: data.subject,
+        content_html: data.content_html,
+        variables: data.variables,
+        is_active: data.is_active,
+        locale: data.locale ?? null,
+      });
+    } else if (!isEdit) {
+      setTemplate(defaultTemplate);
     }
-  }, [id]);
+  }, [isEdit, data]);
 
-  const fetchTemplate = async () => {
+  const canSave = useMemo(
+    () => !!template.name && !!template.subject && !!template.content_html && (!isEdit ? !!template.key : true),
+    [template, isEdit]
+  );
+
+  const handleSave = async () => {
+    if (!canSave) {
+      toast.error("Lütfen zorunlu alanları doldurun.");
+      return;
+    }
     try {
-      setLoading(true);
-      const { data, error } = await metahub
-        .from("email_templates")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) throw error;
-      if (data) {
-        const variables = Array.isArray(data.variables)
-          ? data.variables.filter((v): v is string => typeof v === 'string')
-          : [];
-
-        setTemplate({
-          template_key: data.template_key,
-          template_name: data.template_name,
-          subject: data.subject,
-          content: data.content,
-          variables,
-          is_active: data.is_active,
-        });
+      if (isEdit) {
+        await updateTemplate({
+          id: id as string,
+          body: {
+            // BE alan adları
+            template_name: template.name,
+            subject: template.subject,
+            content: template.content_html,
+            variables: template.variables, // array göndermek OK
+            is_active: template.is_active,
+            locale: template.locale ?? null,
+          },
+        }).unwrap();
+        toast.success("Şablon güncellendi");
+      } else {
+        await createTemplate({
+          // BE alan adları
+          template_key: template.key.toLowerCase().replace(/\s+/g, "_"),
+          template_name: template.name,
+          subject: template.subject,
+          content: template.content_html,
+          variables: template.variables,
+          is_active: template.is_active,
+          locale: template.locale ?? null,
+        }).unwrap();
+        toast.success("Şablon oluşturuldu");
       }
-    } catch (error) {
-      console.error("Error fetching template:", error);
-      toast.error("Şablon yüklenirken hata oluştu");
-    } finally {
-      setLoading(false);
+      navigate("/admin/email-templates");
+    } catch (e) {
+      console.error(e);
+      toast.error("Şablon kaydedilirken hata oluştu");
     }
   };
 
-  const handleSave = async () => {
-    if (!template.template_name || !template.subject || !template.content) {
-      toast.error("Lütfen tüm zorunlu alanları doldurun");
-      return;
-    }
-
+  const handleDelete = async () => {
+    if (!isEdit || !id) return;
+    const ok = window.confirm("Bu şablonu silmek istediğinizden emin misiniz?");
+    if (!ok) return;
     try {
-      setSaving(true);
-
-      if (id && id !== "new") {
-        const { error } = await metahub
-          .from("email_templates")
-          .update({
-            template_name: template.template_name,
-            subject: template.subject,
-            content: template.content,
-            variables: template.variables,
-            is_active: template.is_active,
-          })
-          .eq("id", id);
-
-        if (error) throw error;
-        toast.success("Şablon güncellendi");
-      } else {
-        const { error } = await metahub.from("email_templates").insert({
-          template_key: template.template_key,
-          template_name: template.template_name,
-          subject: template.subject,
-          content: template.content,
-          variables: template.variables,
-          is_active: template.is_active,
-        });
-
-        if (error) throw error;
-        toast.success("Şablon oluşturuldu");
-      }
-
+      await deleteTemplate(id as string).unwrap();
+      toast.success("Şablon silindi");
       navigate("/admin/email-templates");
-    } catch (error: any) {
-      console.error("Error saving template:", error);
-      toast.error("Şablon kaydedilirken hata oluştu: " + error.message);
-    } finally {
-      setSaving(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Şablon silinirken hata oluştu");
     }
   };
 
@@ -134,18 +144,24 @@ export default function EmailTemplateForm() {
   };
 
   return (
-    <AdminLayout
-      title={id && id !== "new" ? "Mail Şablonu Düzenle" : "Yeni Mail Şablonu"}
-    >
+    <AdminLayout title={isEdit ? "Mail Şablonu Düzenle" : "Yeni Mail Şablonu"}>
       <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/email-templates")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Geri
-          </Button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/admin/email-templates")}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Geri
+            </Button>
+          </div>
+          {isEdit && (
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              {isDeleting ? "Siliniyor..." : "Sil"}
+            </Button>
+          )}
         </div>
 
-        {loading ? (
+        {isEdit && isFetching ? (
           <Card>
             <CardContent className="py-8">
               <p className="text-center text-muted-foreground">Yükleniyor...</p>
@@ -159,34 +175,30 @@ export default function EmailTemplateForm() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="template_name">Şablon Adı *</Label>
+                  <Label htmlFor="name">Şablon Adı *</Label>
                   <Input
-                    id="template_name"
-                    value={template.template_name}
-                    onChange={(e) =>
-                      setTemplate({ ...template, template_name: e.target.value })
-                    }
+                    id="name"
+                    value={template.name}
+                    onChange={(e) => setTemplate({ ...template, name: e.target.value })}
                     placeholder="Örn: Hoşgeldin Maili"
                   />
                 </div>
 
-                {(!id || id === "new") && (
+                {!isEdit && (
                   <div className="space-y-2">
-                    <Label htmlFor="template_key">Şablon Anahtarı *</Label>
+                    <Label htmlFor="key">Şablon Anahtarı *</Label>
                     <Input
-                      id="template_key"
-                      value={template.template_key}
+                      id="key"
+                      value={template.key}
                       onChange={(e) =>
                         setTemplate({
                           ...template,
-                          template_key: e.target.value.toLowerCase().replace(/\s+/g, "_"),
+                          key: e.target.value.toLowerCase().replace(/\s+/g, "_"),
                         })
                       }
                       placeholder="Örn: welcome"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Kod içinde kullanılacak benzersiz anahtar
-                    </p>
+                    <p className="text-xs text-muted-foreground">Kod içinde kullanılacak benzersiz anahtar</p>
                   </div>
                 )}
 
@@ -195,14 +207,10 @@ export default function EmailTemplateForm() {
                   <Input
                     id="subject"
                     value={template.subject}
-                    onChange={(e) =>
-                      setTemplate({ ...template, subject: e.target.value })
-                    }
-                    placeholder="Örn: Hoş Geldiniz - {'{'}{'{'site_name}'}'}'"
+                    onChange={(e) => setTemplate({ ...template, subject: e.target.value })}
+                    placeholder="Örn: Hoş Geldiniz - {{site_name}}"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Değişkenler için {'{{değişken_adı}}'} formatını kullanın
-                  </p>
+                  <p className="text-xs text-muted-foreground">Değişkenler için {'{{degisken_adi}}'} formatını kullanın</p>
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
@@ -210,14 +218,14 @@ export default function EmailTemplateForm() {
                   <div className="border rounded-md">
                     <ReactQuill
                       theme="snow"
-                      value={template.content}
-                      onChange={(value) => setTemplate({ ...template, content: value })}
+                      value={template.content_html}
+                      onChange={(value) => setTemplate({ ...template, content_html: value })}
                       modules={modules}
                       className="bg-background"
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    HTML formatında yazabilirsiniz. Değişkenler: {'{{user_name}}, {{site_name}}'} vb.
+                    HTML yazın. Değişkenler: {'{{user_name}}, {{site_name}}'} vb.
                   </p>
                 </div>
 
@@ -232,14 +240,12 @@ export default function EmailTemplateForm() {
                         variables: e.target.value
                           .split(",")
                           .map((v) => v.trim())
-                          .filter((v) => v),
+                          .filter((v) => v.length > 0),
                       })
                     }
                     placeholder="user_name, user_email, site_name"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Virgülle ayırarak yazın
-                  </p>
+                  <p className="text-xs text-muted-foreground">Virgülle ayırın</p>
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
@@ -247,15 +253,10 @@ export default function EmailTemplateForm() {
                     <Switch
                       id="is_active"
                       checked={template.is_active}
-                      onCheckedChange={(checked) =>
-                        setTemplate({ ...template, is_active: checked })
-                      }
+                      onCheckedChange={(checked) => setTemplate({ ...template, is_active: checked })}
                     />
                     <Label htmlFor="is_active">Aktif</Label>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Pasif şablonlar mail gönderiminde kullanılmaz
-                  </p>
                 </div>
               </div>
 
@@ -263,7 +264,7 @@ export default function EmailTemplateForm() {
                 <Button variant="outline" onClick={() => navigate("/admin/email-templates")}>
                   İptal
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
+                <Button onClick={handleSave} disabled={saving || !canSave}>
                   <Save className="w-4 h-4 mr-2" />
                   {saving ? "Kaydediliyor..." : "Kaydet"}
                 </Button>

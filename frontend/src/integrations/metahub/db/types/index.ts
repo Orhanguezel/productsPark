@@ -33,7 +33,9 @@ export type {
   OrderView,
   OrderItemView,
 } from "./orders";
-export type { ProfileRow, UserRoleRow } from "./users";
+
+export type { ProfileRow, UserRoleRow, AdminUserRaw, AdminUserView, UserRoleName } from "./users";
+
 export type { WalletTransactionRow, WalletDepositRequestRow } from "./wallet";
 export type { SupportTicketView, TicketReplyView } from "./support";
 

@@ -29,6 +29,23 @@ function extractIdFromSearch(u: string): string | null {
   }
 }
 
+// 🔎 site_settings için ?key=... yakala
+function extractKeyFromSearch(u: string): string | null {
+  try {
+    const url = new URL(u, BASE_URL);
+    return url.searchParams.get("key");
+  } catch {
+    return null;
+  }
+}
+
+function detectValueType(v: unknown): "string" | "number" | "boolean" | "json" {
+  if (typeof v === "boolean") return "boolean";
+  if (typeof v === "number") return "number";
+  if (v !== null && typeof v === "object") return "json";
+  return "string";
+}
+
 export async function runUpdate<TRow>(
   built: BuiltUrl,
   originalPayload: Record<string, unknown> | undefined,
@@ -57,9 +74,9 @@ export async function runUpdate<TRow>(
     bodyPayload = { profile: bodyPayload as Record<string, unknown> };
   }
 
-  // 🔧 PUT gereken path'ler
+  // 🔧 PUT gereken path'ler (default davranış)
   const mustPut = new Set<string>(["/categories", "/blog_posts"]);
-  const methodForThis = built.methodOverride ?? (mustPut.has(built.path) ? "PUT" : "PATCH");
+  let methodForThis: "PUT" | "PATCH" = built.methodOverride ?? (mustPut.has(built.path) ? "PUT" : "PATCH");
 
   // ---- URL hazırlığı (fetch'ten ÖNCE mutlak) ----
   let requestUrl = built.url;
@@ -101,6 +118,34 @@ export async function runUpdate<TRow>(
     }
   }
 
+  // ✅ NEW: site_settings → /admin/site_settings/:key (PUT + {key,value,value_type})
+  if (built.path === "/admin/site_settings" || built.path === "/site_settings") {
+    const keyQ = extractKeyFromSearch(requestUrl);
+    const keyFromBody = typeof prePayload.key === "string" ? prePayload.key : null;
+    const key = keyQ || keyFromBody;
+    if (key) {
+      try {
+        const u = new URL(requestUrl, BASE_URL);
+        u.pathname = `/admin/site_settings/${encodeURIComponent(key)}`;
+        u.search = "";
+        requestUrl = u.toString();
+
+        // update({ value: ... }) veya doğrudan alanlar gelebilir
+        const bodyValue = Object.prototype.hasOwnProperty.call(prePayload, "value")
+          ? (prePayload as Record<string, unknown>).value
+          : prePayload;
+
+        bodyPayload = {
+          key,
+          value: bodyValue,
+          value_type: detectValueType(bodyValue),
+        };
+
+        methodForThis = "PUT";
+      } catch { /* no-op */ }
+    }
+  }
+
   // ---- İSTEK ----
   let res = await fetch(requestUrl, {
     method: methodForThis,
@@ -109,8 +154,8 @@ export async function runUpdate<TRow>(
     body: JSON.stringify(bodyPayload),
   });
 
-
-   // ✅ NEW: /payment_requests → /admin/payment_requests/:id/status
+  // (Not: /payment_requests bloğu mevcut kodda fetch sonrası yazılmıştı; dokunmuyoruz)
+  // ✅ NEW: /payment_requests → /admin/payment_requests/:id/status
   if (built.path === "/payment_requests") {
     const id = extractIdFromUrl(requestUrl) || extractIdFromSearch(requestUrl);
     // sadece durum/not güncellemeleri status endpoint’ine gider

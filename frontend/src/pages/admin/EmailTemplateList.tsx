@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+// =============================================================
+// FILE: src/pages/admin/email-templates/EmailTemplateList.tsx
+// =============================================================
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { metahub } from "@/integrations/metahub/client";
-import { toast } from "sonner";
-import { Plus, Edit, Mail } from "lucide-react";
+import { Plus, Edit, Mail, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -15,40 +16,39 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "sonner";
 
-interface EmailTemplate {
-  id: string;
-  template_key: string;
-  template_name: string;
-  subject: string;
-  is_active: boolean;
-  created_at: string;
-}
+import {
+  useListEmailTemplatesAdminQuery,
+  useDeleteEmailTemplateAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints";
+
+import type { EmailTemplateView } from "@/integrations/metahub/db/types/email";
 
 export default function EmailTemplateList() {
   const navigate = useNavigate();
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const { data, isFetching, isError, error } = useListEmailTemplatesAdminQuery();
+  const [deleteTemplate, { isLoading: isDeleting }] = useDeleteEmailTemplateAdminMutation();
 
   useEffect(() => {
-    fetchTemplates();
-  }, []);
+    if (isError) {
+      const status = (error as { status?: number })?.status;
+      toast.error(`Mail şablonları yüklenirken hata oluştu${status ? ` (HTTP ${status})` : ""}.`);
+    }
+  }, [isError, error]);
 
-  const fetchTemplates = async () => {
+  const templates: EmailTemplateView[] = data ?? [];
+
+  const handleDelete = async (id: string) => {
+    const ok = window.confirm("Bu şablonu silmek istediğinizden emin misiniz?");
+    if (!ok) return;
     try {
-      setLoading(true);
-      const { data, error } = await metahub
-        .from("email_templates")
-        .select("*")
-        .order("template_name");
-
-      if (error) throw error;
-      setTemplates(data || []);
-    } catch (error) {
-      console.error("Error fetching templates:", error);
-      toast.error("Mail şablonları yüklenirken hata oluştu");
-    } finally {
-      setLoading(false);
+      await deleteTemplate(id).unwrap();
+      toast.success("Şablon silindi");
+    } catch (e) {
+      console.error(e);
+      toast.error("Şablon silinirken hata oluştu");
     }
   };
 
@@ -58,9 +58,7 @@ export default function EmailTemplateList() {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold">Mail Şablonları</h2>
-            <p className="text-muted-foreground">
-              Sistem mail şablonlarını yönetin
-            </p>
+            <p className="text-muted-foreground">Sistem mail şablonlarını yönetin</p>
           </div>
           <Button onClick={() => navigate("/admin/email-templates/new")}>
             <Plus className="w-4 h-4 mr-2" />
@@ -68,7 +66,7 @@ export default function EmailTemplateList() {
           </Button>
         </div>
 
-        {loading ? (
+        {isFetching ? (
           <Card>
             <CardContent className="py-8">
               <p className="text-center text-muted-foreground">Yükleniyor...</p>
@@ -100,33 +98,35 @@ export default function EmailTemplateList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {templates.map((template) => (
-                    <TableRow key={template.id}>
-                      <TableCell className="font-medium">
-                        {template.template_name}
-                      </TableCell>
+                  {templates.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
                       <TableCell>
-                        <code className="px-2 py-1 bg-muted rounded text-xs">
-                          {template.template_key}
-                        </code>
+                        <code className="px-2 py-1 bg-muted rounded text-xs">{t.key}</code>
                       </TableCell>
-                      <TableCell className="max-w-md truncate">
-                        {template.subject}
-                      </TableCell>
+                      <TableCell className="max-w-md truncate">{t.subject}</TableCell>
                       <TableCell>
-                        <Badge variant={template.is_active ? "default" : "secondary"}>
-                          {template.is_active ? "Aktif" : "Pasif"}
+                        <Badge variant={t.is_active ? "default" : "secondary"}>
+                          {t.is_active ? "Aktif" : "Pasif"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            navigate(`/admin/email-templates/${template.id}`)
-                          }
+                          onClick={() => navigate(`/admin/email-templates/${t.id}`)}
+                          title="Düzenle"
                         >
                           <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(t.id)}
+                          disabled={isDeleting}
+                          title="Sil"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </TableCell>
                     </TableRow>

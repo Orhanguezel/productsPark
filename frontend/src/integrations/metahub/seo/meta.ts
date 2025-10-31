@@ -16,8 +16,8 @@ export type MetaInput = {
 export function buildMeta(meta: MetaInput): Record<string, string> {
   const out: Record<string, string> = {};
   if (meta.title) out["og:title"] = meta.title;
-  if (meta.description) out["description"] = meta.description, out["og:description"] = meta.description;
-  if (meta.url) out["og:url"] = meta.url, out["canonical"] = meta.url;
+  if (meta.description) out["og:description"] = meta.description;
+  if (meta.url) out["og:url"] = meta.url;
   if (meta.image) out["og:image"] = meta.image;
   out["og:type"] = "website";
   if (meta.siteName) out["og:site_name"] = meta.siteName;

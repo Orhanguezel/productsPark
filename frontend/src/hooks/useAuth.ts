@@ -1,3 +1,5 @@
+// src/hooks/useAuth.ts
+
 import { useEffect, useState } from "react";
 import { metahub } from "@/integrations/metahub/client";
 import type { User, Session } from "@/integrations/metahub/core/types";

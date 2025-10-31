@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { metahub } from "@/integrations/metahub/client";
+import type { SiteSettingRow } from "@/integrations/metahub/db/types/site";
+import type { RowChange, SubscriptionResult } from "@/integrations/metahub/realtime/channel";
 
 export const useMaintenanceMode = () => {
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
@@ -7,39 +9,40 @@ export const useMaintenanceMode = () => {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    checkMaintenanceMode();
-    checkAdminStatus();
+    void checkMaintenanceMode();
+    void checkAdminStatus();
 
-    // Subscribe to real-time updates
-    const channel = metahub
-      .channel('maintenance-mode-changes')
-      .on(
-        'postgres_changes',
+    // Realtime — payload’ı tipliyoruz
+    const ch = metahub
+      .channel("maintenance-mode-changes")
+      .on<RowChange<SiteSettingRow>>(
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'site_settings',
-          filter: 'key=eq.maintenance_mode'
+          event: "*",
+          schema: "public",
+          table: "site_settings",
+          filter: "key=eq.maintenance_mode",
         },
         (payload) => {
-          console.log('Maintenance mode changed:', payload);
-          if (payload.new && 'value' in payload.new) {
-            const newValue = payload.new.value;
-            setIsMaintenanceMode(newValue === true || newValue === 'true');
-          }
+          // payload.new veya payload.old olabilir
+          const raw = payload?.new?.value ?? payload?.old?.value;
+          const enabled =
+            raw === true || raw === "true" || raw === 1 || raw === "1";
+          setIsMaintenanceMode(Boolean(enabled));
         }
-      )
-      .subscribe();
+      );
+
+    const subscription: Promise<SubscriptionResult> | SubscriptionResult = ch.subscribe();
 
     return () => {
-      metahub.removeChannel(channel);
+      // removeChannel hem Promise’i hem objeyi kabul ediyor
+      metahub.removeChannel(subscription);
     };
   }, []);
 
-  const checkAdminStatus = async () => {
+  async function checkAdminStatus(): Promise<void> {
     try {
       const { data: { user } } = await metahub.auth.getUser();
-
       if (!user) {
         setIsAdmin(false);
         return;
@@ -53,15 +56,14 @@ export const useMaintenanceMode = () => {
         .maybeSingle();
 
       if (error) throw error;
-
       setIsAdmin(!!roleData);
-    } catch (error) {
-      console.error("Error checking admin status:", error);
+    } catch (err) {
+      console.error("Error checking admin status:", err);
       setIsAdmin(false);
     }
-  };
+  }
 
-  const checkMaintenanceMode = async () => {
+  async function checkMaintenanceMode(): Promise<void> {
     try {
       setLoading(true);
       const { data, error } = await metahub
@@ -72,19 +74,18 @@ export const useMaintenanceMode = () => {
 
       if (error) throw error;
 
-      const maintenanceValue = data?.value;
-      // Handle both boolean and string 'true'/'false' values
-      setIsMaintenanceMode(maintenanceValue === true || maintenanceValue === 'true');
-    } catch (error) {
-      console.error("Error checking maintenance mode:", error);
+      const raw = data?.value;
+      const enabled = raw === true || raw === "true" || raw === 1 || raw === "1";
+      setIsMaintenanceMode(Boolean(enabled));
+    } catch (err) {
+      console.error("Error checking maintenance mode:", err);
       setIsMaintenanceMode(false);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Admins bypass maintenance mode
+  // Admin’ler bakım modunu bypass eder
   const shouldShowMaintenance = isMaintenanceMode && !isAdmin;
-
   return { shouldShowMaintenance, loading };
 };

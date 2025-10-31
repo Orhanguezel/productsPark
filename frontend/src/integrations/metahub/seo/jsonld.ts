@@ -10,7 +10,7 @@ export function org(input: { name: string; url: string; logo?: string; sameAs?: 
 
 export function website(input: { name: string; url: string; searchUrlTemplate?: string }): Thing {
   const base: Thing = { "@context": "https://schema.org", "@type": "WebSite", name: input.name, url: input.url };
-  if (input.searchUrlTemplate) (base as any).potentialAction = { "@type": "SearchAction", target: input.searchUrlTemplate, "query-input": "required name=q" };
+  if (input.searchUrlTemplate) (base ).potentialAction = { "@type": "SearchAction", target: input.searchUrlTemplate, "query-input": "required name=q" };
   return base;
 }
 

@@ -113,7 +113,7 @@ export default function PageForm() {
         toast.success("Sayfa güncellendi");
       } else {
         // POST /custom_pages
-        const { error } = await metahub.from("custom_pages").insert([body]);
+        const { error } = await metahub.from("custom_pages").insert(body);
         if (error) throw error;
         toast.success("Sayfa oluşturuldu");
       }

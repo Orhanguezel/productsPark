@@ -29,6 +29,7 @@ export const TABLES: Record<KnownTables, string> = {
   payment_providers: "/payment_providers",
   payment_sessions: "/payment_sessions",
   wallet_transactions: "/wallet_transactions",
+  payments: "/payments",
 
   // site config
   site_settings: "/site_settings",
@@ -49,4 +50,5 @@ export const TABLES: Record<KnownTables, string> = {
   support_tickets: "/support_tickets",
   ticket_replies: "/ticket_replies",
   api_providers: "/api_providers",
+
 };

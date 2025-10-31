@@ -1,6 +1,14 @@
-// Drizzle şemanı camelCase + güvenli string tarih/decimal olarak modelliyoruz
+// src/integrations/metahub/core/types.ts
 
-export type UserRole = "admin" | "moderator" | "user";
+export type UserRole = import("@/integrations/metahub/db/types/users").UserRoleName;
+
+export type UserMetadata = {
+  full_name?: string | null;
+  name?: string | null;
+  [k: string]: unknown;
+} | null;
+
+
 export type User = {
   id: string;
   email: string;
@@ -12,8 +20,9 @@ export type User = {
   last_sign_in_at?: string | null; // ISO
   created_at?: string;
   updated_at?: string;
-  role?: "admin" | "moderator" | "user"; // opsiyonel
+  role?: UserRole;
   [key: string]: unknown;
+  user_metadata?: UserMetadata;
 };
 
 export type Session = {

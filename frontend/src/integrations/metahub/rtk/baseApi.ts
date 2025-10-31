@@ -1,17 +1,33 @@
-// src/integrations/metahub/rtk/baseApi.ts
+// =============================================================
+// FILE: src/integrations/metahub/rtk/baseApi.ts
+// =============================================================
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type { BaseQueryFn, FetchArgs, FetchBaseQueryError, FetchBaseQueryMeta } from "@reduxjs/toolkit/query";
+import type {
+  BaseQueryFn,
+  FetchArgs,
+  FetchBaseQueryError,
+  FetchBaseQueryMeta,
+} from "@reduxjs/toolkit/query";
 import { metahubTags } from "./tags";
 import { tokenStore } from "@/integrations/metahub/core/token";
+import { BASE_URL as DB_BASE_URL } from "@/integrations/metahub/db/from/constants";
 
-/** ---------- Base URL resolve ---------- */
-const RAW_BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined) ??
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  (import.meta.env.VITE_METAHUB_URL as string | undefined) ??
-  "/api"; // <— varsayılan tek kapı
-
-const BASE_URL = RAW_BASE.replace(/\/+$/, "");
+/** ---------- Base URL resolve (constants.ts'tan) ---------- */
+function trimSlash(x: string) {
+  return x.replace(/\/+$/, "");
+}
+function guessDevBackend(): string {
+  try {
+    const loc = typeof window !== "undefined" ? window.location : null;
+    const host = loc?.hostname || "localhost";
+    const proto = loc?.protocol || "http:";
+    return `${proto}//${host}:8081`;
+  } catch {
+    return "http://localhost:8081";
+  }
+}
+// constants.ts boş bırakılırsa: DEV→8081, PROD→/api
+const BASE_URL = trimSlash(DB_BASE_URL || (import.meta.env.DEV ? guessDevBackend() : "/api"));
 
 /** ---------- helpers & guards ---------- */
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -46,7 +62,7 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
   const urlNoSlash = (a.url ?? "").replace(/\/+$/, "");
   const isGet = !a.method || a.method.toUpperCase() === "GET";
 
-  // GET /profiles?id=UUID&limit=1  ->  /profiles/UUID
+  // GET /profiles?id=UUID&limit=1 -> /profiles/UUID
   if (urlNoSlash === "/profiles" && isGet) {
     const params = isRecord(a.params) ? (a.params as Record<string, unknown>) : undefined;
     const id = typeof params?.id === "string" ? params.id : null;
@@ -82,16 +98,16 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
 type RBQ = BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError, unknown, FetchBaseQueryMeta>;
 
 const rawBaseQuery: RBQ = fetchBaseQuery({
-  baseUrl: BASE_URL,           // <— ARTIK /api (veya env'den gelen)
+  baseUrl: BASE_URL,
   credentials: "include",
   prepareHeaders: (headers) => {
     // auth atlama
     if (headers.get("x-skip-auth") === "1") {
       headers.delete("x-skip-auth");
       if (!headers.has("Accept")) headers.set("Accept", "application/json");
-      // Dil başlığı yoksa ekle
       if (!headers.has("Accept-Language")) {
-        const lang = (import.meta.env.VITE_DEFAULT_LOCALE as string | undefined) ??
+        const lang =
+          (import.meta.env.VITE_DEFAULT_LOCALE as string | undefined) ??
           (typeof navigator !== "undefined" ? navigator.language : "tr");
         headers.set("Accept-Language", lang || "tr");
       }
@@ -104,7 +120,8 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
     }
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
     if (!headers.has("Accept-Language")) {
-      const lang = (import.meta.env.VITE_DEFAULT_LOCALE as string | undefined) ??
+      const lang =
+        (import.meta.env.VITE_DEFAULT_LOCALE as string | undefined) ??
         (typeof navigator !== "undefined" ? navigator.language : "tr");
       headers.set("Accept-Language", lang || "tr");
     }
@@ -114,7 +131,12 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
     const ct = response.headers.get("content-type") || "";
     if (ct.includes("application/json")) return response.json();
     if (ct.includes("text/")) return response.text();
-    try { const t = await response.text(); return t || null; } catch { return null; }
+    try {
+      const t = await response.text();
+      return t || null;
+    } catch {
+      return null;
+    }
   },
   validateStatus: (res) => res.ok,
 }) as RBQ;
