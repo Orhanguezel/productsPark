@@ -1,21 +1,17 @@
 // src/integrations/metahub/rtk/baseApi.ts
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type {
-  BaseQueryFn,
-  FetchArgs,
-  FetchBaseQueryError,
-  FetchBaseQueryMeta,
-} from "@reduxjs/toolkit/query";
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError, FetchBaseQueryMeta } from "@reduxjs/toolkit/query";
 import { metahubTags } from "./tags";
 import { tokenStore } from "@/integrations/metahub/core/token";
 
 /** ---------- Base URL resolve ---------- */
-const RAW =
+const RAW_BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined) ??
   (import.meta.env.VITE_API_URL as string | undefined) ??
   (import.meta.env.VITE_METAHUB_URL as string | undefined) ??
-  "http://localhost:8081";
+  "/api"; // <— varsayılan tek kapı
 
-const BASE_URL = RAW.replace(/\/+$/, "");
+const BASE_URL = RAW_BASE.replace(/\/+$/, "");
 
 /** ---------- helpers & guards ---------- */
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -24,7 +20,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 type AnyArgs = string | FetchArgs;
 
 function isJsonLikeBody(b: unknown): b is Record<string, unknown> {
-  // FormData, Blob, ArrayBuffer vs. hariç tut
   if (typeof FormData !== "undefined" && b instanceof FormData) return false;
   if (typeof Blob !== "undefined" && b instanceof Blob) return false;
   if (typeof ArrayBuffer !== "undefined" && b instanceof ArrayBuffer) return false;
@@ -48,10 +43,10 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
   if (typeof args === "string") return args;
   const a: FetchArgs = { ...args };
 
-  // GET /profiles?id=UUID&limit=1  ->  /profiles/UUID
   const urlNoSlash = (a.url ?? "").replace(/\/+$/, "");
   const isGet = !a.method || a.method.toUpperCase() === "GET";
 
+  // GET /profiles?id=UUID&limit=1  ->  /profiles/UUID
   if (urlNoSlash === "/profiles" && isGet) {
     const params = isRecord(a.params) ? (a.params as Record<string, unknown>) : undefined;
     const id = typeof params?.id === "string" ? params.id : null;
@@ -86,7 +81,47 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
 /** ---------- Base Query ---------- */
 type RBQ = BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError, unknown, FetchBaseQueryMeta>;
 
-// Auth endpoint'leri: bearer ekleme + reauth denemesi YOK
+const rawBaseQuery: RBQ = fetchBaseQuery({
+  baseUrl: BASE_URL,           // <— ARTIK /api (veya env'den gelen)
+  credentials: "include",
+  prepareHeaders: (headers) => {
+    // auth atlama
+    if (headers.get("x-skip-auth") === "1") {
+      headers.delete("x-skip-auth");
+      if (!headers.has("Accept")) headers.set("Accept", "application/json");
+      // Dil başlığı yoksa ekle
+      if (!headers.has("Accept-Language")) {
+        const lang = (import.meta.env.VITE_DEFAULT_LOCALE as string | undefined) ??
+          (typeof navigator !== "undefined" ? navigator.language : "tr");
+        headers.set("Accept-Language", lang || "tr");
+      }
+      return headers;
+    }
+
+    const token = tokenStore.get();
+    if (token && !headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+    if (!headers.has("Accept")) headers.set("Accept", "application/json");
+    if (!headers.has("Accept-Language")) {
+      const lang = (import.meta.env.VITE_DEFAULT_LOCALE as string | undefined) ??
+        (typeof navigator !== "undefined" ? navigator.language : "tr");
+      headers.set("Accept-Language", lang || "tr");
+    }
+    return headers;
+  },
+  responseHandler: async (response) => {
+    const ct = response.headers.get("content-type") || "";
+    if (ct.includes("application/json")) return response.json();
+    if (ct.includes("text/")) return response.text();
+    try { const t = await response.text(); return t || null; } catch { return null; }
+  },
+  validateStatus: (res) => res.ok,
+}) as RBQ;
+
+/** ---------- 401 → refresh → retry ---------- */
+type RawResult = Awaited<ReturnType<typeof rawBaseQuery>>;
+
 const AUTH_SKIP_REAUTH = new Set<string>([
   "/auth/v1/token",
   "/auth/v1/signup",
@@ -108,48 +143,11 @@ function extractPath(u: string): string {
   }
 }
 
-const rawBaseQuery: RBQ = fetchBaseQuery({
-  baseUrl: BASE_URL,
-  credentials: "include",
-  // x-skip-auth geldiyse bearer enjekte etme
-  prepareHeaders: (headers) => {
-    if (headers.get("x-skip-auth") === "1") {
-      headers.delete("x-skip-auth");
-      if (!headers.has("Accept")) headers.set("Accept", "application/json");
-      return headers;
-    }
-    const token = tokenStore.get();
-    if (token && !headers.has("authorization")) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
-    if (!headers.has("Accept")) headers.set("Accept", "application/json");
-    return headers;
-  },
-  responseHandler: async (response) => {
-    // 204 No Content vb. durumlarda body yoksa null döndür
-    const ct = response.headers.get("content-type") || "";
-    if (ct.includes("application/json")) return response.json();
-    if (ct.includes("text/")) return response.text();
-    try {
-      const t = await response.text();
-      return t || null;
-    } catch {
-      return null;
-    }
-  },
-  validateStatus: (response) => response.ok,
-}) as RBQ;
-
-/** ---------- 401 → refresh → retry ---------- */
-type RawResult = Awaited<ReturnType<typeof rawBaseQuery>>;
-
 const baseQueryWithReauth: RBQ = async (args, api, extra) => {
   let req: AnyArgs = compatAdjustArgs(args);
-
   const path = typeof req === "string" ? req : req.url || "";
   const cleanPath = extractPath(path);
 
-  // JSON body'lerde Content-Type'ı garanti et (FormData/Blob hariç)
   const ensureJson = (fa: FetchArgs) => {
     if (isJsonLikeBody(fa.body)) {
       fa.headers = { ...(fa.headers || {}), "Content-Type": "application/json" };
@@ -157,7 +155,6 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
     return fa;
   };
 
-  // Auth endpoint'lerinde bearer enjekte edilmesin
   if (typeof req !== "string") {
     if (AUTH_SKIP_REAUTH.has(cleanPath)) {
       req.headers = { ...(req.headers || {}), "x-skip-auth": "1" };
@@ -167,16 +164,9 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
 
   let result: RawResult = await rawBaseQuery(req, api, extra);
 
-  const status = result.error?.status;
-
-  // 401 ise ve bu istek auth endpoint'i DEĞİL ise refresh dene
-  if (status === 401 && !AUTH_SKIP_REAUTH.has(cleanPath)) {
+  if (result.error?.status === 401 && !AUTH_SKIP_REAUTH.has(cleanPath)) {
     const refreshRes = await rawBaseQuery(
-      {
-        url: "/auth/v1/token/refresh",
-        method: "POST",
-        headers: { "x-skip-auth": "1", Accept: "application/json" },
-      },
+      { url: "/auth/v1/token/refresh", method: "POST", headers: { "x-skip-auth": "1", Accept: "application/json" } },
       api,
       extra
     );
@@ -185,12 +175,9 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
       const access_token = (refreshRes.data as { access_token?: string } | undefined)?.access_token;
       if (access_token) tokenStore.set(access_token);
 
-      // orijinali tekrar dene
       let retry: AnyArgs = compatAdjustArgs(args);
       if (typeof retry !== "string") {
-        if (AUTH_SKIP_REAUTH.has(cleanPath)) {
-          retry.headers = { ...(retry.headers || {}), "x-skip-auth": "1" };
-        }
+        if (AUTH_SKIP_REAUTH.has(cleanPath)) retry.headers = { ...(retry.headers || {}), "x-skip-auth": "1" };
         retry = ensureJson(retry);
       }
       result = await rawBaseQuery(retry, api, extra);
@@ -198,11 +185,9 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
       tokenStore.set(null);
     }
   }
-
   return result;
 };
 
-/** ---------- RTK Query API ---------- */
 export const baseApi = createApi({
   reducerPath: "metahubApi",
   baseQuery: baseQueryWithReauth,

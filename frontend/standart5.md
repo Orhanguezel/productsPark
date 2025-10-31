@@ -114,7 +114,6 @@ Süper—şimdi “yeni her admin modülü” için aynı hataları tekrar yaşa
   * `id` body’den **okunmamalı** (path paramdan gelir).
   * Partial update: `PATCH` şeması **partial** olsun (Zod `z.object({...}).partial()`).
   * `slug` unique: 409 → mesaj `"duplicate_slug"`.
-  * **Multi-tenant**: `tenantId` filtreleri tüm CRUD’da (index, update, delete).
   * `updated_at` auto-set.
   * `returning`: FE listesine uygun alan seti (Row) → FE zaten normalize eder.
 
@@ -147,7 +146,6 @@ const fooBodySchema = z.object({
 export async function updateFoo(req: FastifyRequest<{ Params: { id: string }, Body: unknown }>, res: FastifyReply) {
   const { id } = req.params;
   const body = fooBodySchema.parse(req.body ?? {});
-  const tenantId = requireTenant(req);
 
   // mapping
   const record: any = { ...body, updated_at: new Date() };
@@ -166,8 +164,7 @@ export async function updateFoo(req: FastifyRequest<{ Params: { id: string }, Bo
   }
   delete record.id;
 
-  // repo: where { id, tenantId }
-  const updated = await fooRepo.updateById({ id, tenantId }, record);
+  const updated = await fooRepo.updateById({ id}, record);
   if (!updated) return res.status(404).send({ code: 'NOT_FOUND' });
 
   return res.send(updated); // tek satır Row döndür
@@ -223,6 +220,6 @@ export async function updateFoo(req: FastifyRequest<{ Params: { id: string }, Bo
 * **Normalizer:** `normalize<Module>Rows` → `toView`
 * **RTK:** `foo_admin.endpoints.ts` + hooks
 * **Admin UI:** `List.tsx`, `Form.tsx` (slug normalize, content_html, boolean Switch)
-* **BE:** `admin.router.ts` + `admin.controller.ts` (id path, body map, tenant, errors)
+* **BE:** `admin.router.ts` + `admin.controller.ts` (id path, body map,errors)
 
 Bu yol haritasını takip edersen yeni her modül “custom_pages”te çözdüğümüz tüm edge-case’lerle **out-of-the-box** uyumlu olur. İstersen ilk sıraya hangisini alacağımızı söyle; aynı şablonla kodu çıkarırım.

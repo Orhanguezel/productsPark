@@ -8,7 +8,7 @@ export type TelemetryBase = {
   ts: number;                // epoch ms
   user_id?: string | null;
   session_id?: string | null;
-  ctx?: Record<string, unknown> | null; // global context (tenant, locale, ua)
+  ctx?: Record<string, unknown> | null; // global context ( locale, ua)
 };
 
 export type PageViewEvent = TelemetryBase & { type: "pageview"; path: string; ref?: string | null; title?: string | null };
