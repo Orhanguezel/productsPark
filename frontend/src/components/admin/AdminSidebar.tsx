@@ -80,7 +80,6 @@ const menuGroups = [
     label: "Ayarlar",
     items: [
       { title: "Genel Ayarlar", icon: Settings, value: "settings", path: "/admin/settings" },
-      { title: "Güncellemeler", icon: RefreshCw, value: "updates", path: "/admin/updates" },
       { title: "Yedekleme", icon: Database, value: "backup", path: "/admin/backup" },
     ],
   },

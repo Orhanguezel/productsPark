@@ -12,7 +12,7 @@ import type { UnknownRow } from "../../../types";
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
 
-const pick = (o: Record<string, unknown>, k: string): string | null => {
+const pick = <T extends Record<string, unknown>>(o: T, k: string): string | null => {
   const v = o[k];
   return typeof v === "string" && v ? v : null;
 };
@@ -28,7 +28,7 @@ async function postOnce(url: string, body: unknown): Promise<Response> {
 
 const looksLikeValidationError = (j: unknown): boolean => {
   if (!isRecord(j)) return false;
-  const err = isRecord(j.error) ? j.error : null;
+  const err = isRecord(j.error) ? (j.error as Record<string, unknown>) : null;
   const msg =
     (err && pick(err, "message")) ||
     pick(j, "message") ||
@@ -52,6 +52,7 @@ const toPersist = (v: unknown): string | number | boolean | null => {
   if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v;
   try { return JSON.stringify(v); } catch { return String(v); }
 };
+
 function normalizeSiteSettingsPayload(payload: UnknownRow | UnknownRow[]): UnknownRow | UnknownRow[] {
   const arr = Array.isArray(payload) ? payload : [payload];
   const out = arr.map((r) => {
@@ -66,9 +67,96 @@ function normalizeSiteSettingsPayload(payload: UnknownRow | UnknownRow[]): Unkno
   return Array.isArray(payload) ? out : out[0];
 }
 
+/** helpers for custom_pages */
+const isCustomPagesEndpoint = (path: string): boolean =>
+  /^\/(custom_pages|admin\/custom_pages)(\/|$)/.test(path);
+
+const toStr = (v: unknown): string =>
+  typeof v === "string" ? v : v == null ? "" : String(v);
+
+const normalizeSlug = (s: unknown, fallbackTitle?: unknown): string => {
+  const raw = toStr(s) || toStr(fallbackTitle);
+  return raw.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+};
+
+const truthy = (v: unknown): boolean =>
+  v === true || v === 1 || v === "1" || v === "true";
+
+/** BE'nin beklediği minimal body tipi (referans) */
+type CustomPageInsertBody = {
+  title: string;
+  slug: string;
+  content: string;           // STRING: JSON.stringify({ html })
+  is_published: boolean;     // boolean
+  meta_title?: string;
+  meta_description?: string;
+  locale?: string;
+};
+
+/**
+ * custom_pages insert payload normalizer (STRICT):
+ * - Sadece BE’nin beklediği alanları gönder
+ * - content: **STRING** (JSON.stringify({ html }))
+ * - is_published: boolean
+ * - meta_title/meta_description/locale: yalnızca doluysa ekle
+ * - content_html POST edilmez (strict şemalar reddediyor)
+ */
+function normalizeCustomPagesPayload(payload: UnknownRow | UnknownRow[]): UnknownRow | UnknownRow[] {
+  const arr = Array.isArray(payload) ? payload : [payload];
+
+  const out = arr.map((row) => {
+    const rec = (row ?? {}) as Record<string, unknown>;
+
+    const title = toStr(rec.title).trim();
+    const slug = normalizeSlug(rec.slug, title);
+
+    // html çıkarımı: content (string/JSON-string/obj) veya content_html (string)
+    let html = "";
+    const rawContent = rec.content;
+    const contentHtmlField = toStr(rec.content_html);
+
+    if (typeof rawContent === "string" && rawContent) {
+      try {
+        const parsed = JSON.parse(rawContent) as unknown;
+        if (isRecord(parsed) && typeof parsed.html === "string") {
+          html = parsed.html;
+        } else {
+          html = rawContent; // düz html string
+        }
+      } catch {
+        html = rawContent;   // parse edilemeyen düz string
+      }
+    } else if (isRecord(rawContent) && typeof rawContent.html === "string") {
+      html = rawContent.html;
+    }
+
+    if (!html && contentHtmlField) html = contentHtmlField;
+
+    const body: CustomPageInsertBody = {
+      title,
+      slug,
+      content: JSON.stringify({ html }),
+      is_published: typeof rec.is_published === "boolean" ? rec.is_published : truthy(rec.is_published),
+    };
+
+    const metaTitle = toStr(rec.meta_title).trim();
+    if (metaTitle) body.meta_title = metaTitle;
+
+    const metaDesc = toStr(rec.meta_description).trim();
+    if (metaDesc) body.meta_description = metaDesc;
+
+    const loc = rec.locale;
+    if (typeof loc === "string" && loc.trim()) body.locale = loc.trim();
+
+    return body as unknown as UnknownRow;
+  });
+
+  return Array.isArray(payload) ? out : out[0];
+}
+
 /** yalnızca object⇄[object] fallback; wrapper'lar devre dışı */
 const isStrictObjectEndpoint = (path: string): boolean =>
-  /^\/(orders|admin\/orders|order_items|admin\/order_items|payment_requests|admin\/payment_requests)(\/|$)/.test(
+  /^\/(orders|admin\/orders|order_items|admin\/order_items|payment_requests|admin\/payment_requests|custom_pages|admin\/custom_pages)(\/|$)/.test(
     path
   );
 
@@ -80,34 +168,46 @@ export async function runInsert<TRow>(
   built: BuiltUrl,
   rows: UnknownRow | UnknownRow[]
 ): Promise<FetchResult<TRow[]>> {
-  // 0) OUTBOUND DÖNÜŞÜM (kritik!)
-  let prepared = transformOutgoingPayload(built.path, rows);
+  // 0) OUTBOUND DÖNÜŞÜM
+  let prepared = transformOutgoingPayload(built.path, rows) as UnknownRow | UnknownRow[];
 
-  // 0.1) /orders POST her zaman **tek obje** bekler → array geldiyse ilk öğeyi al
+  // 0.0) /custom_pages → tekil obje
+  if (isCustomPagesEndpoint(built.path) && Array.isArray(prepared)) {
+    prepared = prepared[0] ?? ({} as UnknownRow);
+  }
+
+  // 0.1) /orders → tekil obje
   if (isOrdersEndpoint(built.path) && Array.isArray(prepared)) {
-    prepared = prepared[0] ?? {};
+    prepared = prepared[0] ?? ({} as UnknownRow);
   }
 
   // 0.2) site_settings özel normalize
   const isSiteSettings =
     built.path.includes("/site_settings") || built.url.includes("/site_settings");
-  const firstBody = isSiteSettings ? normalizeSiteSettingsPayload(prepared) : prepared;
+  const firstTransformed: UnknownRow | UnknownRow[] = isSiteSettings
+    ? normalizeSiteSettingsPayload(prepared)
+    : prepared;
 
-  // 1) İlk deneme: DÖNÜŞTÜRÜLMÜŞ hâli gönder
+  // 0.3) custom_pages özel normalize (STRICT minimal body)
+  const firstBody: UnknownRow | UnknownRow[] = isCustomPagesEndpoint(built.path)
+    ? normalizeCustomPagesPayload(firstTransformed)
+    : firstTransformed;
+
+  // 1) İlk deneme
   let res = await postOnce(built.url, firstBody);
 
-  // 2) Başarısızsa **yalnızca** object⇄[object] fallback dene
+  // 2) Fallback (custom_pages strict: fallback kapalı)
   if (!res.ok) {
     let j: unknown = null;
     try { j = await readJson(res); } catch { /* noop */ }
 
-    if (looksLikeValidationError(j)) {
+    if (looksLikeValidationError(j) && !isStrictObjectEndpoint(built.path)) {
       const attempts: unknown[] = [];
       const wasArray = Array.isArray(firstBody);
 
-      if (!wasArray) attempts.push([firstBody]);  // tekil → tek elemanlı dizi
+      if (!wasArray) attempts.push([firstBody]);                 // tekil → dizi
       if (wasArray && (firstBody as unknown[]).length > 0) {
-        attempts.push((firstBody as unknown[])[0]); // dizi → tekil
+        attempts.push((firstBody as unknown[])[0]);              // dizi → tekil
       }
 
       for (const alt of attempts) {
@@ -126,7 +226,7 @@ export async function runInsert<TRow>(
       if (isRecord(last)) {
         const cand =
           pick(last, "message") ||
-          (isRecord(last.error) ? pick(last.error, "message") : null) ||
+          (isRecord(last.error) ? pick(last.error as Record<string, unknown>, "message") : null) ||
           pick(last, "error") ||
           pick(last, "detail");
         if (cand) msg = cand;
@@ -135,19 +235,20 @@ export async function runInsert<TRow>(
     return { data: null, error: { message: msg, status: res.status } };
   }
 
-  // OK → JSON al & normalize et
+  // 3) OK → JSON al & normalize et
   let json: unknown = null;
   try { json = await res.json(); } catch { json = null; }
 
-  let arr: UnknownRow[];
+  let arr: UnknownRow[] = [];
   if (Array.isArray(json)) {
     arr = json as UnknownRow[];
-  } else if (isRecord(json) && Array.isArray((json ).data)) {
-    arr = (json).data as UnknownRow[];
-  } else if (isRecord(json) && Object.keys(json).length) {
-    arr = [json as UnknownRow];
-  } else {
-    arr = [];
+  } else if (isRecord(json)) {
+    const maybeData = (json as Record<string, unknown>)["data"];
+    if (Array.isArray(maybeData)) {
+      arr = maybeData as UnknownRow[];
+    } else if (Object.keys(json).length > 0) {
+      arr = [json as UnknownRow];
+    }
   }
 
   const data = normalizeTableRows(built.path, arr) as unknown as TRow[];
