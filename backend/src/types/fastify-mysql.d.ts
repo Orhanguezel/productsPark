@@ -1,13 +1,15 @@
-import 'fastify';
-import type { MySQLPromisePool } from '@fastify/mysql';
+// src/types/fastify-mysql.d.ts
+import "fastify";
 
-declare module 'fastify' {
+type MySQL = { query<T = unknown[]>(sql: string, params?: unknown[]): Promise<[T, unknown]> };
+
+declare module "fastify" {
   interface FastifyInstance {
-    /** Decorated by @fastify/mysql with { promise: true } */
-    mysql: MySQLPromisePool;
+    mysql?: MySQL;
+    db?: MySQL;
+    mariadb?: MySQL;
   }
   interface FastifyRequest {
-    /** Only if you ever attach it to req; optional */
-    mysql?: MySQLPromisePool;
+    mysql?: MySQL;
   }
 }

@@ -18,7 +18,6 @@ import {
   adminSetProductStock,
   adminListUsedStock,
   adminListCategories,
-  // ❌ adminListApiProviders kaldırıldı (kendi modülünde)
 } from './admin.controller';
 
 export async function registerProductsAdmin(app: FastifyInstance) {

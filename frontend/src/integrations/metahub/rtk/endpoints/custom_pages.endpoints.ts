@@ -2,11 +2,14 @@
 // FILE: src/integrations/metahub/rtk/endpoints/custom_pages.endpoints.ts
 // (public FE; slug ile get vs.)
 // =============================================================
-import { baseApi as baseApi_m3 } from "../baseApi";
-import type { CustomPageRow, CustomPageView } from "../../db/types/content";
+import { baseApi } from "../baseApi";
+import type { CustomPageRow, CustomPageView } from "../../db/types/customPages";
 
 const toBool = (x: unknown): boolean =>
   x === true || x === 1 || x === "1" || x === "true";
+
+const strOrNull = (v: unknown): string | null =>
+  typeof v === "string" ? v : v == null ? null : String(v);
 
 function extractHtml(rawField: unknown): string {
   if (typeof rawField === "string") {
@@ -44,6 +47,12 @@ const toView = (row: unknown): CustomPageView => {
     title: String(r["title"] ?? ""),
     slug: String(r["slug"] ?? ""),
     content: extractHtml(raw),
+
+    // Görseller
+    featured_image: strOrNull(r["featured_image"]),
+    featured_image_asset_id: strOrNull(r["featured_image_asset_id"]),
+    featured_image_alt: strOrNull(r["featured_image_alt"]),
+
     meta_title:
       (typeof r["meta_title"] === "string" ? r["meta_title"] : null) ?? null,
     meta_description:
@@ -54,13 +63,15 @@ const toView = (row: unknown): CustomPageView => {
   };
 };
 
-export const customPagesApi = baseApi_m3.injectEndpoints({
+const BASE = "/custom_pages";
+
+export const customPagesApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCustomPages: b.query<
       CustomPageView[],
       { locale?: string; is_published?: boolean | 0 | 1; limit?: number; offset?: number }
     >({
-      query: (params) => ({ url: "/custom_pages", params }),
+      query: (params) => ({ url: `${BASE}`, params }),
       transformResponse: (res: unknown): CustomPageView[] =>
         Array.isArray(res) ? (res as CustomPageRow[]).map(toView) : [],
       providesTags: (result) =>
@@ -73,13 +84,13 @@ export const customPagesApi = baseApi_m3.injectEndpoints({
     }),
 
     getCustomPageBySlug: b.query<CustomPageView, { slug: string; locale?: string }>({
-      query: ({ slug, locale }) => ({ url: `/custom_pages/by-slug/${slug}`, params: { locale } }),
+      query: ({ slug, locale }) => ({ url: `${BASE}/by-slug/${slug}`, params: { locale } }),
       transformResponse: (res: unknown): CustomPageView => toView(res),
       providesTags: (_r, _e, { slug }) => [{ type: "CustomPage", id: `SLUG_${slug}` }],
     }),
 
     getCustomPageById: b.query<CustomPageView, string>({
-      query: (id) => ({ url: `/custom_pages/${id}` }),
+      query: (id) => ({ url: `${BASE}/${id}` }),
       transformResponse: (res: unknown): CustomPageView => toView(res),
       providesTags: (_r, _e, id) => [{ type: "CustomPage", id }],
     }),

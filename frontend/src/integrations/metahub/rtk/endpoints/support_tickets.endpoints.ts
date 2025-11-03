@@ -1,64 +1,63 @@
+// =============================================================
+// FILE: src/integrations/metahub/rtk/endpoints/support_tickets.endpoints.ts
+// =============================================================
 import { baseApi as baseApi5 } from "../baseApi";
+import type {
+  SupportTicket,
+  SupportTicketStatus,
+  SupportTicketPriority,
+  ApiSupportTicket,
+} from "../../db/types/support";
 
-/** DB enumlarına göre güncel tipler */
-export type SupportTicketStatus = "open" | "in_progress" | "waiting_response" | "closed";
-export type SupportTicketPriority = "low" | "medium" | "high" | "urgent";
+/* ---------------- Helpers ---------------- */
 
-export type SupportTicket = {
-  id: string;
-  user_id: string;
-  subject: string;
-  message: string;
-  status: SupportTicketStatus;
-  priority: SupportTicketPriority;
-  /** UI bu alanı zorunlu bekliyor → null olabilir ama undefined OLMAZ */
-  category: string | null;
-  created_at: string;
-  updated_at: string;
+const trim = (v: string | undefined | null): string =>
+  (v ?? "").toString().trim();
+
+/** Eski adlardan yeni statülere güvenli map */
+const mapStatus = (raw: unknown): SupportTicketStatus => {
+  const s = trim(typeof raw === "string" ? raw : String(raw ?? "")).toLowerCase();
+  if (s === "open") return "open";
+  if (s === "in_progress") return "in_progress";
+  if (s === "waiting_response") return "waiting_response";
+  if (s === "closed") return "closed";
+  // Eski isimlerden gelenler:
+  if (s === "answered") return "waiting_response";
+  if (s === "resolved") return "closed";
+  // Default
+  return "open";
 };
 
-/** Normalize yardımcıları */
-const str = (x: unknown) => (typeof x === "string" ? x : String(x ?? ""));
-const coStatus = (s: unknown): SupportTicketStatus => {
-  const v = str(s).trim() as SupportTicketStatus | "";
-  return v === "" ? "open" : v;
-};
-const coPriority = (p: unknown): SupportTicketPriority => {
-  const v = str(p).trim() as SupportTicketPriority | "";
-  return v === "" ? "medium" : v;
-};
-
-/** BE hem snake hem camel dönebilir */
-type ApiSupportTicket = {
-  id?: unknown;
-
-  user_id?: unknown; userId?: unknown;
-  subject?: unknown;
-  message?: unknown;
-
-  status?: unknown;
-  priority?: unknown;
-  category?: unknown;
-
-  created_at?: unknown; createdAt?: unknown;
-  updated_at?: unknown; updatedAt?: unknown;
+const mapPriority = (raw: unknown): SupportTicketPriority => {
+  const p = trim(typeof raw === "string" ? raw : String(raw ?? "")).toLowerCase();
+  if (p === "low" || p === "medium" || p === "high" || p === "urgent") return p;
+  return "medium";
 };
 
 const normalizeTicket = (t: ApiSupportTicket): SupportTicket => {
-  const user_id = str(t.user_id ?? t.userId ?? "");
-  const created_at = str(t.created_at ?? t.createdAt ?? "");
-  const updated_at_raw = t.updated_at ?? t.updatedAt ?? t.created_at ?? t.createdAt ?? created_at;
+  const id = trim(t.id);
+  const user_id = trim(t.user_id ?? t.userId);
+  const subject = trim(t.subject);
+  const message = trim(t.message);
+  const status = mapStatus(t.status);
+  const priority = mapPriority(t.priority);
+  const category = typeof t.category === "string" ? t.category : null;
+
+  const created_at = trim(t.created_at ?? t.createdAt);
+  const updated_at = trim(
+    t.updated_at ?? t.updatedAt ?? t.created_at ?? t.createdAt ?? created_at
+  );
 
   return {
-    id: str(t.id),
+    id,
     user_id,
-    subject: str(t.subject),
-    message: str(t.message),
-    status: coStatus(t.status),
-    priority: coPriority(t.priority),
-    category: (typeof t.category === "string" ? t.category : null),
+    subject,
+    message,
+    status,
+    priority,
+    category,
     created_at,
-    updated_at: str(updated_at_raw),
+    updated_at,
   };
 };
 
@@ -75,16 +74,20 @@ const toQuery = (p?: {
 }) => {
   const q: Record<string, unknown> = {};
   if (!p) return q;
-  if (p.user_id) q.userId = p.user_id;
-  if (p.status) q.status = p.status;
-  if (p.priority) q.priority = p.priority;
-  if (p.q) q.q = p.q;
-  if (p.limit != null) q.limit = p.limit;
-  if (p.offset != null) q.offset = p.offset;
-  if (p.sort) q.sort = p.sort === "created_at" ? "createdAt" : "updatedAt";
-  if (p.order) q.order = p.order;
+  if (p?.user_id) q.user_id = p.user_id;
+if (p?.status) q.status = p.status;
+if (p?.priority) q.priority = p.priority;
+if (p?.q) q.q = p.q;
+if (p?.limit != null) q.limit = p.limit;
+if (p?.offset != null) q.offset = p.offset;
+// BE sadece "created_at" | "updated_at" kabul eder → olduğu gibi gönder
+if (p?.sort) q.sort = p.sort;
+// "asc" | "desc" zaten uygun
+if (p?.order) q.order = p.order;
   return q;
 };
+
+/* ---------------- RTK Endpoints ---------------- */
 
 export const supportTicketsApi = baseApi5.injectEndpoints({
   endpoints: (b) => ({
@@ -103,24 +106,37 @@ export const supportTicketsApi = baseApi5.injectEndpoints({
       }
     >({
       query: (params) => ({ url: "/support_tickets", params: toQuery(params) }),
-      transformResponse: (res: unknown): SupportTicket[] =>
-        Array.isArray(res) ? (res as ApiSupportTicket[]).map(normalizeTicket) : [],
+      transformResponse: (res: unknown): SupportTicket[] => {
+        if (!Array.isArray(res)) return [];
+        // `res` dizisinin öğelerini `ApiSupportTicket` gibi işleyip normalize ediyoruz
+        return (res as unknown[]).map((row) => normalizeTicket(row as ApiSupportTicket));
+      },
       providesTags: (result) =>
         result
-          ? [...result.map((t) => ({ type: "SupportTicket" as const, id: t.id })), { type: "SupportTickets" as const, id: "LIST" }]
+          ? [
+              ...result.map((t) => ({ type: "SupportTicket" as const, id: t.id })),
+              { type: "SupportTickets" as const, id: "LIST" },
+            ]
           : [{ type: "SupportTickets" as const, id: "LIST" }],
     }),
 
     getSupportTicketById: b.query<SupportTicket, string>({
       query: (id) => ({ url: `/support_tickets/${id}` }),
-      transformResponse: (res: unknown): SupportTicket => normalizeTicket(res as ApiSupportTicket),
+      transformResponse: (res: unknown): SupportTicket =>
+        normalizeTicket(res as ApiSupportTicket),
       providesTags: (_r, _e, id) => [{ type: "SupportTicket", id }],
     }),
 
     /** Yeni ticket oluştur (UI create formu için) */
     createSupportTicket: b.mutation<
       SupportTicket,
-      { user_id: string; subject: string; message: string; priority?: SupportTicketPriority; category?: string | null }
+      {
+        user_id: string;
+        subject: string;
+        message: string;
+        priority?: SupportTicketPriority;
+        category?: string | null;
+      }
     >({
       query: (body) => ({
         url: "/support_tickets",
@@ -135,14 +151,20 @@ export const supportTicketsApi = baseApi5.injectEndpoints({
           ...(typeof body.category !== "undefined" ? { category: body.category } : {}),
         },
       }),
-      transformResponse: (res: unknown): SupportTicket => normalizeTicket(res as ApiSupportTicket),
+      transformResponse: (res: unknown): SupportTicket =>
+        normalizeTicket(res as ApiSupportTicket),
       invalidatesTags: [{ type: "SupportTickets", id: "LIST" }],
     }),
 
     /** Durum/öncelik güncelleme */
     updateSupportTicket: b.mutation<
       SupportTicket,
-      { id: string; patch: Partial<Pick<SupportTicket, "status" | "priority" | "subject" | "message" | "category">> }
+      {
+        id: string;
+        patch: Partial<
+          Pick<SupportTicket, "status" | "priority" | "subject" | "message" | "category">
+        >;
+      }
     >({
       query: ({ id, patch }) => ({
         url: `/support_tickets/${id}`,
@@ -155,7 +177,8 @@ export const supportTicketsApi = baseApi5.injectEndpoints({
           ...(patch.category !== undefined ? { category: patch.category } : {}),
         },
       }),
-      transformResponse: (res: unknown): SupportTicket => normalizeTicket(res as ApiSupportTicket),
+      transformResponse: (res: unknown): SupportTicket =>
+        normalizeTicket(res as ApiSupportTicket),
       invalidatesTags: (_r, _e, arg) => [{ type: "SupportTicket", id: arg.id }],
     }),
   }),

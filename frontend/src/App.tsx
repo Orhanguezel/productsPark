@@ -39,8 +39,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Support = lazy(() => import("./pages/Support"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const HomeSettings = lazy(() => import("./pages/admin/HomeSettings"));
-const ProductList = lazy(() => import("./pages/admin/ProductList"));
-const ProductForm = lazy(() => import("./pages/admin/ProductForm"));
+const ProductList = lazy(() => import("./pages/admin/product/ProductList"));
+const ProductForm = lazy(() => import("./pages/admin/product/ProductForm"));
 const CategoryList = lazy(() => import("./pages/admin/CategoryList"));
 const CategoryForm = lazy(() => import("./pages/admin/CategoryForm"));
 const BlogList = lazy(() => import("./pages/admin/BlogList"));
@@ -54,13 +54,15 @@ const TicketList = lazy(() => import("./pages/admin/TicketList"));
 const TicketDetail = lazy(() => import("./pages/admin/TicketDetail"));
 const UserList = lazy(() => import("./pages/admin/UserList"));
 const UserEdit = lazy(() => import("./pages/admin/UserEdit"));
-const Settings = lazy(() => import("./pages/admin/Settings"));
+const Settings = lazy(() => import("./pages/admin/settings/Settings"));
+const FakeOrdersPage = lazy(() => import("./pages/admin/FakeOrdersPage"));
+const FakeOrderForm = lazy(() => import("./pages/admin/FakeOrderForm"));
 const FakeNotificationList = lazy(() => import("./pages/admin/FakeNotificationList"));
 const DepositRequestList = lazy(() => import("./pages/admin/DepositRequestList"));
 const PageList = lazy(() => import("./pages/admin/PageList"));
 const PageForm = lazy(() => import("./pages/admin/PageForm"));
 const CustomPage = lazy(() => import("./pages/CustomPage"));
-const MenuManagement = lazy(() => import("./pages/admin/MenuManagement"));
+const MenuManagement = lazy(() => import("./pages/admin/menu/MenuManagement"));
 const ApiProviderList = lazy(() => import("./pages/admin/ApiProviderList"));
 const ApiProviderForm = lazy(() => import("./pages/admin/ApiProviderForm"));
 const TurkpinSettings = lazy(() => import("./pages/admin/TurkpinSettings"));
@@ -93,7 +95,12 @@ const AppContent = () => {
       <Toaster />
       <Sonner />
       <FakeOrderNotification />
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <CartDrawer />
         <CampaignPopup />
         <Suspense fallback={<LoadingSpinner />}>
@@ -142,6 +149,9 @@ const AppContent = () => {
             <Route path="/admin/users/:id" element={<UserEdit />} />
             <Route path="/admin/settings" element={<Settings />} />
             <Route path="/admin/fake-notifications" element={<FakeNotificationList />} />
+            <Route path="/admin/fake-orders" element={<FakeOrdersPage />} />
+            <Route path="/admin/fake-orders/new" element={<FakeOrderForm />} />
+            <Route path="/admin/fake-orders/:id" element={<FakeOrderForm />} />
             <Route path="/admin/deposit-requests" element={<DepositRequestList />} />
             <Route path="/admin/pages" element={<PageList />} />
             <Route path="/admin/pages/new" element={<PageForm />} />

@@ -1,7 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import { env } from "@/core/env";
 
-type Cfg = {
+export type Cfg = {
   cloudName: string;
   apiKey?: string;
   apiSecret?: string;
@@ -14,7 +14,6 @@ export function getCloudinaryConfig(): Cfg | null {
   const apiKey       = env.CLOUDINARY_API_KEY    || env.CLOUDINARY?.apiKey;
   const apiSecret    = env.CLOUDINARY_API_SECRET || env.CLOUDINARY?.apiSecret;
   const uploadPreset = env.CLOUDINARY_UPLOAD_PRESET || undefined;
-  // düz env için default klasör desteği
   const defaultFolder = env.CLOUDINARY?.folder || undefined;
 
   if (!cloudName) return null;
@@ -24,7 +23,7 @@ export function getCloudinaryConfig(): Cfg | null {
 
 type UpOpts = { folder?: string; publicId?: string; mime?: string };
 
-/** Cloudinary public URL (folder + publicId) */
+/** Opsiyonel — kullanmıyoruz; elde gerçek secure_url var */
 export function buildCloudinaryUrl(cloud: string, publicId: string, folder?: string) {
   const pid = (folder ? `${folder}/` : "") + publicId.replace(/^\/+/, "");
   return `https://res.cloudinary.com/${cloud}/image/upload/${pid}`;
@@ -79,7 +78,25 @@ export async function uploadBufferAuto(
   });
 }
 
-export async function destroyPublicId(publicId: string) {
-  try { await cloudinary.uploader.destroy(publicId, { resource_type: "image" }); } catch {}
-  try { await cloudinary.uploader.destroy(publicId, { resource_type: "raw"   }); } catch {}
+/** Güvenli destroy — resource_type verilirse tek atış; verilmezse image/video/raw dener */
+export async function destroyCloudinaryById(publicId: string, resourceType?: string) {
+  const tryTypes = resourceType ? [resourceType] : ["image", "video", "raw"];
+  for (const rt of tryTypes) {
+    try {
+      await cloudinary.uploader.destroy(publicId, { resource_type: rt as any, invalidate: true });
+      return;
+    } catch (_) {}
+  }
+}
+
+/** Klasör değişiminde uzak rename (overwrite=true) */
+export async function renameCloudinaryPublicId(
+  oldPublicId: string,
+  newPublicId: string,
+  resourceType: string = "image"
+) {
+  return cloudinary.uploader.rename(oldPublicId, newPublicId, {
+    resource_type: resourceType as any,
+    overwrite: true,
+  });
 }

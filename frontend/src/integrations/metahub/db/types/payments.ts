@@ -26,7 +26,7 @@ export type PaymentRow = {
   transaction_id: string | null;
   is_test: boolean;
   metadata?: Record<string, unknown> | null;
-  created_at: string;       // ISO
+  created_at: string;        // ISO
   updated_at: string | null; // ISO
 };
 
@@ -63,6 +63,9 @@ export type PaymentProviderRow = {
   is_active?: 0 | 1 | boolean;
   public_config?: Record<string, unknown> | null;
   secret_config?: Record<string, unknown> | null; // admin görünür
+  // Opsiyonel zaman damgaları (BE varsa kullansa da, yoksa sorun değil)
+  created_at?: string;
+  updated_at?: string | null;
 };
 
 /** ---------- Payment Requests ---------- */
@@ -76,7 +79,7 @@ export type PaymentRequestRow = {
   status: PaymentRequestStatus;
   admin_note?: string | null;
   created_at?: string;
-  orders?: Record<string, unknown> | null; // include=order/… için geniş yer
+  orders?: Record<string, unknown> | null;
 };
 export type ApiPaymentRequestRow = Omit<PaymentRequestRow, "amount"> & {
   amount: number | string;

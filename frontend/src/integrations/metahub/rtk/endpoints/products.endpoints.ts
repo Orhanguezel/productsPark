@@ -1,76 +1,20 @@
+// =============================================================
+// FILE: src/integrations/metahub/rtk/endpoints/products.endpoints.ts
+// =============================================================
 import { baseApi } from "../baseApi";
-
-// --- Tipler (FE beklentisi) ---
-export type CategoryBrief = { id: string; name: string; slug: string };
-export type QuantityOption = { quantity: number; price: number };
-export type Badge = { text: string; icon?: string | null; active: boolean };
-
-export type Product = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  short_description: string | null;
-  category_id: string | null;
-  price: number;
-  original_price: number | null;
-  cost: number | null;
-  image_url: string | null;
-  gallery_urls: string[] | null;
-  features: string[] | null;
-  rating: number;
-  review_count: number;
-  product_type?: string | null;
-  delivery_type?: string | null;
-  custom_fields?: Array<{
-    id: string;
-    label: string;
-    type: "text" | "email" | "phone" | "url" | "textarea";
-    placeholder?: string | null;
-    required: boolean;
-  }> | null;
-  quantity_options?: QuantityOption[] | null;
-  api_provider_id?: string | null;
-  api_product_id?: string | null;
-  api_quantity?: number | null;
-  meta_title?: string | null;
-  meta_description?: string | null;
-  article_content?: string | null;
-  article_enabled?: 0 | 1 | boolean;
-  demo_url?: string | null;
-  demo_embed_enabled?: 0 | 1 | boolean;
-  demo_button_text?: string | null;
-  badges?: Badge[] | null;
-  sku?: string | null;
-  stock_quantity: number;
-  is_active: 0 | 1 | boolean;
-  is_featured: 0 | 1 | boolean;
-  requires_shipping: 0 | 1 | boolean;
-  created_at: string;
-  updated_at: string;
-  categories?: CategoryBrief;
-};
-
-// --- Ham API tipi (BE alan adları + geriye dönük uyum) ---
-type ApiProduct = Omit<
+import type {
   Product,
-  "price" | "original_price" | "gallery_urls" | "cost" | "rating" | "review_count"
-> & {
-  price: number | string;
-  /** Yeni isimler */
-  original_price?: number | string | null;
-  gallery_urls?: string[] | string | null;
-  /** Eski isimlerle geriye dönük uyum */
-  compare_at_price?: number | string | null;
-  images?: string[] | string | null;
-  /** Opsiyonel sayısal alanlar string gelebilir */
-  cost?: number | string | null;
-  rating?: number | string | null;
-  review_count?: number | string | null;
-};
+  ApiProduct,
+  FAQ,
+  Review,
+  ProductOption,
+  Stock,
+} from "@/integrations/metahub/db/types/products";
 
 // ---------- helpers (typed) ----------
 type NumericLike = number | string | null | undefined;
+type BoolLike = boolean | 0 | 1 | "0" | "1" | null | undefined;
+type QueryParams = Record<string, string | number | boolean | undefined>;
 
 const asNumber = (v: NumericLike, fallback = 0): number => {
   if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
@@ -105,12 +49,18 @@ const parseArr = (v: unknown): string[] | null => {
   return null;
 };
 
+const asBool = (v: BoolLike, fallback = false): boolean | 0 | 1 => {
+  if (v === true || v === 1 || v === "1") return 1;
+  if (v === false || v === 0 || v === "0") return 0;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  return fallback ? 1 : 0;
+};
+
 // ---------- normalize ----------
 const normalizeProduct = (p: ApiProduct): Product => {
-  // price
   const price = asNumber(p.price, 0);
 
-  // original_price: yeni isim öncelikli, yoksa eski 'compare_at_price'
+  // original_price: yeni isim öncelikli, yoksa legacy 'compare_at_price'
   const originalPrice =
     p.original_price !== undefined && p.original_price !== null
       ? asNumber(p.original_price, 0)
@@ -118,32 +68,103 @@ const normalizeProduct = (p: ApiProduct): Product => {
       ? asNumber(p.compare_at_price, 0)
       : null;
 
-  // cost (opsiyonel)
   const cost = toNumOptional(p.cost);
 
-  // gallery: yeni → eski → image_url fallback
+  // gallery: yeni → legacy → image_url fallback
   const gallery =
     parseArr(p.gallery_urls) ??
     parseArr(p.images) ??
     (typeof p.image_url === "string" && p.image_url.trim() ? [p.image_url] : null);
 
-  // rating / review_count (defaults)
+  const galleryAssetIds = parseArr(p.gallery_asset_ids);
+  const features = parseArr(p.features);
+
+  // booleans
+  const isActive = asBool(p.is_active, true);
+  const isFeatured = asBool(p.is_featured ?? 0, false);
+  const requiresShipping = asBool(p.requires_shipping ?? 1, true);
+  const articleEnabled = asBool(p.article_enabled ?? 0, false);
+  const demoEmbedEnabled = asBool(p.demo_embed_enabled ?? 0, false);
+
+  // rating / review_count
   const rating = p.rating === undefined || p.rating === null ? 5 : asNumber(p.rating, 5);
   const reviewCount =
     p.review_count === undefined || p.review_count === null
       ? 0
       : Math.max(0, Math.floor(asNumber(p.review_count, 0)));
 
-  return {
-    ...p,
+  const featuredImage =
+    (typeof p.featured_image === "string" && p.featured_image.trim() && p.featured_image) ||
+    (typeof p.image_url === "string" && p.image_url.trim() && p.image_url) ||
+    (Array.isArray(gallery) && gallery.length > 0 ? gallery[0] : null);
+
+  const product: Product = {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+
+    description: p.description ?? null,
+    short_description: p.short_description ?? null,
+    category_id: p.category_id ?? null,
+
     price,
     original_price: originalPrice,
     cost,
+
+    image_url: typeof p.image_url === "string" ? p.image_url : null,
+    featured_image: featuredImage ?? null,
+    featured_image_asset_id: p.featured_image_asset_id ?? null,
+    featured_image_alt: p.featured_image_alt ?? null,
     gallery_urls: gallery,
+    gallery_asset_ids: galleryAssetIds,
+
+    features,
+
     rating,
     review_count: reviewCount,
-    delivery_type: p.delivery_type ?? "manual",
+
+    product_type: p.product_type ?? null,
+    delivery_type: (p.delivery_type as Product["delivery_type"]) ?? "manual",
+
+    custom_fields: p.custom_fields ?? null,
+    quantity_options: p.quantity_options ?? null,
+
+    api_provider_id: p.api_provider_id ?? null,
+    api_product_id: p.api_product_id ?? null,
+    api_quantity: p.api_quantity ?? null,
+
+    meta_title: p.meta_title ?? null,
+    meta_description: p.meta_description ?? null,
+
+    article_content: p.article_content ?? null,
+    article_enabled: articleEnabled,
+    demo_url: p.demo_url ?? null,
+    demo_embed_enabled: demoEmbedEnabled,
+    demo_button_text: p.demo_button_text ?? null,
+
+    badges: p.badges ?? null,
+
+    sku: p.sku ?? null,
+    stock_quantity: (p as unknown as { stock_quantity?: number }).stock_quantity ?? 0,
+
+    is_active: isActive,
+    is_featured: isFeatured,
+    requires_shipping: requiresShipping,
+
+    created_at: p.created_at ?? "",
+    updated_at: p.updated_at ?? p.created_at ?? "",
+
+    categories: p.categories
+      ? { id: p.categories.id, name: p.categories.name, slug: p.categories.slug }
+      : undefined,
   };
+
+  // gallery boşsa image_url'ü fallback olarak ekle
+  if ((!product.gallery_urls || product.gallery_urls.length === 0) && product.image_url) {
+    product.gallery_urls = [product.image_url];
+  }
+
+  return product;
 };
 
 // ---------- RTK endpoints ----------
@@ -152,43 +173,35 @@ export const productsApi = baseApi.injectEndpoints({
     // GET /products (liste)
     listProducts: builder.query<
       Product[],
-      {
-        category_id?: string;
-        is_active?: boolean | 0 | 1;
-        q?: string;
-        limit?: number;
-        offset?: number;
-        sort?: "price" | "rating" | "created_at";
-        order?: "asc" | "desc";
-        slug?: string; // opsiyonel; backend slug ile tekil ürün döndürürse aşağıda ele aldık
-      }
+      | {
+          category_id?: string;
+          is_active?: boolean | 0 | 1;
+          q?: string;
+          limit?: number;
+          offset?: number;
+          sort?: "price" | "rating" | "created_at";
+          order?: "asc" | "desc";
+          slug?: string;
+        }
+      | void
     >({
-      query: (params) => ({
-        url: "/products",
-        params: {
-          ...params,
-          // bool -> 0/1 coercion
-          is_active:
-            params?.is_active === undefined ? undefined : params.is_active ? 1 : 0,
-        },
-      }),
+      query: (params) => {
+        const q: { url: string; params?: QueryParams } = { url: "/products" };
+        if (params) {
+          q.params = {
+            ...params,
+            is_active:
+              params.is_active === undefined ? undefined : params.is_active ? 1 : 0,
+          };
+        }
+        return q;
+      },
       transformResponse: (res: unknown): Product[] => {
-        // BE bazı durumlarda slug ile tekil obje döndürebilir
         if (Array.isArray(res)) {
-          return (res as ApiProduct[]).map(normalizeProduct).map((p) => {
-            if ((!p.gallery_urls || p.gallery_urls.length === 0) && p.image_url) {
-              return { ...p, gallery_urls: [p.image_url] };
-            }
-            return p;
-          });
+          return (res as ApiProduct[]).map(normalizeProduct);
         }
         if (res && typeof res === "object") {
-          const n = normalizeProduct(res as ApiProduct);
-          return [
-            (!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url
-              ? { ...n, gallery_urls: [n.image_url] }
-              : n,
-          ];
+          return [normalizeProduct(res as ApiProduct)];
         }
         return [];
       },
@@ -204,55 +217,41 @@ export const productsApi = baseApi.injectEndpoints({
     // ✅ Birleşik detay: GET /products/:idOrSlug
     getProduct: builder.query<Product, string>({
       query: (idOrSlug) => ({ url: `/products/${encodeURIComponent(idOrSlug)}` }),
-      transformResponse: (res: unknown): Product => {
-        const n = normalizeProduct(res as ApiProduct);
-        if ((!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url) {
-          return { ...n, gallery_urls: [n.image_url] };
-        }
-        return n;
-      },
+      transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
       providesTags: (r) =>
         r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
     }),
 
-    // (Geri uyum) GET /products/:id
+    // (Backward compat) GET /products/by-slug/:slug
+    getProductBySlug: builder.query<Product, string>({
+      query: (slug) => ({ url: `/products/by-slug/${encodeURIComponent(slug)}` }),
+      transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
+      providesTags: (r) =>
+        r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
+    }),
+
+    // (Backward compat) GET /products/:id
     getProductById: builder.query<Product, string>({
       query: (id) => ({ url: `/products/${encodeURIComponent(id)}` }),
-      transformResponse: (res: unknown): Product => {
-        const n = normalizeProduct(res as ApiProduct);
-        if ((!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url) {
-          return { ...n, gallery_urls: [n.image_url] };
-        }
-        return n;
-      },
+      transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
       providesTags: (_r, _e, id) => [{ type: "Product", id }],
-    }),
-
-    // (Geri uyum) GET /products/by-slug/:slug  → tek ürün döner
-    getProductBySlug: builder.query<Product, string>({
-      // İstersen unified rota da kullanabilirsin: `/products/${slug}`
-      query: (slug) => ({ url: `/products/by-slug/${encodeURIComponent(slug)}` }),
-      transformResponse: (res: unknown): Product => {
-        const n = normalizeProduct(res as ApiProduct);
-        if ((!n.gallery_urls || n.gallery_urls.length === 0) && n.image_url) {
-          return { ...n, gallery_urls: [n.image_url] };
-        }
-        return n;
-      },
-      providesTags: (r) =>
-        r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
     }),
 
     // GET /product_faqs?product_id=&only_active=
     listProductFaqs: builder.query<
-      Faq[],
+      FAQ[],
       { product_id: string; only_active?: boolean | 0 | 1 }
     >({
       query: ({ product_id, only_active = true }) => ({
         url: "/product_faqs",
         params: { product_id, only_active: only_active ? 1 : 0 },
       }),
-      providesTags: (_r, _e, arg) => [{ type: "Faqs", id: arg.product_id }],
+      transformResponse: (res: unknown): FAQ[] => {
+        if (Array.isArray(res)) return res as FAQ[];
+        const maybe = res as { data?: unknown[] };
+        return Array.isArray(maybe?.data) ? (maybe.data as FAQ[]) : [];
+      },
+      providesTags: (_r, _e, arg) => [{ type: "Faqs" as const, id: arg.product_id }],
     }),
 
     // GET /product_reviews?product_id=&only_active=
@@ -264,7 +263,12 @@ export const productsApi = baseApi.injectEndpoints({
         url: "/product_reviews",
         params: { product_id, only_active: only_active ? 1 : 0 },
       }),
-      providesTags: (_r, _e, arg) => [{ type: "Reviews", id: arg.product_id }],
+      transformResponse: (res: unknown): Review[] => {
+        if (Array.isArray(res)) return res as Review[];
+        const maybe = res as { data?: unknown[] };
+        return Array.isArray(maybe?.data) ? (maybe.data as Review[]) : [];
+      },
+      providesTags: (_r, _e, arg) => [{ type: "Reviews" as const, id: arg.product_id }],
     }),
 
     // GET /product_options?product_id=
@@ -273,7 +277,16 @@ export const productsApi = baseApi.injectEndpoints({
         url: "/product_options",
         params: { product_id },
       }),
-      providesTags: (_r, _e, arg) => [{ type: "Options", id: arg.product_id }],
+      transformResponse: (res: unknown): ProductOption[] => {
+        const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data;
+        if (!Array.isArray(arr)) return [];
+        return (arr as ProductOption[]).map((opt) => {
+          const raw = (opt as unknown as { option_values?: unknown }).option_values;
+          const values = Array.isArray(raw) ? raw as string[] : parseArr(raw) ?? [];
+          return { ...opt, option_values: values };
+        });
+      },
+      providesTags: (_r, _e, arg) => [{ type: "Options" as const, id: arg.product_id }],
     }),
 
     // GET /product_stock?product_id=&is_used=
@@ -286,65 +299,29 @@ export const productsApi = baseApi.injectEndpoints({
         params: {
           product_id,
           ...(is_used === undefined ? {} : { is_used: is_used ? 1 : 0 }),
-        },
+        } as QueryParams,
       }),
-      providesTags: (_r, _e, arg) => [{ type: "Stock", id: arg.product_id }],
+      transformResponse: (res: unknown): Stock[] => {
+        const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data;
+        if (!Array.isArray(arr)) return [];
+        return (arr as Stock[]).map((s) => {
+          if (s.code && !s.stock_content) return s;
+          if (s.stock_content && !s.code) return { ...s, code: s.stock_content };
+          return s;
+        });
+      },
+      providesTags: (_r, _e, arg) => [{ type: "Stock" as const, id: arg.product_id }],
     }),
   }),
   overrideExisting: true,
 });
 
-// --- Alt tipler ---
-export type Review = {
-  id: string;
-  product_id: string;
-  user_id?: string | null;
-  rating: number;
-  comment?: string | null;
-  is_active?: 0 | 1 | boolean;
-  customer_name?: string | null;
-  review_count?: never; // sadece type ayrımı için
-  review_date: string;
-  created_at: string;
-  updated_at: string;
-};
-
-export type Faq = {
-  id: string;
-  product_id: string;
-  question: string;
-  answer: string;
-  display_order: number;
-  is_active: 0 | 1 | boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type ProductOption = {
-  id: string;
-  product_id: string;
-  option_name: string;
-  option_values: string[];
-  created_at: string;
-  updated_at: string;
-};
-
-export type Stock = {
-  id: string;
-  product_id: string;
-  code: string;
-  is_used: 0 | 1 | boolean;
-  used_at?: string | null;
-  created_at: string;
-  order_item_id?: string | null;
-};
-
 // Hooks
 export const {
   useListProductsQuery,
-  useGetProductQuery,        // ✅ birleşik (id veya slug)
-  useGetProductByIdQuery,    // backward-compat
-  useGetProductBySlugQuery,  // backward-compat
+  useGetProductQuery,       
+  useGetProductByIdQuery,   
+  useGetProductBySlugQuery, 
   useListProductFaqsQuery,
   useListProductReviewsQuery,
   useListProductOptionsQuery,

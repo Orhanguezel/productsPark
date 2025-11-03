@@ -1,5 +1,3 @@
-// src/modules/blog/schema.ts
-
 import { sql } from "drizzle-orm";
 import {
   mysqlTable, char, varchar, text, tinyint, datetime, index, uniqueIndex
@@ -13,7 +11,14 @@ export const blogPosts = mysqlTable(
     slug: varchar("slug", { length: 255 }).notNull(),
     excerpt: varchar("excerpt", { length: 500 }),
     content: text("content").notNull(),
+
+    /** Eski alan (URL) – GERİYE DÖNÜK UYUMLULUK */
     featured_image: varchar("featured_image", { length: 500 }),
+
+    /** Yeni alanlar: storage ile bağ */
+    featured_image_asset_id: char("featured_image_asset_id", { length: 36 }),
+    featured_image_alt: varchar("featured_image_alt", { length: 255 }),
+
     author: varchar("author", { length: 100 }),
     meta_title: varchar("meta_title", { length: 255 }),
     meta_description: varchar("meta_description", { length: 500 }),
@@ -27,6 +32,7 @@ export const blogPosts = mysqlTable(
     index("blog_posts_created_idx").on(t.created_at),
     index("blog_posts_published_idx").on(t.published_at),
     index("blog_posts_is_published_idx").on(t.is_published),
+    index("blog_posts_featured_asset_idx").on(t.featured_image_asset_id),
   ],
 );
 

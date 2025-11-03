@@ -1,30 +1,12 @@
+// =============================================================
+// FILE: src/integrations/metahub/rtk/endpoints/topbar_settings.endpoints.ts
+// =============================================================
 import { baseApi as baseApi_topbar } from "../baseApi";
-
-type BoolLike = 0 | 1 | boolean;
-
-export type TopbarSetting = {
-  id: string;
-  is_active: boolean;
-  message: string;
-  coupon_code?: string | null;
-  link_url?: string | null;
-  link_text?: string | null;
-  show_ticker?: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type ApiTopbarSetting = {
-  id: string;
-  is_active?: BoolLike;
-  message?: string | null;
-  coupon_code?: string | null;
-  link_url?: string | null;
-  link_text?: string | null;
-  show_ticker?: BoolLike;
-  created_at?: string;
-  updated_at?: string;
-};
+import type {
+  TopbarSetting,
+  ApiTopbarSetting,
+  TopbarPublicListParams,
+} from "@/integrations/metahub/db/types/topbar";
 
 const toBool = (v: unknown): boolean =>
   v === true || v === "true" || v === 1 || v === "1";
@@ -41,46 +23,54 @@ const normalize = (r: ApiTopbarSetting): TopbarSetting => ({
   updated_at: r.updated_at,
 });
 
-type ListArgs = {
-  is_active?: BoolLike;
-  order?: string;
-  limit?: number;
-  offset?: number;
+const toParams = (p?: TopbarPublicListParams | void) => {
+  if (!p) return undefined;
+  const params: Record<string, string> = {};
+  if (typeof p.is_active === "boolean") params.is_active = String(p.is_active ? 1 : 0);
+  if (p.order) params.order = p.order;
+  if (p.limit != null) params.limit = String(p.limit);
+  if (p.offset != null) params.offset = String(p.offset);
+  return params;
 };
+
+const BASE = "/topbar_settings";
 
 export const topbarSettingsApi = baseApi_topbar.injectEndpoints({
   endpoints: (b) => ({
-    // ❗ params opsiyonel; yoksa {} gönderiyoruz
-    listTopbarSettings: b.query<TopbarSetting[], ListArgs | undefined>({
-      query: (params) => ({
-        url: "/topbar_settings",
-        params: params ?? {}, // <-- kritik değişiklik
-      }),
+    listTopbarSettings: b.query<TopbarSetting[], TopbarPublicListParams | void>({
+      query: (q) => {
+        const params = toParams(q);
+        return params ? { url: BASE, params } : { url: BASE };
+      },
       transformResponse: (res: unknown): TopbarSetting[] =>
         Array.isArray(res) ? (res as ApiTopbarSetting[]).map(normalize) : [],
       providesTags: (result) =>
         result
           ? [
-              ...result.map((i) => ({ type: "TopbarSetting" as const, id: i.id })),
+              ...result.map((i) => ({ type: "TopbarSettings" as const, id: i.id })),
               { type: "TopbarSettings" as const, id: "LIST" },
             ]
           : [{ type: "TopbarSettings" as const, id: "LIST" }],
+      keepUnusedDataFor: 60,
     }),
 
+    /** Aktif ilk kaydı döndürür (yoksa null) */
     getActiveTopbar: b.query<TopbarSetting | null, void>({
       query: () => ({
-        url: "/topbar_settings",
+        url: BASE,
         params: { is_active: 1, limit: 1 },
       }),
       transformResponse: (res: unknown): TopbarSetting | null => {
         const rows = Array.isArray(res) ? (res as ApiTopbarSetting[]) : [];
         return rows.length ? normalize(rows[0]!) : null;
       },
-      providesTags: (_r) => [{ type: "TopbarSettings", id: "ACTIVE" }],
+      providesTags: [{ type: "TopbarSettings", id: "ACTIVE" }],
     }),
   }),
   overrideExisting: true,
 });
 
-export const { useListTopbarSettingsQuery, useGetActiveTopbarQuery } =
-  topbarSettingsApi;
+export const {
+  useListTopbarSettingsQuery,
+  useGetActiveTopbarQuery,
+} = topbarSettingsApi;

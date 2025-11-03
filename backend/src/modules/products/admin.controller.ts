@@ -1,36 +1,33 @@
 // =============================================================
 // FILE: src/modules/products/admin.controller.ts
 // =============================================================
-import type { RouteHandler } from 'fastify';
-import { randomUUID } from 'crypto';
-import { db } from '@/db/client';
-import { and, desc, eq, like, sql, asc, inArray } from 'drizzle-orm';
+import type { RouteHandler } from "fastify";
+import { randomUUID } from "crypto";
+import { db } from "@/db/client";
+import { and, desc, eq, like, sql, asc, inArray } from "drizzle-orm";
 import {
   products,
   productFaqs,
   productOptions,
   productReviews,
   productStock,
-} from './schema';
-import { categories } from '@/modules/categories/schema';
+} from "./schema";
+import { categories } from "@/modules/categories/schema";
 import {
   productCreateSchema,
   productUpdateSchema,
   productFaqCreateSchema,
-  productFaqUpdateSchema,
   productReviewCreateSchema,
-  productReviewUpdateSchema,
-} from './validation';
-import { ZodError } from 'zod';
+} from "./validation";
 
 const now = () => new Date();
 const toNumber = (x: any) =>
-  x === null || x === undefined ? x : (Number.isNaN(Number(x)) ? x : Number(x));
-const toBool = (x: any) => (typeof x === 'boolean' ? x : Number(x) === 1);
+  x === null || x === undefined ? x : Number.isNaN(Number(x)) ? x : Number(x);
+const toBool = (x: any) => (typeof x === "boolean" ? x : Number(x) === 1);
 
 const parseJson = <T,>(val: any): T | null => {
   if (val == null) return null;
-  if (typeof val === 'string') {
+  if (typeof val === "string") {
     const s = val.trim();
     if (!s) return null;
     try {
@@ -39,11 +36,10 @@ const parseJson = <T,>(val: any): T | null => {
       return null;
     }
   }
-  if (typeof val === 'object') return val as T;
+  if (typeof val === "object") return val as T;
   return null;
 };
 
-// FE ProductRow ile uyumlu normalize (sayılar, json ve tinyint→boolean)
 function normalizeProduct(row: any) {
   if (!row) return row;
   const p = { ...row };
@@ -58,30 +54,29 @@ function normalizeProduct(row: any) {
 
   // json
   p.gallery_urls = parseJson<string[]>(p.gallery_urls);
+  p.gallery_asset_ids = parseJson<string[]>(p.gallery_asset_ids);
   p.features = parseJson<string[]>(p.features);
   p.custom_fields = parseJson(p.custom_fields);
   p.quantity_options = parseJson(p.quantity_options);
   p.badges = parseJson(p.badges);
 
-  // booleans
-  const b = (x: any) => (typeof x === 'boolean' ? x : Number(x) === 1);
+  // booleans (0/1 kolonlar)
+  const b = (x: any) => (typeof x === "boolean" ? x : Number(x) === 1);
   p.is_active = b(p.is_active);
   p.is_featured = b(p.is_featured);
   p.requires_shipping = b(p.requires_shipping);
   p.article_enabled = b(p.article_enabled);
   p.demo_embed_enabled = b(p.demo_embed_enabled);
+  if ("is_digital" in p) p.is_digital = b(p.is_digital);
+  if ("auto_delivery_enabled" in p) p.auto_delivery_enabled = b(p.auto_delivery_enabled);
+  if ("pre_order_enabled" in p) p.pre_order_enabled = b(p.pre_order_enabled);
 
-  // yeni bayraklar
-  if ('is_digital' in p) p.is_digital = b(p.is_digital);
-  if ('auto_delivery_enabled' in p) p.auto_delivery_enabled = b(p.auto_delivery_enabled);
-  if ('pre_order_enabled' in p) p.pre_order_enabled = b(p.pre_order_enabled);
+  // UI eşitleme (show_on_homepage yoksa is_featured’e bağla)
+  p.show_on_homepage = "show_on_homepage" in p ? b(p.show_on_homepage) : b(p.is_featured);
 
-  // FE `show_on_homepage` = is_featured fallback
-  p.show_on_homepage = 'show_on_homepage' in p ? b(p.show_on_homepage) : b(p.is_featured);
-
+  // featured_image / featured_image_asset_id / featured_image_alt → passthrough
   return p;
 }
-
 
 /* ============================================= */
 /* PRODUCTS (ADMIN)                              */
@@ -98,8 +93,8 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
     max_price?: string;
     limit?: string;
     offset?: string;
-    sort?: 'created_at' | 'price' | 'name' | 'review_count' | 'rating';
-    order?: 'asc' | 'desc' | string;
+    sort?: "created_at" | "price" | "name" | "review_count" | "rating";
+    order?: "asc" | "desc" | string;
   };
 
   const conds: any[] = [];
@@ -107,17 +102,16 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
   if (q.category_id) conds.push(eq(products.category_id, q.category_id));
   if (q.is_active !== undefined) {
     const v =
-      typeof q.is_active === 'boolean'
+      typeof q.is_active === "boolean"
         ? q.is_active
-        : q.is_active === '1' || q.is_active === 'true';
+        : q.is_active === "1" || q.is_active === "true";
     conds.push(eq(products.is_active, (v ? 1 : 0) as any));
   }
   if (q.show_on_homepage !== undefined) {
     const v =
-      typeof q.show_on_homepage === 'boolean'
+      typeof q.show_on_homepage === "boolean"
         ? q.show_on_homepage
-        : q.show_on_homepage === '1' || q.show_on_homepage === 'true';
-    // DB’de show_on_homepage kolonu yoksa is_featured’e bağla
+        : q.show_on_homepage === "1" || q.show_on_homepage === "true";
     conds.push(eq(products.is_featured, (v ? 1 : 0) as any));
   }
   if (q.min_price) conds.push(sql`${products.price} >= ${q.min_price}`);
@@ -135,12 +129,12 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
     review_count: products.review_count,
     rating: products.rating,
   } as const;
-  const sortKey = (q.sort && colMap[q.sort]) ? q.sort : 'created_at';
-  const dir: 'asc' | 'desc' = q.order === 'asc' ? 'asc' : 'desc';
-  const orderExpr = dir === 'asc' ? asc(colMap[sortKey]) : desc(colMap[sortKey]);
+  const sortKey = q.sort && colMap[q.sort] ? q.sort : "created_at";
+  const dir: "asc" | "desc" = q.order === "asc" ? "asc" : "desc";
+  const orderExpr = dir === "asc" ? asc(colMap[sortKey]) : desc(colMap[sortKey]);
 
-  const dataBase = db.select().from(products);
-  const dataQuery = (whereExpr ? dataBase.where(whereExpr) : dataBase)
+  const baseSel = db.select().from(products);
+  const dataQuery = (whereExpr ? baseSel.where(whereExpr) : baseSel)
     .orderBy(orderExpr)
     .limit(limit)
     .offset(offset);
@@ -152,30 +146,26 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
 /** GET /admin/products/:id */
 export const adminGetProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
-  const rows = await db
-    .select()
-    .from(products)
-    .where(eq(products.id, id))
-    .limit(1);
-  if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
+  const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
+  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
   return reply.send(normalizeProduct(rows[0]));
 };
 
 /** POST /admin/products */
-// adminCreateProduct
 export const adminCreateProduct: RouteHandler = async (req, reply) => {
   try {
     const input = productCreateSchema.parse(req.body ?? {});
-    // FK guard: kategori varsa DB'de var mı?
+    // FK guard
     if (input.category_id) {
-      const [cat] = await db.select({ id: categories.id })
+      const [cat] = await db
+        .select({ id: categories.id })
         .from(categories)
         .where(eq(categories.id, input.category_id))
         .limit(1);
       if (!cat) {
-        return reply.code(409).send({
-          error: { message: "category_not_found", details: input.category_id }
-        });
+        return reply
+          .code(409)
+          .send({ error: { message: "category_not_found", details: input.category_id } });
       }
     }
 
@@ -183,20 +173,17 @@ export const adminCreateProduct: RouteHandler = async (req, reply) => {
     await (db.insert(products) as any).values({
       ...input,
       id,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: now(),
+      updated_at: now(),
     });
 
     const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
     return reply.code(201).send(normalizeProduct(row));
-
   } catch (e: any) {
-    // Doğrudan Zod hatası
+    const code = e?.cause?.code || e?.code;
     if (e?.name === "ZodError") {
       return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
     }
-    // Drizzle → mysql2 hatasını sarmalıyor, asıl kod e.cause.code içinde olur
-    const code = e?.cause?.code || e?.code;
     if (code === "ER_NO_REFERENCED_ROW_2" || code === 1452) {
       return reply.code(409).send({ error: { message: "fk_category_not_found" } });
     }
@@ -208,36 +195,37 @@ export const adminCreateProduct: RouteHandler = async (req, reply) => {
   }
 };
 
-// adminUpdateProduct
+/** PATCH /admin/products/:id */
 export const adminUpdateProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
     const patch = productUpdateSchema.parse(req.body ?? {});
+
     if (patch.category_id) {
-      const [cat] = await db.select({ id: categories.id })
+      const [cat] = await db
+        .select({ id: categories.id })
         .from(categories)
         .where(eq(categories.id, patch.category_id))
         .limit(1);
       if (!cat) {
-        return reply.code(409).send({
-          error: { message: "category_not_found", details: patch.category_id }
-        });
+        return reply
+          .code(409)
+          .send({ error: { message: "category_not_found", details: patch.category_id } });
       }
     }
 
     await (db.update(products) as any)
-      .set({ ...patch, updated_at: new Date() })
+      .set({ ...patch, updated_at: now() })
       .where(eq(products.id, id));
 
     const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
+    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(normalizeProduct(rows[0]));
-
   } catch (e: any) {
+    const code = e?.cause?.code || e?.code;
     if (e?.name === "ZodError") {
       return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
     }
-    const code = e?.cause?.code || e?.code;
     if (code === "ER_NO_REFERENCED_ROW_2" || code === 1452) {
       return reply.code(409).send({ error: { message: "fk_category_not_found" } });
     }
@@ -245,7 +233,7 @@ export const adminUpdateProduct: RouteHandler = async (req, reply) => {
       return reply.code(409).send({ error: { message: "duplicate_slug" } });
     }
     req.log.error(e);
-    return reply.code(500).send({ error: { message: 'internal_error' } });
+    return reply.code(500).send({ error: { message: "internal_error" } });
   }
 };
 
@@ -260,7 +248,7 @@ export const adminDeleteProduct: RouteHandler = async (req, reply) => {
 export const adminBulkSetActive: RouteHandler = async (req, reply) => {
   const body = (req.body || {}) as { ids?: string[]; is_active?: boolean };
   if (!Array.isArray(body.ids) || body.ids.length === 0) {
-    return reply.code(400).send({ error: { message: 'ids_required' } });
+    return reply.code(400).send({ error: { message: "ids_required" } });
   }
   const v = body.is_active ? 1 : 0;
   await (db.update(products) as any)
@@ -340,8 +328,8 @@ export const adminReplaceFaqs: RouteHandler = async (req, reply) => {
     return {
       id: parsed.id ?? randomUUID(),
       product_id: id,
-      question: parsed.question ?? '',
-      answer: parsed.answer ?? '',
+      question: parsed.question ?? "",
+      answer: parsed.answer ?? "",
       display_order: toNumber(parsed.display_order ?? i) ?? i,
       is_active: toBool(parsed.is_active ?? 1) ? 1 : 0,
       created_at: now(),
@@ -364,9 +352,7 @@ export const adminReplaceFaqs: RouteHandler = async (req, reply) => {
 export const adminSetProductStock: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const { lines } = (req.body || {}) as { lines?: string[] };
-  const items = Array.isArray(lines)
-    ? lines.map((s) => String(s).trim()).filter(Boolean)
-    : [];
+  const items = Array.isArray(lines) ? lines.map((s) => String(s).trim()).filter(Boolean) : [];
 
   // önce kullanılmamış stokları sil
   await (db.delete(productStock) as any).where(
@@ -379,7 +365,7 @@ export const adminSetProductStock: RouteHandler = async (req, reply) => {
       items.map((line) => ({
         id: randomUUID(),
         product_id: id,
-        stock_content: line, // <-- FE & DB ile uyumlu alan
+        stock_content: line, // FE & DB ile uyumlu alan
         is_used: 0,
         used_at: null,
         created_at: now(),
@@ -411,7 +397,6 @@ export const adminListUsedStock: RouteHandler = async (req, reply) => {
     .where(and(eq(productStock.product_id, id), eq(productStock.is_used, 1 as any)))
     .orderBy(desc(productStock.used_at));
 
-  // FE `stock_content` bekliyor
   const out = rows.map((r: any) => ({
     id: r.id,
     product_id: r.product_id,
@@ -427,7 +412,7 @@ export const adminListUsedStock: RouteHandler = async (req, reply) => {
 };
 
 /* ============================================= */
-/* CATEGORIES & API PROVIDERS                    */
+/* CATEGORIES                                    */
 /* ============================================= */
 
 /** GET /admin/categories */
