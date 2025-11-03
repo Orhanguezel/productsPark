@@ -1,3 +1,6 @@
+// ----------------------------------------------------------------------
+// FILE: src/modules/footer_sections/router.ts
+// ----------------------------------------------------------------------
 import type { FastifyInstance } from "fastify";
 import {
   listController,
@@ -6,14 +9,19 @@ import {
   updateController,
   deleteController,
 } from "./controller";
-
-// İstersen auth middleware ekleyebilirsin:
-// import { requireAuth } from '@/common/middleware/auth';
+import type {
+  FooterSectionListQuery,
+  FooterSectionCreateInput,
+  FooterSectionUpdateInput,
+} from "./validation";
 
 export async function registerFooterSections(app: FastifyInstance) {
-  app.get("/footer_sections", /* { preHandler: [requireAuth] }, */ listController);
-  app.get("/footer_sections/:id", /* { preHandler: [requireAuth] }, */ getController);
-  app.post("/footer_sections", /* { preHandler: [requireAuth] }, */ createController);
-  app.patch("/footer_sections/:id", /* { preHandler: [requireAuth] }, */ updateController);
-  app.delete("/footer_sections/:id", /* { preHandler: [requireAuth] }, */ deleteController);
+  // public
+  app.get<{ Querystring: FooterSectionListQuery }>("/footer_sections", listController);
+  app.get<{ Params: { id: string } }>("/footer_sections/:id", getController);
+
+  // İstersen bu üç satırı kapat (public CRUD istenmiyorsa)
+  app.post<{ Body: FooterSectionCreateInput }>("/footer_sections", createController);
+  app.patch<{ Params: { id: string }; Body: FooterSectionUpdateInput }>("/footer_sections/:id", updateController);
+  app.delete<{ Params: { id: string } }>("/footer_sections/:id", deleteController);
 }

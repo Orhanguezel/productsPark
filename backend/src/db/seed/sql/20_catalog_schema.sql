@@ -1,37 +1,52 @@
--- =========================
--- CATEGORIES
--- =========================
-CREATE TABLE IF NOT EXISTS categories (
-  id            CHAR(36)      NOT NULL,
-  name          VARCHAR(255)  NOT NULL,
-  slug          VARCHAR(255)  NOT NULL,
-  description   TEXT          DEFAULT NULL,
-  image_url     VARCHAR(500)  DEFAULT NULL,
-  icon          VARCHAR(100)  DEFAULT NULL,
-  parent_id     CHAR(36)      DEFAULT NULL,
+-- =============================================================
+-- FILE: 61_categories_schema.sql
+-- Idempotent schema aligned with storage-aware design
+-- =============================================================
 
-  is_active     TINYINT(1)    NOT NULL DEFAULT 1,
-  is_featured   TINYINT(1)    NOT NULL DEFAULT 0,
-  display_order INT(11)       NOT NULL DEFAULT 0,
+-- 1) CREATE (ilk kurulum)
+CREATE TABLE IF NOT EXISTS `categories` (
+  `id`              CHAR(36)      NOT NULL,
+  `name`            VARCHAR(255)  NOT NULL,
+  `slug`            VARCHAR(255)  NOT NULL,
 
-  created_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `description`     TEXT          DEFAULT NULL,
 
-  PRIMARY KEY (id),
+  -- Legacy URL alanı (geriye dönük)
+  `image_url`       VARCHAR(500)  DEFAULT NULL,
 
-  UNIQUE KEY categories_slug_uq (slug),
-  KEY categories_parent_id_idx (parent_id),
-  KEY categories_active_idx (is_active),
-  KEY categories_order_idx (display_order),
+  -- ✅ Yeni: storage bağlantısı
+  `image_asset_id`  CHAR(36)      DEFAULT NULL,
+  `image_alt`       VARCHAR(255)  DEFAULT NULL,
 
-  CONSTRAINT fk_categories_parent
-    FOREIGN KEY (parent_id) REFERENCES categories(id)
+  `icon`            VARCHAR(100)  DEFAULT NULL,
+  `parent_id`       CHAR(36)      DEFAULT NULL,
+
+  -- İçerik alanları
+  `article_content` LONGTEXT      DEFAULT NULL,
+  `article_enabled` TINYINT(1)    NOT NULL DEFAULT 0,
+
+  `is_active`       TINYINT(1)    NOT NULL DEFAULT 1,
+  `is_featured`     TINYINT(1)    NOT NULL DEFAULT 0,
+  `display_order`   INT(11)       NOT NULL DEFAULT 0,
+
+  `created_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY `categories_slug_uq` (`slug`),
+  KEY `categories_parent_id_idx` (`parent_id`),
+  KEY `categories_active_idx` (`is_active`),
+  KEY `categories_order_idx` (`display_order`),
+  KEY `categories_image_asset_idx` (`image_asset_id`),
+
+  CONSTRAINT `fk_categories_parent`
+    FOREIGN KEY (`parent_id`) REFERENCES `categories`(`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =========================
--- PRODUCTS  (FE tiplerine tam uyum)
--- =========================
+-- ============================================
+-- DDL: PRODUCTS (storage entegrasyonu ile tam uyumlu)
+-- ============================================
 CREATE TABLE IF NOT EXISTS products (
   id                 CHAR(36)      NOT NULL,
   name               VARCHAR(255)  NOT NULL,
@@ -46,8 +61,19 @@ CREATE TABLE IF NOT EXISTS products (
   original_price     DECIMAL(10,2) DEFAULT NULL,
   cost               DECIMAL(10,2) DEFAULT NULL,
 
+  -- Legacy URL (korunuyor)
   image_url          VARCHAR(500)  DEFAULT NULL,
+
+  -- Yeni kapak alanları (blog_posts ile aynı patern)
+  featured_image           VARCHAR(500)  DEFAULT NULL,
+  -- ⚠️ UUID olmayan public_id'ler için genişlettik
+  featured_image_asset_id  VARCHAR(200)  DEFAULT NULL,
+  featured_image_alt       VARCHAR(255)  DEFAULT NULL,
+
+  -- Galeri (legacy + yeni asset id’ler)
   gallery_urls       JSON          DEFAULT NULL,
+  gallery_asset_ids  JSON          DEFAULT NULL,
+
   features           JSON          DEFAULT NULL,
 
   rating             DECIMAL(3,2)  NOT NULL DEFAULT 5.00,
@@ -82,17 +108,17 @@ CREATE TABLE IF NOT EXISTS products (
   requires_shipping  TINYINT(1)    NOT NULL DEFAULT 1,
 
   -- FE'de bulunan ilave alanlar
-  file_url           VARCHAR(500)  DEFAULT NULL,
-  epin_game_id       VARCHAR(64)   DEFAULT NULL,
-  epin_product_id    VARCHAR(64)   DEFAULT NULL,
-  auto_delivery_enabled TINYINT(1) NOT NULL DEFAULT 0,
-  pre_order_enabled     TINYINT(1) NOT NULL DEFAULT 0,
-  min_order          INT(11)       DEFAULT NULL,
-  max_order          INT(11)       DEFAULT NULL,
-  min_barem          INT(11)       DEFAULT NULL,
-  max_barem          INT(11)       DEFAULT NULL,
-  barem_step         INT(11)       DEFAULT NULL,
-  tax_type           INT(11)       DEFAULT NULL,
+  file_url               VARCHAR(500)  DEFAULT NULL,
+  epin_game_id           VARCHAR(64)   DEFAULT NULL,
+  epin_product_id        VARCHAR(64)   DEFAULT NULL,
+  auto_delivery_enabled  TINYINT(1)    NOT NULL DEFAULT 0,
+  pre_order_enabled      TINYINT(1)    NOT NULL DEFAULT 0,
+  min_order              INT(11)       DEFAULT NULL,
+  max_order              INT(11)       DEFAULT NULL,
+  min_barem              INT(11)       DEFAULT NULL,
+  max_barem              INT(11)       DEFAULT NULL,
+  barem_step             INT(11)       DEFAULT NULL,
+  tax_type               INT(11)       DEFAULT NULL,
 
   created_at         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -104,13 +130,18 @@ CREATE TABLE IF NOT EXISTS products (
   KEY products_sku_idx (sku),
   KEY products_active_idx (is_active),
 
+  -- Sık kullanılan birleşik index’ler
   KEY products_cat_active_created_idx (category_id, is_active, created_at),
   KEY products_slug_active_idx (slug, is_active),
+
+  -- Storage asset join’lerinde hız için (utf8mb4 → prefix index)
+  KEY products_featured_asset_idx (featured_image_asset_id(191)),
 
   CONSTRAINT fk_products_category
     FOREIGN KEY (category_id) REFERENCES categories(id)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- =========================
 -- PRODUCT FAQS

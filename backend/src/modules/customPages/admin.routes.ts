@@ -1,6 +1,3 @@
-// =============================================================
-// FILE: src/modules/customPages/admin.routes.ts
-// =============================================================
 import type { FastifyInstance } from "fastify";
 import {
   listPagesAdmin,
@@ -11,11 +8,6 @@ import {
   removePageAdmin,
 } from "./admin.controller";
 
-/**
- * Admin rotaları:
- * - Yetkilendirme orta katmanı eklemek için config alanını kullan.
- *   Örn: { config: { auth: true, role: "admin" } }
- */
 export async function registerCustomPagesAdmin(app: FastifyInstance) {
   app.get("/admin/custom_pages",               { config: { auth: true } }, listPagesAdmin);
   app.get("/admin/custom_pages/:id",           { config: { auth: true } }, getPageAdmin);

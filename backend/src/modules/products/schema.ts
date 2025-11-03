@@ -21,9 +21,18 @@ export const products = mysqlTable(
     original_price: decimal('original_price', { precision: 10, scale: 2 }),
     cost: decimal('cost', { precision: 10, scale: 2 }),
 
+    /** 🔧 Eski alan (geriye dönük) */
     image_url: varchar('image_url', { length: 500 }),
 
-    gallery_urls: json('gallery_urls'),
+    /** 🔧 Yeni kapak: blog_posts paternine uygun */
+    featured_image: varchar('featured_image', { length: 500 }),          // opsiyonel URL (legacy-compat)
+    featured_image_asset_id: char('featured_image_asset_id', { length: 36 }),
+    featured_image_alt: varchar('featured_image_alt', { length: 255 }),
+
+    /** Galeri (legacy + yeni asset id’ler) */
+    gallery_urls: json('gallery_urls'),                                   // string[] (URL)
+    gallery_asset_ids: json('gallery_asset_ids').$type<string[]>(),       // string[uuid] (opsiyonel)
+
     features: json('features'),
 
     rating: decimal('rating', { precision: 3, scale: 2 }).notNull().default('5.00'),
@@ -79,13 +88,17 @@ export const products = mysqlTable(
     index('products_category_id_idx').on(t.category_id),
     index('products_sku_idx').on(t.sku),
     index('products_active_idx').on(t.is_active),
+    /** 🔧 storage ilişkisi için index */
+    index('products_featured_asset_idx').on(t.featured_image_asset_id),
     foreignKey({
       columns: [t.category_id],
       foreignColumns: [categories.id],
-      name: 'fk_products_category',               // DDL ile birebir
+      name: 'fk_products_category',
     }).onDelete('set null').onUpdate('cascade'),
   ]
 );
+
+
 
 export const productFaqs = mysqlTable('product_faqs', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
@@ -128,6 +141,8 @@ export const productOptions = mysqlTable('product_options', {
   option_values: json('option_values').$type<string[]>().notNull(), // TEXT[] -> JSON
   created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
 });
+
+
 
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;

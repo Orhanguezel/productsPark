@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { metahub } from "@/integrations/metahub/client";
 import { useSeoSettings } from "@/hooks/useSeoSettings";
 import { ArrowRight } from "lucide-react";
+import type { Category } from "@/integrations/metahub/db/types/categories";
 
 const colorMap: Record<string, string> = {
   steam: "from-blue-500 to-cyan-500",
@@ -22,17 +23,6 @@ const colorMap: Record<string, string> = {
   other: "from-teal-500 to-green-500",
 };
 
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  icon: string | null;
-  product_count: number;
-  image_url: string | null;
-  parent_id: string | null;
-  subcategories?: Category[];
-}
 
 const Categories = () => {
   const [searchParams] = useSearchParams();

@@ -1,46 +1,30 @@
-import { useState, useEffect } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/components/layout/Topbar.tsx
+// =============================================================
+"use client";
+import { useState } from "react";
 import { Copy, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "react-router-dom";
-
-interface TopbarSettings {
-  id: string;
-  is_active: boolean;
-  message: string;
-  coupon_code?: string;
-  link_url?: string;
-  link_text?: string;
-}
+import { Button } from "@/components/ui/button"; // (isteğe bağlı, sadece stil için)
+import {
+  useGetActiveTopbarQuery,
+} from "@/integrations/metahub/rtk/endpoints/topbar_settings.endpoints";
 
 export const Topbar = () => {
-  const [settings, setSettings] = useState<TopbarSettings | null>(null);
+  const { data: settings, isFetching, isError } = useGetActiveTopbarQuery();
   const [isVisible, setIsVisible] = useState(true);
   const { toast } = useToast();
   const location = useLocation();
 
-  useEffect(() => {
-    fetchTopbarSettings();
-  }, []);
+  // Admin sayfalarında gösterme
+  if (location.pathname.startsWith("/admin")) return null;
 
-  const fetchTopbarSettings = async () => {
-    const { data, error } = await metahub
-      .from("topbar_settings")
-      .select("*")
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error fetching topbar:", error);
-      return;
-    }
-
-    setSettings(data);
-  };
+  // Hata, yükleme veya görünür değilse gösterme
+  if (isError || isFetching || !settings || !settings.is_active || !isVisible) return null;
 
   const handleCopyCoupon = async () => {
     if (!settings?.coupon_code) return;
-
     try {
       await navigator.clipboard.writeText(settings.coupon_code);
       toast({
@@ -48,27 +32,15 @@ export const Topbar = () => {
         description: settings.coupon_code,
       });
     } catch (err) {
-      console.error("Failed to copy:", err);
+      // sessizce yut
+      // console.error("Failed to copy:", err);
     }
   };
 
-  const handleClose = () => {
-    setIsVisible(false);
-  };
-
-  // Don't show on admin pages
-  if (location.pathname.startsWith("/admin")) {
-    return null;
-  }
-
-  if (!settings || !isVisible) {
-    return null;
-  }
+  const handleClose = () => setIsVisible(false);
 
   return (
-    <div
-      className="relative w-full py-2 px-4 text-center text-sm font-medium bg-primary text-primary-foreground"
-    >
+    <div className="relative w-full py-2 px-4 text-center text-sm font-medium bg-primary text-primary-foreground">
       <div className="container mx-auto flex items-center justify-center gap-4 flex-wrap">
         <span>{settings.message}</span>
 

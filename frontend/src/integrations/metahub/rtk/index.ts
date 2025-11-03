@@ -33,7 +33,6 @@ export * from "./endpoints/product_stock.endpoints";
 export * from "./endpoints/wallet_transactions.endpoints";
 export * from "./endpoints/site_settings.endpoints";
 export * from "./endpoints/telemetry.endpoints";
-export * from "./endpoints/notifications.endpoints";
 export * from "./endpoints/activity_logs.endpoints";
 export * from "./endpoints/audit_events.endpoints";
 export * from "./endpoints/payment_providers.endpoints";
@@ -59,7 +58,6 @@ export * as adminInvoices       from "./endpoints/admin/invoices_admin.endpoints
 export * as adminSubscriptions  from "./endpoints/admin/subscriptions_admin.endpoints";
 export * as adminPromotions     from "./endpoints/admin/promotions_admin.endpoints";
 export * as adminSiteSettings   from "./endpoints/admin/site_settings_admin.endpoints";
-export * as adminCampaigns      from "./endpoints/admin/campaigns_admin.endpoints";
 export * as adminPayouts        from "./endpoints/admin/payouts_admin.endpoints";
 export * as adminDisputes       from "./endpoints/admin/disputes_admin.endpoints";
 export * as adminSettlements    from "./endpoints/admin/settlements_admin.endpoints";

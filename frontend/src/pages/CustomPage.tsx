@@ -1,63 +1,45 @@
-import { useEffect, useState } from "react";
+// =============================================================
+// FILE: src/pages/custom/CustomPage.tsx
+// =============================================================
+import { useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { metahub } from "@/integrations/metahub/client";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 
-interface PageData {
-  title: string;
-  content: string;
-  meta_description?: string | null; 
+import { useGetCustomPageBySlugQuery } from "@/integrations/metahub/rtk/endpoints/custom_pages.endpoints";
+
+function stripHtml(s: string) {
+  return (s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+function truncate(s: string, n: number) {
+  if (!s) return s;
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
 export default function CustomPage() {
-  const { slug } = useParams();
+  const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
-  const [page, setPage] = useState<PageData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const hasParams = useMemo(() => Array.from(searchParams.keys()).length > 0, [searchParams]);
 
-  // Check if has any query params for noindex
-  const hasParams = Array.from(searchParams.keys()).length > 0;
+  const {
+    data: page,
+    isLoading,
+    isError,
+    error,
+  } = useGetCustomPageBySlugQuery(
+    { slug: slug as string, locale: undefined },
+    { skip: !slug }
+  );
 
-  useEffect(() => {
-    fetchPage();
-  }, [slug]);
+  const notFound = isError && (error as any)?.status === 404;
 
-  const fetchPage = async () => {
-    if (!slug) return;
+  const metaTitle = page?.meta_title?.trim() || page?.title || "";
+  const metaDescription =
+    (page?.meta_description?.trim() ||
+      (page?.content ? truncate(stripHtml(page.content), 160) : "")) || "";
 
-    try {
-      setLoading(true);
-      const { data, error } = await metahub
-        .from("custom_pages")
-        .select("title, content, meta_description")
-        .eq("slug", slug)
-        .eq("is_published", true)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setPage(data);
-        document.title = data.title;
-        if (data.meta_description) {
-          const metaDesc = document.querySelector('meta[name="description"]');
-          if (metaDesc) {
-            metaDesc.setAttribute("content", data.meta_description);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching page:", error);
-      setNotFound(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
@@ -69,7 +51,7 @@ export default function CustomPage() {
     );
   }
 
-  if (notFound || !page) {
+  if (!slug || notFound || !page) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
@@ -87,20 +69,37 @@ export default function CustomPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <Helmet>
-        <title>{page.title}</title>
-        <meta name="description" content={page.meta_description || page.title} />
+        <title>{metaTitle}</title>
+        {metaDescription && <meta name="description" content={metaDescription} />}
         {hasParams && <meta name="robots" content="noindex, follow" />}
       </Helmet>
+
       <Navbar />
+
       <main className="flex-grow container mx-auto px-4 py-12">
         <article className="max-w-4xl mx-auto">
+          {/* Kapak görseli (varsa) */}
+          {page.featured_image && (
+            <img
+              src={page.featured_image}
+              alt={page.featured_image_alt || page.title}
+              className="w-full h-64 object-cover rounded-lg border mb-8"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+            />
+          )}
+
           <h1 className="text-4xl font-bold mb-8">{page.title}</h1>
+
           <div
             className="prose prose-lg max-w-none dark:prose-invert"
+            // İçerik admin panelden kontrol edildiği varsayımıyla render ediliyor.
             dangerouslySetInnerHTML={{ __html: page.content }}
           />
         </article>
       </main>
+
       <Footer />
     </div>
   );

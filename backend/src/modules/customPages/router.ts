@@ -1,6 +1,3 @@
-// =============================================================
-// FILE: src/modules/customPages/router.ts
-// =============================================================
 import type { FastifyInstance } from "fastify";
 import { listPages, getPage, getPageBySlug, createPage, updatePage, removePage } from "./controller";
 

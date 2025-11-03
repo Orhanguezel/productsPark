@@ -1,85 +1,57 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+  Pagination, PaginationContent, PaginationItem,
+  PaginationLink, PaginationNext, PaginationPrevious,
 } from "@/components/ui/pagination";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 
-interface Coupon {
-  id: string;
-  code: string;
-  discount_type: "percentage" | "fixed";
-  discount_value: number;
-  min_purchase: number;
-  max_uses: number | null;
-  used_count: number;
-  valid_from: string;
-  valid_until: string | null;
-  is_active: boolean;
-}
+// RTK Admin endpoints
+import {
+  useListCouponsAdminQuery,
+  useDeleteCouponAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+import type { Coupon } from "@/integrations/metahub/db/types/coupon";
 
 export default function CouponList() {
   const navigate = useNavigate();
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, refetch } = useListCouponsAdminQuery();
+  const [deleteCoupon, { isLoading: isDeleting }] = useDeleteCouponAdminMutation();
+
+  const coupons: Coupon[] = useMemo(() => data ?? [], [data]);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchCoupons();
-  }, []);
-
-  const fetchCoupons = async () => {
-    const { data, error } = await metahub
-      .from("coupons")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast.error("Kuponlar yüklenemedi");
-      console.error(error);
-    } else {
-      setCoupons((data as Coupon[]) || []);
-    }
-    setLoading(false);
-  };
+  const totalPages = Math.ceil((coupons?.length ?? 0) / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedCoupons = coupons.slice(startIndex, startIndex + itemsPerPage);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Bu kuponu silmek istediğinizden emin misiniz?")) return;
-
-    const { error } = await metahub.from("coupons").delete().eq("id", id);
-
-    if (error) {
-      toast.error("Kupon silinemedi");
-      console.error(error);
-    } else {
+    try {
+      await deleteCoupon(id).unwrap();
       toast.success("Kupon silindi");
-      fetchCoupons();
+      refetch();
+    } catch (e) {
+      console.error(e);
+      toast.error("Kupon silinemedi");
     }
   };
 
-  if (loading) return <AdminLayout title="Kupon Yönetimi"><div>Yükleniyor...</div></AdminLayout>;
-
-  const totalPages = Math.ceil(coupons.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedCoupons = coupons.slice(startIndex, startIndex + itemsPerPage);
+  if (isLoading) {
+    return (
+      <AdminLayout title="Kupon Yönetimi">
+        <div>Yükleniyor...</div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout title="Kupon Yönetimi">
@@ -107,9 +79,7 @@ export default function CouponList() {
           <TableBody>
             {paginatedCoupons.map((coupon) => (
               <TableRow key={coupon.id}>
-                <TableCell className="font-mono font-bold">
-                  {coupon.code}
-                </TableCell>
+                <TableCell className="font-mono font-bold">{coupon.code}</TableCell>
                 <TableCell>
                   {coupon.discount_type === "percentage"
                     ? `%${coupon.discount_value}`
@@ -117,12 +87,14 @@ export default function CouponList() {
                 </TableCell>
                 <TableCell>₺{coupon.min_purchase}</TableCell>
                 <TableCell>
-                  {coupon.used_count}
+                  {(coupon.used_count ?? 0)}
                   {coupon.max_uses ? ` / ${coupon.max_uses}` : " / ∞"}
                 </TableCell>
                 <TableCell>
                   <div className="text-xs">
-                    {new Date(coupon.valid_from).toLocaleDateString("tr-TR")}
+                    {coupon.valid_from
+                      ? new Date(coupon.valid_from).toLocaleDateString("tr-TR")
+                      : "-"}
                     {coupon.valid_until && (
                       <>
                         {" - "}
@@ -132,12 +104,9 @@ export default function CouponList() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${coupon.is_active
-                      ? "bg-green-100 text-green-800"
-                      : "bg-gray-100 text-gray-800"
-                      }`}
-                  >
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    coupon.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                  }`}>
                     {coupon.is_active ? "Aktif" : "Pasif"}
                   </span>
                 </TableCell>
@@ -154,6 +123,7 @@ export default function CouponList() {
                       variant="destructive"
                       size="sm"
                       onClick={() => handleDelete(coupon.id)}
+                      disabled={isDeleting}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -161,6 +131,13 @@ export default function CouponList() {
                 </TableCell>
               </TableRow>
             ))}
+            {paginatedCoupons.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8">
+                  Kupon bulunamadı.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
 
@@ -172,7 +149,7 @@ export default function CouponList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
+                    setCurrentPage((p) => Math.max(1, p - 1));
                   }}
                 />
               </PaginationItem>
@@ -195,7 +172,7 @@ export default function CouponList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                    setCurrentPage((p) => Math.min(totalPages, p + 1));
                   }}
                 />
               </PaginationItem>

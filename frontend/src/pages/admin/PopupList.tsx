@@ -1,90 +1,56 @@
+// =============================================================
+// FILE: src/pages/admin/popups/PopupList.tsx
+// =============================================================
 import { useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { metahub } from "@/integrations/metahub/client";
-import { Plus, Pencil, Trash2, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  useListPopupsAdminQuery,
+  useDeletePopupAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/popups_admin.endpoints";
 
-const PopupList = () => {
+function getFrequencyLabel(frequency: string) {
+  const m: Record<string, string> = {
+    always: "Her Zaman",
+    once: "Bir Kez",
+    daily: "Günde Bir",
+    weekly: "Haftada Bir",
+  };
+  return m[frequency] || frequency;
+}
+
+function getPageLabel(pages: string) {
+  const m: Record<string, string> = {
+    all: "Tüm Sayfalar",
+    home: "Anasayfa",
+    products: "Ürünler",
+    categories: "Kategoriler",
+  };
+  return m[pages] || pages;
+}
+
+function errMsg(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const d = (e as { data?: { error?: { message?: string } } }).data;
+    if (d?.error?.message) return d.error.message;
+  }
+  return "Beklenmeyen bir hata oluştu.";
+}
+
+export default function PopupList() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  const { data: popups, isLoading } = useQuery({
-    queryKey: ["admin-popups"],
-    queryFn: async () => {
-      const { data, error } = await metahub
-        .from("popups")
-        .select("*, products(name)")
-        .order("priority", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await metahub.from("popups").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-popups"] });
-      toast({
-        title: "Başarılı",
-        description: "Popup başarıyla silindi.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Hata",
-        description: "Popup silinirken bir hata oluştu: " + error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const getFrequencyLabel = (frequency: string) => {
-    const labels: Record<string, string> = {
-      always: "Her Zaman",
-      once: "Bir Kez",
-      daily: "Günde Bir",
-      weekly: "Haftada Bir",
-    };
-    return labels[frequency] || frequency;
-  };
-
-  const getPageLabel = (pages: string) => {
-    const labels: Record<string, string> = {
-      all: "Tüm Sayfalar",
-      home: "Anasayfa",
-      products: "Ürünler",
-      categories: "Kategoriler",
-    };
-    return labels[pages] || pages;
-  };
+  const { data: popups, isLoading, refetch } = useListPopupsAdminQuery();
+  const [deletePopup] = useDeletePopupAdminMutation();
 
   return (
     <AdminLayout title="Popup Yönetimi">
@@ -105,6 +71,7 @@ const PopupList = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Öncelik</TableHead>
+                  <TableHead>Görsel</TableHead>
                   <TableHead>Başlık</TableHead>
                   <TableHead>Ürün</TableHead>
                   <TableHead>Kupon</TableHead>
@@ -117,47 +84,41 @@ const PopupList = () => {
               </TableHeader>
               <TableBody>
                 {popups && popups.length > 0 ? (
-                  popups.map((popup) => (
-                    <TableRow key={popup.id}>
+                  popups.map((p) => (
+                    <TableRow key={p.id}>
                       <TableCell>
-                        <Badge variant="outline">{popup.priority}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{popup.title}</TableCell>
-                      <TableCell>
-                        {popup.products?.name || "-"}
+                        <Badge variant="outline">{p.priority ?? 0}</Badge>
                       </TableCell>
                       <TableCell>
-                        {popup.coupon_code ? (
-                          <Badge>{popup.coupon_code}</Badge>
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={(p as { image_alt?: string | null }).image_alt || p.title || "popup"}
+                            className="h-8 w-8 rounded object-cover border"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                          />
                         ) : (
-                          "-"
+                          <div className="h-8 w-8 rounded border bg-muted" />
                         )}
                       </TableCell>
-                      <TableCell>{getFrequencyLabel(popup.display_frequency)}</TableCell>
-                      <TableCell>{getPageLabel(popup.display_pages)}</TableCell>
+                      <TableCell className="font-medium">{p.title}</TableCell>
+                      <TableCell>-</TableCell>
+                      <TableCell>{p.coupon_code ? <Badge>{p.coupon_code}</Badge> : "-"}</TableCell>
+                      <TableCell>{getFrequencyLabel(p.display_frequency)}</TableCell>
+                      <TableCell>{getPageLabel(p.display_pages)}</TableCell>
                       <TableCell className="text-sm">
-                        {popup.start_date && (
-                          <div>Başlangıç: {format(new Date(popup.start_date), "dd.MM.yyyy")}</div>
-                        )}
-                        {popup.end_date && (
-                          <div>Bitiş: {format(new Date(popup.end_date), "dd.MM.yyyy")}</div>
-                        )}
-                        {!popup.start_date && !popup.end_date && "-"}
+                        {p.start_date && <div>Başlangıç: {format(new Date(p.start_date), "dd.MM.yyyy")}</div>}
+                        {p.end_date && <div>Bitiş: {format(new Date(p.end_date), "dd.MM.yyyy")}</div>}
+                        {!p.start_date && !p.end_date && "-"}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={popup.is_active ? "default" : "secondary"}
-                        >
-                          {popup.is_active ? "Aktif" : "Pasif"}
+                        <Badge variant={p.is_active ? "default" : "secondary"}>
+                          {p.is_active ? "Aktif" : "Pasif"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => navigate(`/admin/popups/edit/${popup.id}`)}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => navigate(`/admin/popups/edit/${p.id}`)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <AlertDialog>
@@ -169,14 +130,20 @@ const PopupList = () => {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Bu popup kalıcı olarak silinecektir.
-                                </AlertDialogDescription>
+                                <AlertDialogDescription>Bu popup kalıcı olarak silinecektir.</AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>İptal</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => deleteMutation.mutate(popup.id)}
+                                  onClick={async () => {
+                                    try {
+                                      await deletePopup(p.id).unwrap();
+                                      toast({ title: "Silindi", description: "Popup silindi." });
+                                      refetch();
+                                    } catch (e: unknown) {
+                                      toast({ title: "Hata", description: errMsg(e), variant: "destructive" });
+                                    }
+                                  }}
                                 >
                                   Sil
                                 </AlertDialogAction>
@@ -189,9 +156,7 @@ const PopupList = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
-                      Henüz popup bulunmuyor.
-                    </TableCell>
+                    <TableCell colSpan={10} className="text-center py-8">Henüz popup bulunmuyor.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -201,6 +166,4 @@ const PopupList = () => {
       </div>
     </AdminLayout>
   );
-};
-
-export default PopupList;
+}

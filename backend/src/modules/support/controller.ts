@@ -102,27 +102,33 @@ export const SupportController = {
     }
   },
 
-  async createReply(req: FastifyRequest, reply: FastifyReply) {
-    try {
-      const body = createReplyBodySchema.parse(req.body);
-      // @ts-ignore
-      const role = (req.user?.role as string | undefined) ?? "user";
-      // @ts-ignore
-      const userId = (req.user?.id as string | undefined) ?? body.user_id ?? null;
+  // src/modules/support/controller.ts
+async createReply(req: FastifyRequest, reply: FastifyReply) {
+  try {
+    const body = createReplyBodySchema.parse(req.body);
+    // @ts-ignore
+    const role = (req.user?.role as string | undefined) ?? "user";
+    // @ts-ignore
+    const userId = (req.user?.id as string | undefined) ?? body.user_id ?? null;
 
-      const created = await SupportRepo.createReply({
-        ticket_id: body.ticket_id,
-        user_id: role === "admin" ? (body.user_id ?? userId) : userId, // admin istediğini atayabilir
-        message: body.message,
-        is_admin: role === "admin" ? (body.is_admin ?? true) : false, // admin değilse false’a zorla
-      });
+    const created = await SupportRepo.createReply({
+      ticket_id: body.ticket_id,
+      user_id: role === "admin" ? (body.user_id ?? userId) : userId,
+      message: body.message,
+      is_admin: role === "admin" ? (body.is_admin ?? true) : false,
+    });
 
-      reply.code(201);
-      return created;
-    } catch (err) {
-      req.log.error({ err }, "ticket_replies_create_failed");
-      reply.code(400);
-      return { message: "Yanıt oluşturulamadı." };
-    }
-  },
+    // 🔹 Reply sonrası otomatik state transition
+    const nextStatus = role === "admin" ? "waiting_response" : "in_progress";
+    await SupportRepo.updateTicket(body.ticket_id, { status: nextStatus });
+
+    reply.code(201);
+    return created;
+  } catch (err) {
+    req.log.error({ err }, "ticket_replies_create_failed");
+    reply.code(400);
+    return { message: "Yanıt oluşturulamadı." };
+  }
+}
+,
 };

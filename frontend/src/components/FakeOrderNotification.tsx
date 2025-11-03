@@ -1,145 +1,26 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// src/components/FakeOrderNotification.tsx
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { ShoppingBag } from "lucide-react";
-
-interface Notification {
-  id: string;
-  product_id: string;
-  products: {
-    name: string;
-  };
-}
-
-interface Settings {
-  notification_display_duration: number;
-  notification_interval: number;
-  notification_delay: number;
-  fake_notifications_enabled: boolean;
-}
+import {
+  useGetPublicFakeNotificationSettingsQuery,   // ⬅️ değişti
+  useListPublicFakeOrdersQuery,
+  useGetPublicRandomFakeOrderQuery,
+} from "@/integrations/metahub/rtk/endpoints/fake_notifications.endpoints";
+import type { FakeOrderNotification } from "@/integrations/metahub/db/types/fakeNotifications";
 
 export function FakeOrderNotification() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [settings, setSettings] = useState<Settings>({
-    notification_display_duration: 5,
-    notification_interval: 30,
-    notification_delay: 10,
-    fake_notifications_enabled: true,
-  });
+  const { data: settings } = useGetPublicFakeNotificationSettingsQuery(); // ⬅️ değişti
+  const { data: pool } = useListPublicFakeOrdersQuery();
+  const { data: firstRandom } = useGetPublicRandomFakeOrderQuery();
 
-  useEffect(() => {
-    fetchSettings();
-    fetchNotifications();
-
-    // Subscribe to settings changes
-    const channel = metahub
-      .channel('settings-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'site_settings',
-          filter: 'key=eq.fake_notifications_enabled'
-        },
-        () => {
-          console.log('Notification settings updated, refetching...');
-          fetchSettings();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      metahub.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("site_settings")
-        .select("*")
-        .in("key", [
-          "notification_display_duration",
-          "notification_interval",
-          "notification_delay",
-          "fake_notifications_enabled",
-        ]);
-
-      if (error) throw error;
-
-      const settingsObj = data.reduce((acc, item) => {
-        if (item.key === "fake_notifications_enabled") {
-          acc[item.key] = item.value === true || item.value === "true";
-        } else {
-          const numValue = typeof item.value === 'number' ? item.value : parseFloat(String(item.value));
-          acc[item.key] = isNaN(numValue) ? 0 : numValue;
-        }
-        return acc;
-      }, {} as any);
-
-      setSettings({
-        notification_display_duration:
-          settingsObj.notification_display_duration || 5,
-        notification_interval: settingsObj.notification_interval || 30,
-        notification_delay: settingsObj.notification_delay || 10,
-        fake_notifications_enabled: settingsObj.fake_notifications_enabled !== undefined ? settingsObj.fake_notifications_enabled : true,
-      });
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-    }
+  const pick = (rows?: FakeOrderNotification[]): FakeOrderNotification | undefined => {
+    if (!rows || rows.length === 0) return undefined;
+    return rows[Math.floor(Math.random() * rows.length)];
   };
 
-  const fetchNotifications = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("products")
-        .select("id, name")
-        .eq("is_active", true);
-
-      if (error) throw error;
-      if (data && data.length > 0) {
-        setNotifications(data.map(product => ({
-          id: product.id,
-          product_id: product.id,
-          products: { name: product.name }
-        })));
-      }
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (notifications.length === 0 || !settings.fake_notifications_enabled) return;
-
-    // Initial delay before showing first notification
-    const initialTimer = setTimeout(() => {
-      showRandomNotification();
-    }, settings.notification_delay * 1000);
-
-    return () => clearTimeout(initialTimer);
-  }, [notifications, settings.notification_delay, settings.fake_notifications_enabled]);
-
-  useEffect(() => {
-    if (notifications.length === 0 || !settings.fake_notifications_enabled) return;
-
-    // Set up interval for subsequent notifications
-    const intervalTimer = setInterval(() => {
-      showRandomNotification();
-    }, settings.notification_interval * 1000);
-
-    return () => clearInterval(intervalTimer);
-  }, [notifications, settings.notification_interval, settings.fake_notifications_enabled]);
-
-  const showRandomNotification = () => {
-    if (notifications.length === 0) return;
-
-    // Pick a random notification
-    const randomIndex = Math.floor(Math.random() * notifications.length);
-    const notification = notifications[randomIndex];
-    const randomMinutes = Math.floor(Math.random() * 10) + 1; // 1-10 dakika önce
-
+  const show = (n?: FakeOrderNotification) => {
+    if (!n || !settings) return;
     toast.success(
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-full bg-primary/10">
@@ -148,17 +29,26 @@ export function FakeOrderNotification() {
         <div>
           <p className="font-medium">Yeni Sipariş!</p>
           <p className="text-sm text-muted-foreground">
-            Birisi {randomMinutes} dakika önce{" "}
-            <span className="font-semibold">{notification.products?.name}</span> satın aldı
+            {n.customer}{n.location ? `, ${n.location}` : ""} • {n.time_ago}{" "}
+            <span className="font-semibold">{n.product_name}</span> satın aldı
           </p>
         </div>
       </div>,
-      {
-        duration: settings.notification_display_duration * 1000,
-        position: "bottom-left",
-      }
+      { duration: (settings.notification_display_duration ?? 5) * 1000, position: "bottom-left" }
     );
   };
+
+  useEffect(() => {
+    if (!settings?.fake_notifications_enabled) return;
+    const t = setTimeout(() => { show(firstRandom ?? pick(pool)); }, (settings.notification_delay ?? 10) * 1000);
+    return () => clearTimeout(t);
+  }, [settings, firstRandom, pool]);
+
+  useEffect(() => {
+    if (!settings?.fake_notifications_enabled) return;
+    const t = setInterval(() => { show(pick(pool)); }, (settings.notification_interval ?? 30) * 1000);
+    return () => clearInterval(t);
+  }, [settings, pool]);
 
   return null;
 }

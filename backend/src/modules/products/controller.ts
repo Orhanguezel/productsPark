@@ -57,6 +57,7 @@ function normalizeProduct(row: any) {
 
   // json
   p.gallery_urls = parseJson<string[]>(p.gallery_urls);
+  p.gallery_asset_ids = parseJson<string[]>(p.gallery_asset_ids); // 🔧 new
   p.features = parseJson<string[]>(p.features);
   p.custom_fields = parseJson(p.custom_fields);
   p.quantity_options = parseJson(p.quantity_options);

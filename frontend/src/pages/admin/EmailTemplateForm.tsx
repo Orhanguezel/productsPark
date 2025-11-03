@@ -1,7 +1,7 @@
 // =============================================================
 // FILE: src/pages/admin/email-templates/EmailTemplateForm.tsx
 // =============================================================
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,17 @@ const defaultTemplate: FormState = {
 };
 
 export default function EmailTemplateForm() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const isEdit = !!id && id !== "new";
+  // Param'ı güvenli çöz: :id veya :templateId olabilir
+  const params = useParams<{ id?: string; templateId?: string }>();
+  const paramId = params.id ?? params.templateId;
+  const entityId = paramId && paramId !== "new" ? paramId : undefined;
 
-  const { data, isFetching } = useGetEmailTemplateAdminByIdQuery(id as string, {
-    skip: !isEdit,
+  const navigate = useNavigate();
+
+  const { data, isFetching, isLoading, isSuccess } =
+  useGetEmailTemplateAdminByIdQuery(entityId!, {
+    skip: !entityId,
+    refetchOnMountOrArgChange: true, 
   });
 
   const [createTemplate, { isLoading: isCreating }] = useCreateEmailTemplateAdminMutation();
@@ -55,25 +60,35 @@ export default function EmailTemplateForm() {
 
   const [template, setTemplate] = useState<FormState>(defaultTemplate);
   const saving = isCreating || isUpdating;
+  const isEdit = !!entityId;
 
+  // Data geldiğinde formu doldur
   useEffect(() => {
-    if (isEdit && data) {
-      setTemplate({
-        key: data.key,
-        name: data.name,
-        subject: data.subject,
-        content_html: data.content_html,
-        variables: data.variables,
-        is_active: data.is_active,
-        locale: data.locale ?? null,
-      });
-    } else if (!isEdit) {
-      setTemplate(defaultTemplate);
-    }
-  }, [isEdit, data]);
+  if (!isEdit) {
+    setTemplate(defaultTemplate);
+    return;
+  }
+  if (isFetching || isLoading) return;
+  if (isSuccess && data) {
+    setTemplate({
+      key: data.key || "",
+      name: data.name || "",    
+      subject: data.subject || "",
+      content_html: data.content_html || "",
+      variables: Array.isArray(data.variables) ? data.variables : [],
+      is_active: !!data.is_active,
+      locale: data.locale ?? null,
+    });
+  }
+}, [isEdit, isFetching, isLoading, isSuccess, data]);
+
 
   const canSave = useMemo(
-    () => !!template.name && !!template.subject && !!template.content_html && (!isEdit ? !!template.key : true),
+    () =>
+      !!template.name &&
+      !!template.subject &&
+      !!template.content_html &&
+      (!isEdit ? !!template.key : true),
     [template, isEdit]
   );
 
@@ -83,15 +98,14 @@ export default function EmailTemplateForm() {
       return;
     }
     try {
-      if (isEdit) {
+      if (isEdit && entityId) {
         await updateTemplate({
-          id: id as string,
+          id: entityId,
           body: {
-            // BE alan adları
             template_name: template.name,
             subject: template.subject,
             content: template.content_html,
-            variables: template.variables, // array göndermek OK
+            variables: template.variables,
             is_active: template.is_active,
             locale: template.locale ?? null,
           },
@@ -99,7 +113,6 @@ export default function EmailTemplateForm() {
         toast.success("Şablon güncellendi");
       } else {
         await createTemplate({
-          // BE alan adları
           template_key: template.key.toLowerCase().replace(/\s+/g, "_"),
           template_name: template.name,
           subject: template.subject,
@@ -118,11 +131,11 @@ export default function EmailTemplateForm() {
   };
 
   const handleDelete = async () => {
-    if (!isEdit || !id) return;
+    if (!isEdit || !entityId) return;
     const ok = window.confirm("Bu şablonu silmek istediğinizden emin misiniz?");
     if (!ok) return;
     try {
-      await deleteTemplate(id as string).unwrap();
+      await deleteTemplate(entityId).unwrap();
       toast.success("Şablon silindi");
       navigate("/admin/email-templates");
     } catch (e) {
@@ -161,7 +174,7 @@ export default function EmailTemplateForm() {
           )}
         </div>
 
-        {isEdit && isFetching ? (
+        {isEdit && (isFetching || isLoading) ? (
           <Card>
             <CardContent className="py-8">
               <p className="text-center text-muted-foreground">Yükleniyor...</p>

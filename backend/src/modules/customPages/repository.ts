@@ -1,5 +1,3 @@
-// src/modules/customPages/repository.ts
-
 import { db } from "@/db/client";
 import { customPages, type CustomPageRow, type NewCustomPageRow } from "./schema";
 import { and, asc, desc, eq, like, or, sql, type SQL } from "drizzle-orm";
@@ -8,9 +6,7 @@ import { and, asc, desc, eq, like, or, sql, type SQL } from "drizzle-orm";
 type Sortable = "created_at" | "updated_at";
 
 export type ListParams = {
-  /** Supabase-benzeri: "created_at.desc" */
   orderParam?: string;
-  /** Alternatif: sort & order */
   sort?: Sortable;
   order?: "asc" | "desc";
   limit?: number;
@@ -44,8 +40,21 @@ const parseOrder = (
   return null;
 };
 
-/** JSON string saklayan content alanı için yardımcı */
-export const packContent = (html: string): string => JSON.stringify({ html });
+const isRec = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+
+/** JSON-string saklayan content alanı için yardımcı */
+export const packContent = (htmlOrJson: string): string => {
+  try {
+    const parsed = JSON.parse(htmlOrJson) as unknown;
+    if (isRec(parsed) && typeof parsed.html === "string") {
+      return JSON.stringify({ html: parsed.html });
+    }
+  } catch {
+    // düz HTML ise buraya düşer
+  }
+  return JSON.stringify({ html: htmlOrJson });
+};
 
 /** list */
 export async function listCustomPages(params: ListParams) {
@@ -61,7 +70,6 @@ export async function listCustomPages(params: ListParams) {
 
     if (params.q && params.q.trim()) {
       const s = `%${params.q.trim()}%`;
-      // Not: meta_title/meta_description NULL olabilir; LIKE NULL false döner, sorun değil.
       const titleLike = like(customPages.title, s);
       const slugLike  = like(customPages.slug, s);
       const metaTitleLike = like(customPages.meta_title, s);
@@ -69,7 +77,6 @@ export async function listCustomPages(params: ListParams) {
       filters.push(or(titleLike, slugLike, metaTitleLike, metaDescLike) as SQL);
     }
 
-    // <-- HATA BURADAYDI: filters hiç uygulanmıyordu.
     const whereExpr: SQL | undefined = filters.length ? (and(...filters) as SQL) : undefined;
 
     const ord = parseOrder(params.orderParam, params.sort, params.order);
@@ -87,8 +94,7 @@ export async function listCustomPages(params: ListParams) {
 
     const total = cnt[0]?.c ?? 0;
     return { items, total };
-  } catch (e) {
-    // Controller üstünde yakalanıp 500 + sabit mesaj dönsün
+  } catch {
     throw new Error("custom_pages_list_failed");
   }
 }

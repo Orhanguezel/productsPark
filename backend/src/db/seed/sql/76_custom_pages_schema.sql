@@ -12,6 +12,11 @@ CREATE TABLE `custom_pages` (
                      NOT NULL
                      CHECK (JSON_VALID(`content`)),
 
+  -- Görsel alanları
+  `featured_image`           VARCHAR(500) DEFAULT NULL,
+  `featured_image_asset_id`  CHAR(36)     DEFAULT NULL,
+  `featured_image_alt`       VARCHAR(255) DEFAULT NULL,
+
   `meta_title`       VARCHAR(255)  DEFAULT NULL,
   `meta_description` VARCHAR(500)  DEFAULT NULL,
   `is_published`     TINYINT(1)    NOT NULL DEFAULT 0,
@@ -24,7 +29,8 @@ CREATE TABLE `custom_pages` (
   UNIQUE KEY `ux_custom_pages_slug`           (`slug`),
   KEY        `custom_pages_created_idx`       (`created_at`),
   KEY        `custom_pages_updated_idx`       (`updated_at`),
-  KEY        `custom_pages_is_published_idx`  (`is_published`)
+  KEY        `custom_pages_is_published_idx`  (`is_published`),
+  KEY        `custom_pages_featured_asset_idx` (`featured_image_asset_id`)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
