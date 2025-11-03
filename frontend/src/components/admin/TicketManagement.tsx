@@ -1,222 +1,198 @@
-import { useEffect, useState } from "react";
+// =============================================================
+// FILE: src/components/support/TicketManagement.tsx
+// =============================================================
+import { useEffect, useMemo, useState } from "react";
 import { metahub } from "@/integrations/metahub/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
-interface Ticket {
-  id: string;
-  subject: string;
-  message: string;
-  status: string;
-  priority: string;
-  category: string | null;
-  created_at: string;
-  user_id: string;
-}
+import {
+  useListSupportTicketsQuery,
+  useUpdateSupportTicketMutation,
+} from "@/integrations/metahub/rtk/endpoints/support_tickets.endpoints";
+import {
+  useListTicketRepliesByTicketQuery,
+  useCreateTicketReplyMutation,
+} from "@/integrations/metahub/rtk/endpoints/ticket_replies.endpoints";
 
-interface TicketReply {
-  id: string;
-  message: string;
-  is_admin: boolean;
-  created_at: string;
-  profiles: {
-    full_name: string | null;
-  };
-}
+import type {
+  SupportTicket,
+  SupportTicketPriority,
+  SupportTicketStatus,
+  TicketReply,
+} from "@/integrations/metahub/db/types/support";
+
+/** Admin ile aynı status sabitleri */
+const STATUS = {
+  OPEN: "open",
+  IN_PROGRESS: "in_progress",
+  WAITING_RESPONSE: "waiting_response",
+  CLOSED: "closed",
+} as const satisfies Record<string, SupportTicketStatus>;
+
+const PRIORITY = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  URGENT: "urgent",
+} as const satisfies Record<string, SupportTicketPriority>;
+
+/** Badge/metin eşlemesi */
+const statusText: Record<SupportTicketStatus, string> = {
+  open: "Açık",
+  in_progress: "İşlemde",
+  waiting_response: "Yanıt bekliyor",
+  closed: "Kapalı",
+};
+
+const getStatusColor = (s: SupportTicketStatus | string) => {
+  switch (s) {
+    case STATUS.OPEN: return "bg-blue-100 text-blue-800";
+    case STATUS.IN_PROGRESS: return "bg-amber-100 text-amber-800";
+    case STATUS.WAITING_RESPONSE: return "bg-purple-100 text-purple-800";
+    case STATUS.CLOSED: return "bg-gray-100 text-gray-800";
+    default: return "bg-gray-100 text-gray-800";
+  }
+};
+
+const getPriorityColor = (p: SupportTicketPriority | string) => {
+  switch (p) {
+    case PRIORITY.URGENT: return "bg-red-100 text-red-800";
+    case PRIORITY.HIGH: return "bg-orange-100 text-orange-800";
+    case PRIORITY.MEDIUM: return "bg-yellow-100 text-yellow-800";
+    case PRIORITY.LOW: return "bg-green-100 text-green-800";
+    default: return "bg-gray-100 text-gray-800";
+  }
+};
 
 export function TicketManagement() {
   const { user } = useAuth();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [replies, setReplies] = useState<TicketReply[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const {
+    data: tickets = [],
+    isLoading,
+    refetch: refetchTickets,
+  } = useListSupportTicketsQuery({
+    sort: "created_at",
+    order: "desc",
+  });
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedTicket: SupportTicket | null = useMemo(
+    () => tickets.find((t) => t.id === selectedId) ?? null,
+    [tickets, selectedId]
+  );
+
+  const {
+    data: replies = [],
+    refetch: refetchReplies,
+    isFetching: repliesLoading,
+  } = useListTicketRepliesByTicketQuery(selectedId ?? "", {
+    skip: !selectedId,
+  });
+
+  const [updateSupportTicket] = useUpdateSupportTicketMutation();
+  const [createReply, { isLoading: sendingReply }] =
+    useCreateTicketReplyMutation();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [replyMessage, setReplyMessage] = useState("");
 
   useEffect(() => {
-    fetchTickets();
-  }, []);
-
-  const fetchTickets = async () => {
-    const { data, error } = await metahub
-      .from("support_tickets")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast.error("Ticketlar yüklenemedi");
-      console.error(error);
-    } else {
-      setTickets((data as any) || []);
+    if (!dialogOpen) {
+      setSelectedId(null);
+      setReplyMessage("");
     }
-    setLoading(false);
-  };
+  }, [dialogOpen]);
 
-  const fetchReplies = async (ticketId: string) => {
-    const { data, error } = await metahub
-      .from("ticket_replies")
-      .select(`
-        *,
-        profiles (full_name)
-      `)
-      .eq("ticket_id", ticketId)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Error fetching replies:", error);
-    } else {
-      setReplies((data as any) || []);
-    }
-  };
-
-  const handleTicketClick = (ticket: Ticket) => {
-    setSelectedTicket(ticket);
-    fetchReplies(ticket.id);
+  const handleTicketClick = (ticket: SupportTicket) => {
+    setSelectedId(ticket.id);
     setDialogOpen(true);
   };
 
-  const handleSendReply = async () => {
-    console.log('handleSendReply called!');
-    console.log('User:', user);
-    console.log('Selected ticket:', selectedTicket);
-    console.log('Reply message:', replyMessage);
-
-    if (!user || !selectedTicket || !replyMessage.trim()) {
-      console.log('Early return - missing data');
-      return;
+  const handleStatusChange = async (
+    ticketId: string,
+    newStatus: SupportTicketStatus
+  ) => {
+    try {
+      await updateSupportTicket({ id: ticketId, patch: { status: newStatus } }).unwrap();
+      toast.success("Durum güncellendi");
+      refetchTickets();
+    } catch (e) {
+      console.error(e);
+      toast.error("Durum güncellenemedi");
     }
+  };
 
-    const { error } = await metahub.from("ticket_replies").insert([
-      {
+  const handleSendReply = async () => {
+    if (!user || !selectedTicket || !replyMessage.trim()) return;
+
+    try {
+      // 1) Yanıtı oluştur
+      await createReply({
         ticket_id: selectedTicket.id,
         user_id: user.id,
-        message: replyMessage,
+        message: replyMessage.trim(),
         is_admin: true,
-      },
-    ]);
+      }).unwrap();
 
-    if (error) {
-      toast.error("Yanıt gönderilemedi");
-      console.error(error);
-    } else {
-      // Admin cevap verdiğinde ticket'ı cevaplandı durumuna al
-      await metahub
-        .from("support_tickets")
-        .update({ status: "answered" })
-        .eq("id", selectedTicket.id);
+      // 2) Admin cevap sonrası akış: "waiting_response"
+      if (selectedTicket.status !== STATUS.CLOSED) {
+        await updateSupportTicket({
+          id: selectedTicket.id,
+          patch: { status: STATUS.WAITING_RESPONSE },
+        }).unwrap();
+      }
+
+      // 3) Opsiyonel e-posta bildirimi
+      try {
+        const result = await metahub.functions.invoke<{ success?: boolean; error?: string }>(
+          "send-email",
+          {
+            body: {
+              userId: selectedTicket.user_id,
+              template_key: "ticket_replied",
+              variables: {
+                ticket_subject: selectedTicket.subject,
+                reply_message: replyMessage.trim(),
+                user_name: "Kullanıcı",
+                ticket_id: selectedTicket.id,
+                site_name: "Platform",
+              },
+            },
+          }
+        );
+        if (result.error) {
+          console.error("Ticket reply email invocation error:", result.error);
+        }
+      } catch (emailErr) {
+        console.error("Ticket reply email exception:", emailErr);
+      }
 
       toast.success("Yanıt gönderildi");
       setReplyMessage("");
-      fetchReplies(selectedTicket.id);
-      fetchTickets(); // Ticket listesini güncelle
-
-      // Send ticket replied email
-      try {
-        console.log('Attempting to send ticket reply email...');
-        console.log('User ID:', selectedTicket.user_id);
-        console.log('Ticket subject:', selectedTicket.subject);
-
-        const result = await metahub.functions.invoke('send-email', {
-          body: {
-            userId: selectedTicket.user_id,
-            template_key: 'ticket_replied',
-            variables: {
-              ticket_subject: selectedTicket.subject,
-              reply_message: replyMessage,
-              user_name: 'Kullanıcı',
-              ticket_id: selectedTicket.id,
-              site_name: 'Platform'
-            }
-          }
-        });
-
-        console.log('Email send result:', result);
-
-        if (result.error) {
-          console.error('Ticket reply email invocation error:', result.error);
-        }
-      } catch (emailError) {
-        console.error('Ticket reply email exception:', emailError);
-      }
+      refetchReplies();
+      refetchTickets();
+    } catch (err) {
+      console.error(err);
+      toast.error("Yanıt gönderilemedi");
     }
   };
 
-  const handleStatusChange = async (ticketId: string, newStatus: string) => {
-    const { error } = await metahub
-      .from("support_tickets")
-      .update({ status: newStatus })
-      .eq("id", ticketId);
-
-    if (error) {
-      toast.error("Durum güncellenemedi");
-      console.error(error);
-    } else {
-      toast.success("Durum güncellendi");
-      fetchTickets();
-      if (selectedTicket?.id === ticketId) {
-        setSelectedTicket({ ...selectedTicket, status: newStatus });
-      }
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "open":
-        return "bg-blue-100 text-blue-800";
-      case "answered":
-        return "bg-purple-100 text-purple-800";
-      case "resolved":
-        return "bg-green-100 text-green-800";
-      case "closed":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "low":
-        return "bg-gray-100 text-gray-800";
-      case "medium":
-        return "bg-blue-100 text-blue-800";
-      case "high":
-        return "bg-orange-100 text-orange-800";
-      case "urgent":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  if (loading) {
-    return <div>Yükleniyor...</div>;
-  }
+  if (isLoading) return <div>Yükleniyor...</div>;
 
   return (
     <div className="space-y-4">
@@ -261,18 +237,18 @@ export function TicketManagement() {
                 <TableCell>
                   <Select
                     value={ticket.status}
-                    onValueChange={(value) =>
-                      handleStatusChange(ticket.id, value)
+                    onValueChange={(val) =>
+                      handleStatusChange(ticket.id, val as SupportTicketStatus)
                     }
                   >
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="w-40">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="open">Açık</SelectItem>
-                      <SelectItem value="answered">Cevaplandı</SelectItem>
-                      <SelectItem value="resolved">Çözüldü</SelectItem>
-                      <SelectItem value="closed">Kapalı</SelectItem>
+                      <SelectItem value={STATUS.OPEN}>{statusText[STATUS.OPEN]}</SelectItem>
+                      <SelectItem value={STATUS.IN_PROGRESS}>{statusText[STATUS.IN_PROGRESS]}</SelectItem>
+                      <SelectItem value={STATUS.WAITING_RESPONSE}>{statusText[STATUS.WAITING_RESPONSE]}</SelectItem>
+                      <SelectItem value={STATUS.CLOSED}>{statusText[STATUS.CLOSED]}</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableCell>
@@ -301,11 +277,9 @@ export function TicketManagement() {
               {selectedTicket?.subject}
               <div className="flex gap-2 mt-2">
                 <Badge className={getStatusColor(selectedTicket?.status || "")}>
-                  {selectedTicket?.status}
+                  {selectedTicket ? statusText[selectedTicket.status] : ""}
                 </Badge>
-                <Badge
-                  className={getPriorityColor(selectedTicket?.priority || "")}
-                >
+                <Badge className={getPriorityColor(selectedTicket?.priority || "")}>
                   {selectedTicket?.priority}
                 </Badge>
               </div>
@@ -316,12 +290,8 @@ export function TicketManagement() {
             <div className="space-y-4">
               {/* Original Message */}
               <div className="bg-muted p-4 rounded-lg">
-                <p className="text-sm font-semibold mb-2">
-                  Kullanıcı
-                </p>
-                <p className="text-sm whitespace-pre-wrap">
-                  {selectedTicket.message}
-                </p>
+                <p className="text-sm font-semibold mb-2">Kullanıcı</p>
+                <p className="text-sm whitespace-pre-wrap">{selectedTicket.message}</p>
                 <p className="text-xs text-muted-foreground mt-2">
                   {new Date(selectedTicket.created_at).toLocaleString("tr-TR")}
                 </p>
@@ -329,31 +299,32 @@ export function TicketManagement() {
 
               {/* Replies */}
               <div className="space-y-4">
-                {replies.map((reply) => (
-                  <div
-                    key={reply.id}
-                    className={`p-4 rounded-lg ${reply.is_admin ? "bg-primary/10" : "bg-muted"
+                {repliesLoading ? (
+                  <div className="text-sm text-muted-foreground">Yanıtlar yükleniyor…</div>
+                ) : (
+                  replies.map((reply: TicketReply) => (
+                    <div
+                      key={reply.id}
+                      className={`p-4 rounded-lg ${
+                        reply.is_admin ? "bg-primary/10" : "bg-muted"
                       }`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <p className="font-semibold text-sm">
-                        {reply.is_admin
-                          ? "Destek Ekibi (Siz)"
-                          : reply.profiles?.full_name || "Kullanıcı"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(reply.created_at).toLocaleString("tr-TR")}
-                      </p>
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <p className="font-semibold text-sm">
+                          {reply.is_admin ? "Destek Ekibi (Siz)" : "Kullanıcı"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(reply.created_at).toLocaleString("tr-TR")}
+                        </p>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{reply.message}</p>
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">
-                      {reply.message}
-                    </p>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               {/* Reply Form */}
-              {selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
+              {selectedTicket.status !== STATUS.CLOSED && (
                 <div className="flex gap-2">
                   <Textarea
                     value={replyMessage}
@@ -361,7 +332,7 @@ export function TicketManagement() {
                     placeholder="Yanıt yazın..."
                     rows={3}
                   />
-                  <Button onClick={handleSendReply} size="icon">
+                  <Button onClick={handleSendReply} size="icon" disabled={sendingReply}>
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>

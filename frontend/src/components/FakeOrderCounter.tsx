@@ -1,3 +1,5 @@
+// src/components/FakeOrderCounter.tsx
+
 import { useState, useEffect } from "react";
 import { metahub } from "@/integrations/metahub/client";
 

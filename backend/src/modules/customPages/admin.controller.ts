@@ -1,6 +1,3 @@
-// =============================================================
-// FILE: src/modules/customPages/admin.controller.ts
-// =============================================================
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import {
@@ -74,7 +71,12 @@ export const createPageAdmin: RouteHandler<{ Body: UpsertCustomPageBody }> = asy
       id: randomUUID(),
       title: b.title.trim(),
       slug: b.slug.trim(),
-      content: packContent(b.content), // {"html":"..."}
+      content: packContent(b.content),
+
+      featured_image: b.featured_image ?? null,
+      featured_image_asset_id: b.featured_image_asset_id ?? null,
+      featured_image_alt: b.featured_image_alt ?? null,
+
       meta_title: b.meta_title ?? null,
       meta_description: b.meta_description ?? null,
       is_published: toBool(b.is_published) ? 1 : 0,
@@ -83,8 +85,9 @@ export const createPageAdmin: RouteHandler<{ Body: UpsertCustomPageBody }> = asy
     });
 
     return reply.code(201).send(row);
-  } catch (err: any) {
-    if (err?.code === "ER_DUP_ENTRY") {
+  } catch (err: unknown) {
+    const e = err as { code?: string };
+    if (e?.code === "ER_DUP_ENTRY") {
       return reply.code(409).send({ error: { message: "slug_already_exists" } });
     }
     req.log.error({ err }, "custom_pages_create_failed");
@@ -102,18 +105,29 @@ export const updatePageAdmin: RouteHandler<{ Params: { id: string }; Body: Patch
 
   try {
     const patched = await updateCustomPage(req.params.id, {
-      title: typeof b.title === "string" ? b.title : undefined,
-      slug: typeof b.slug === "string" ? b.slug : undefined,
+      title: typeof b.title === "string" ? b.title.trim() : undefined,
+      slug: typeof b.slug === "string" ? b.slug.trim() : undefined,
       content: typeof b.content === "string" ? packContent(b.content) : undefined,
-      meta_title: b.meta_title ?? null,
-      meta_description: b.meta_description ?? null,
-      is_published: typeof b.is_published !== "undefined" ? (toBool(b.is_published) ? 1 : 0) : undefined,
+
+      featured_image: typeof b.featured_image !== "undefined" ? (b.featured_image ?? null) : undefined,
+      featured_image_asset_id:
+        typeof b.featured_image_asset_id !== "undefined" ? (b.featured_image_asset_id ?? null) : undefined,
+      featured_image_alt:
+        typeof b.featured_image_alt !== "undefined" ? (b.featured_image_alt ?? null) : undefined,
+
+      meta_title: typeof b.meta_title !== "undefined" ? (b.meta_title ?? null) : undefined,
+      meta_description: typeof b.meta_description !== "undefined" ? (b.meta_description ?? null) : undefined,
+      is_published:
+        typeof b.is_published !== "undefined"
+          ? (toBool(b.is_published) ? 1 : 0)
+          : undefined,
     });
 
     if (!patched) return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(patched);
-  } catch (err: any) {
-    if (err?.code === "ER_DUP_ENTRY") {
+  } catch (err: unknown) {
+    const e = err as { code?: string };
+    if (e?.code === "ER_DUP_ENTRY") {
       return reply.code(409).send({ error: { message: "slug_already_exists" } });
     }
     req.log.error({ err }, "custom_pages_update_failed");

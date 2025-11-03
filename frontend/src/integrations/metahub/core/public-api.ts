@@ -10,6 +10,13 @@ import type { ChannelStatus } from "../realtime/channel";
 
 /* ========================= Auth Facade ========================= */
 
+export type BalanceResult = {
+  success: boolean;
+  balance?: number;
+  currency?: string;
+  error?: string;
+};
+
 export type AuthFacade = {
   signInWithPassword(input: {
     email: string;
@@ -105,8 +112,46 @@ export interface FunctionsFacade {
     args?: Readonly<{ body?: unknown }>
   ): InvokeResult<TestSmtpResult>;
 
-  // fallback generic
+ 
+
+invoke(
+    name: "turkpin-balance",
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<BalanceResult>;
+
+  invoke(
+    name: "turkpin-game-list",
+    args?: Readonly<{ body?: { providerId: string; listType: "epin" | "topup" } }>
+  ): InvokeResult<{ success: boolean; games?: { id: string; name: string }[]; error?: string }>;
+
+  invoke(
+    name: "turkpin-product-list",
+    args?: Readonly<{ body?: { providerId: string; gameId: string; listType: "epin" | "topup" } }>
+  ): InvokeResult<{
+    success: boolean;
+    products?: {
+      id: string; name: string; price: number; stock: number; min_order: number; max_order: number;
+      tax_type: number; pre_order: boolean; min_barem?: number; max_barem?: number; barem_step?: number;
+    }[];
+    error?: string;
+  }>;
+
+  invoke(
+    name: "smm-api-balance",
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<BalanceResult>;
+
+   // ✅ Backup fonksiyonu (opsiyonel overload – sadece DX için)
+  invoke(
+    name: "backup-database",
+    args?: Readonly<{ body?: { format: "json" | "sql" } }>
+  ): InvokeResult<string>;
+
+
+
+ // fallback generic
   invoke<T = unknown>(name: string, args?: Readonly<{ body?: unknown }>): InvokeResult<T>;
+
 }
 
 /* ========================= Metahub kök tipi ========================= */

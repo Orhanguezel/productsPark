@@ -1,5 +1,7 @@
+// ----------------------------------------------------------------------
+// FILE: src/modules/footer_sections/controller.ts
+// ----------------------------------------------------------------------
 import type { RouteHandler } from "fastify";
-import { randomUUID } from "crypto";
 import {
   listFooterSections,
   getFooterSectionById,
@@ -7,35 +9,42 @@ import {
   updateFooterSection,
   deleteFooterSection,
 } from "./repository";
-import { footerSectionCreateSchema, footerSectionUpdateSchema } from "./validation";
+import {
+  footerSectionListQuerySchema,
+  footerSectionCreateSchema,
+  footerSectionUpdateSchema,
+  type FooterSectionListQuery,
+  type FooterSectionCreateInput,
+  type FooterSectionUpdateInput,
+} from "./validation";
+import { randomUUID } from "crypto";
 
 /** Liste */
-type ListQuery = {
-  q?: string;
-  limit?: string;
-  offset?: string;
-  order?: "asc" | "desc";
-};
-
-export const listController: RouteHandler<{ Querystring: ListQuery }> = async (req, reply) => {
-  const q = req.query;
-  const limitNum = q.limit ? Number(q.limit) : undefined;
-  const offsetNum = q.offset ? Number(q.offset) : undefined;
+export const listController: RouteHandler<{ Querystring: FooterSectionListQuery }> = async (req, reply) => {
+  const q = footerSectionListQuerySchema.parse(req.query ?? {}) as FooterSectionListQuery;
 
   const { items, total } = await listFooterSections({
     q: q.q,
-    limit: Number.isFinite(limitNum!) ? limitNum : undefined,
-    offset: Number.isFinite(offsetNum!) ? offsetNum : undefined,
+    is_active: q.is_active,
+    limit: q.limit,
+    offset: q.offset,
     order: q.order,
   });
 
-  // FE uyumu için: display_order alias’ını ekliyoruz (order_num’dan)
   const mapped = items.map((r) => ({
-    ...r,
+    id: r.id,
+    title: r.title,
+    links: r.links,
     display_order: r.order_num,
+    is_active: r.is_active,
+    created_at: r.created_at?.toISOString?.(),
+    updated_at: r.updated_at?.toISOString?.(),
   }));
 
   reply.header("x-total-count", String(total));
+  reply.header("content-range", `*/${total}`);
+  reply.header("access-control-expose-headers", "x-total-count, content-range");
+
   return reply.send(mapped);
 };
 
@@ -43,53 +52,68 @@ export const listController: RouteHandler<{ Querystring: ListQuery }> = async (r
 export const getController: RouteHandler<{ Params: { id: string } }> = async (req, reply) => {
   const row = await getFooterSectionById(req.params.id);
   if (!row) return reply.code(404).send({ error: { message: "not_found" } });
-  // display_order alias
-  return reply.send({ ...row, display_order: row.order_num });
+  return reply.send({
+    id: row.id,
+    title: row.title,
+    links: row.links,
+    display_order: row.order_num,
+    is_active: row.is_active,
+    created_at: row.created_at?.toISOString?.(),
+    updated_at: row.updated_at?.toISOString?.(),
+  });
 };
 
-/** Create */
-type CreateBody = {
-  title: string;
-  links: string | Array<{ label: string; href: string; external?: boolean }>;
-  order_num?: number | string;
-};
-
-export const createController: RouteHandler<{ Body: CreateBody }> = async (req, reply) => {
-  const parsed = footerSectionCreateSchema.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    return reply.code(400).send({ error: { message: "validation_error", details: parsed.error.issues } });
-  }
+/** Create (public’te kapatmak istersen router’da bağlama) */
+export const createController: RouteHandler<{ Body: FooterSectionCreateInput }> = async (req, reply) => {
+  const body = footerSectionCreateSchema.parse(req.body ?? {}) as FooterSectionCreateInput;
 
   const id = randomUUID();
   const row = await createFooterSection({
     id,
-    title: parsed.data.title,
-    links: parsed.data.links,        // string (JSON) halde
-    order_num: parsed.data.order_num,
+    title: body.title,
+    links: body.links, // JSON string
+    order_num: body.order_num,
+    is_active: body.is_active ?? true,
     created_at: new Date(),
     updated_at: new Date(),
   });
 
-  return reply.code(201).send(row ? { ...row, display_order: row.order_num } : row);
+  return reply.code(201).send(
+    row
+      ? {
+          id: row.id,
+          title: row.title,
+          links: row.links,
+          display_order: row.order_num,
+          is_active: row.is_active,
+          created_at: row.created_at?.toISOString?.(),
+          updated_at: row.updated_at?.toISOString?.(),
+        }
+      : row
+  );
 };
 
 /** Update */
-type PatchBody = Partial<CreateBody>;
-
-export const updateController: RouteHandler<{ Params: { id: string }; Body: PatchBody }> = async (req, reply) => {
-  const parsed = footerSectionUpdateSchema.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    return reply.code(400).send({ error: { message: "validation_error", details: parsed.error.issues } });
-  }
+export const updateController: RouteHandler<{ Params: { id: string }; Body: FooterSectionUpdateInput }> = async (req, reply) => {
+  const patch = footerSectionUpdateSchema.parse(req.body ?? {}) as FooterSectionUpdateInput;
 
   const row = await updateFooterSection(req.params.id, {
-    title: parsed.data.title,
-    links: parsed.data.links,              // string (JSON) halde
-    order_num: parsed.data.order_num,
+    title: patch.title,
+    links: patch.links,
+    order_num: patch.order_num,
+    is_active: patch.is_active,
   });
 
   if (!row) return reply.code(404).send({ error: { message: "not_found" } });
-  return reply.send({ ...row, display_order: row.order_num });
+  return reply.send({
+    id: row.id,
+    title: row.title,
+    links: row.links,
+    display_order: row.order_num,
+    is_active: row.is_active,
+    created_at: row.created_at?.toISOString?.(),
+    updated_at: row.updated_at?.toISOString?.(),
+  });
 };
 
 /** Delete */

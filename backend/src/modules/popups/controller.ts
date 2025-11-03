@@ -1,48 +1,48 @@
-import type { RouteHandler } from 'fastify';
-import { db } from '@/db/client';
-import { popups } from './schema';
-import { and, asc, desc, eq, gt, lt } from 'drizzle-orm';
-import { popupListQuerySchema, type PopupListQuery } from './validation';
+// =============================================================
+// FILE: src/modules/popups/controller.ts
+// =============================================================
+import type { RouteHandler } from "fastify";
+import { db } from "@/db/client";
+import { popups } from "./schema";
+import { and, asc, desc, eq, gte, lte, or, isNull } from "drizzle-orm";
+import { popupListQuerySchema, type PopupListQuery } from "./validation";
 
 /** FE/RTK tarafının beklediği "key" üretimi (title → slug) */
 function slugifyKey(s: string): string {
-  return s
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')       // diakritikleri sil
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')           // alfasayısal dışını tire yap
-    .replace(/^-+|-+$/g, '')               // baş/son tireleri sil
-    || 'popup';
+  return (
+    s
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "popup"
+  );
 }
-
-/** unknown → boolean? */
 function toBool(v: unknown): boolean | undefined {
-  if (v === true || v === 'true' || v === 1 || v === '1') return true;
-  if (v === false || v === 'false' || v === 0 || v === '0') return false;
+  if (v === true || v === "true" || v === 1 || v === "1") return true;
+  if (v === false || v === "false" || v === 0 || v === "0") return false;
   return undefined;
 }
-
-/** unknown → number? */
 function toIntMaybe(v: unknown): number | undefined {
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
+function nowIso(v?: Date | string | null) {
+  return v ? new Date(v as unknown as string).toISOString() : undefined;
+}
 
-/** DB row → FE/RTK uyumlu obje (PopupRow + RTK Popup union’ı) */
 function mapRow(r: typeof popups.$inferSelect) {
-  const nowIso = (d?: Date | string | null) =>
-    d ? new Date(d as any).toISOString() : undefined;
-
   const key = r.title ? slugifyKey(r.title) : undefined;
-
   return {
-    // RTK Popup alanları
     id: r.id,
     key,
     title: r.title ?? null,
-    type: 'modal' as const,             // DB’de yok → varsayılan
-    content_html: r.content ?? null,    // text’i HTML alanına da yansıtıyoruz
+
+    // FE CampaignPopup alanları
+    type: "modal" as const,
+    content_html: r.content ?? null,
     options: null as Record<string, unknown> | null,
+
     is_active: !!r.is_active,
     start_at: nowIso(r.valid_from) ?? null,
     end_at: nowIso(r.valid_until) ?? null,
@@ -50,14 +50,18 @@ function mapRow(r: typeof popups.$inferSelect) {
     created_at: nowIso(r.created_at),
     updated_at: nowIso(r.updated_at),
 
-    // FE CampaignPopup’un bekledikleri (PopupRow ile uyum)
+    // Görsel alanları
     image_url: r.image_url ?? null,
+    image_asset_id: r.image_asset_id ?? null,
+    image_alt: r.image_alt ?? null,
+
+    // FE convenience
     content: r.content ?? null,
     button_text: r.button_text ?? null,
     button_link: r.button_url ?? null,
 
-    display_pages: 'all' as const,                      // DB’de yok → tüm sayfalar
-    display_frequency: r.show_once ? 'once' : 'always', // show_once mapping
+    display_pages: "all" as const,
+    display_frequency: r.show_once ? "once" : "always",
     delay_seconds: Number(r.delay ?? 0),
     duration_seconds: null as number | null,
     priority: null as number | null,
@@ -68,17 +72,15 @@ function mapRow(r: typeof popups.$inferSelect) {
 
 /** "order" çöz — bilinmeyen sütunda created_at desc fallback */
 function resolveOrder(order?: string) {
-  if (!order) return { col: popups.created_at, dir: 'desc' as const };
-  const [col, dirRaw] = order.split('.');
-  const dir = dirRaw === 'asc' ? 'asc' : 'desc';
-
+  if (!order) return { col: popups.created_at, dir: "desc" as const };
+  const [col, dirRaw] = order.split(".");
+  const dir = dirRaw === "asc" ? "asc" : "desc";
   switch (col) {
-    case 'created_at':   return { col: popups.created_at, dir };
-    case 'updated_at':   return { col: popups.updated_at, dir };
-    case 'delay':        return { col: popups.delay, dir };
-    // FE bazen priority gönderiyor; DB’de yok → created_at fallback
-    case 'priority':     return { col: popups.created_at, dir };
-    default:             return { col: popups.created_at, dir: 'desc' as const };
+    case "created_at": return { col: popups.created_at, dir };
+    case "updated_at": return { col: popups.updated_at, dir };
+    case "delay":      return { col: popups.delay, dir };
+    case "priority":   return { col: popups.created_at, dir }; // DB’de yok
+    default:           return { col: popups.created_at, dir: "desc" as const };
   }
 }
 
@@ -86,30 +88,28 @@ function resolveOrder(order?: string) {
 export const listPopups: RouteHandler = async (req, reply) => {
   const q = popupListQuerySchema.parse(req.query ?? {}) as PopupListQuery;
 
-  const conds: any[] = [];
+  const conds = [] as Array<ReturnType<typeof and> | ReturnType<typeof eq> | ReturnType<typeof or>>;
 
-  // is_active filtresi
+  // is_active filtresi (opsiyonel)
   if (q.is_active !== undefined) {
     const b = toBool(q.is_active);
     if (b !== undefined) conds.push(eq(popups.is_active, b));
   }
 
-  // geçerlilik aralığı (varsa): now BETWEEN valid_from & valid_until, null’lar allow
+  // now BETWEEN valid_from & valid_until (null ise geçir)
   const now = new Date();
-  // valid_from <= now (veya null)
-  conds.push(and(
-    // valid_from null ise koşul sağ
-    // drizzle’da basitçe gt/lt ile null karşılaştırmayalım; sadece iki ayrı koşuldan birini eklemiyoruz.
-    // burada iş mantığı basit kalsın: tarih filtrelerini zorunlu tutmayalım (aktiflik FE’de de kontrol ediliyor)
-  ));
+  const timeWindow = and(
+    or(isNull(popups.valid_from), lte(popups.valid_from, now)),
+    or(isNull(popups.valid_until), gte(popups.valid_until, now))
+  );
+  conds.push(timeWindow);
 
   let qb = db.select().from(popups).$dynamic();
-
-  if (conds.length === 1) qb = qb.where(conds[0]);
+  if (conds.length === 1) qb = qb.where(conds[0]!);
   else if (conds.length > 1) qb = qb.where(and(...conds));
 
   const { col, dir } = resolveOrder(q.order);
-  qb = qb.orderBy(dir === 'asc' ? asc(col) : desc(col));
+  qb = qb.orderBy(dir === "asc" ? asc(col) : desc(col));
 
   const lim = toIntMaybe(q.limit);
   const off = toIntMaybe(q.offset);
@@ -123,7 +123,7 @@ export const listPopups: RouteHandler = async (req, reply) => {
 /** GET /popups/by-key/:key  (DB’de "key" alanı yok → title’dan slug türetip eşleştiriyoruz) */
 export const getPopupByKey: RouteHandler = async (req, reply) => {
   const { key } = req.params as { key: string };
-  const norm = String(key || '').trim().toLowerCase();
+  const norm = String(key || "").trim().toLowerCase();
 
   // aktif olanlardan en yeniye bak
   const rows = await db
@@ -133,8 +133,8 @@ export const getPopupByKey: RouteHandler = async (req, reply) => {
     .orderBy(desc(popups.created_at))
     .limit(50);
 
-  const found = rows.find(r => slugifyKey(r.title ?? '') === norm);
-  if (!found) return reply.code(404).send({ error: { message: 'not_found' } });
+  const found = rows.find((r) => slugifyKey(r.title ?? "") === norm);
+  if (!found) return reply.code(404).send({ error: { message: "not_found" } });
 
   return reply.send(mapRow(found));
 };

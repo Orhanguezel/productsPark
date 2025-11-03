@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+// =============================================================
+// FILE: src/pages/admin/custom-pages/PageList.tsx
+// =============================================================
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,63 +37,38 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-interface CustomPage {
-  id: string;
-  title: string;
-  slug: string;
-  is_published: boolean;
-  created_at: string;
-}
+import {
+  useListCustomPagesAdminQuery,
+  useDeleteCustomPageAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
+import type { CustomPageView } from "@/integrations/metahub/db/types/customPages";
 
 export default function PageList() {
   const navigate = useNavigate();
-  const [pages, setPages] = useState<CustomPage[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const { data: list = [], isLoading } = useListCustomPagesAdminQuery();
+  const [deletePage, { isLoading: deleting }] = useDeleteCustomPageAdminMutation();
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchPages();
-  }, []);
+  const pages = useMemo(() => list as CustomPageView[], [list]);
 
-  const fetchPages = async () => {
+  const totalPages = Math.ceil(pages.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPages = pages.slice(startIndex, startIndex + itemsPerPage);
+
+  const handleDelete = async (id: string) => {
     try {
-      setLoading(true);
-      const { data, error } = await metahub
-        .from("custom_pages")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setPages((data || []) as CustomPage[]);
-    } catch (error: any) {
-      console.error("Error fetching pages:", error);
-      toast.error("Sayfalar yüklenirken hata oluştu");
-    } finally {
-      setLoading(false);
+      await deletePage(id).unwrap();
+      toast.success("Sayfa silindi");
+    } catch (err) {
+      console.error(err);
+      toast.error("Sayfa silinirken hata oluştu");
     }
   };
 
-  const handleDelete = async (id: string) => {
-  try {
-    // optimistic
-    setPages(prev => prev.filter(p => p.id !== id));
-
-    const { error } = await metahub.from("custom_pages").delete().eq("id", id);
-    if (error) throw error;
-
-    toast.success("Sayfa silindi");
-    // güvence için arkadan yenile
-    fetchPages();
-  } catch (err) {
-    console.error("Error deleting page:", err);
-    toast.error("Sayfa silinirken hata oluştu");
-    // optimistic geri al
-    await fetchPages();
-  }
-};
-
-  if (loading) {
+  if (isLoading) {
     return (
       <AdminLayout title="Sayfalar">
         <div className="flex items-center justify-center py-8">
@@ -100,10 +77,6 @@ export default function PageList() {
       </AdminLayout>
     );
   }
-
-  const totalPages = Math.ceil(pages.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPages = pages.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <AdminLayout title="Sayfalar">
@@ -126,6 +99,7 @@ export default function PageList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Görsel</TableHead>
                   <TableHead>Başlık</TableHead>
                   <TableHead>Slug</TableHead>
                   <TableHead>Durum</TableHead>
@@ -136,25 +110,48 @@ export default function PageList() {
               <TableBody>
                 {paginatedPages.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center">
+                    <TableCell colSpan={6} className="text-center">
                       Henüz sayfa eklenmemiş
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedPages.map((page) => (
                     <TableRow key={page.id}>
+                      <TableCell className="py-2">
+                        {page.featured_image ? (
+                          <img
+                            src={page.featured_image}
+                            alt={page.featured_image_alt || page.title}
+                            className="h-10 w-16 object-cover rounded border"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="h-10 w-16 rounded bg-muted/50 border flex items-center justify-center text-[10px] text-muted-foreground">
+                            Yok
+                          </div>
+                        )}
+                      </TableCell>
+
                       <TableCell className="font-medium">{page.title}</TableCell>
+
                       <TableCell>
                         <code className="text-xs">/{page.slug}</code>
                       </TableCell>
+
                       <TableCell>
                         <Badge variant={page.is_published ? "default" : "secondary"}>
                           {page.is_published ? "Yayında" : "Taslak"}
                         </Badge>
                       </TableCell>
+
                       <TableCell>
-                        {new Date(page.created_at).toLocaleDateString("tr-TR")}
+                        {page.created_at
+                          ? new Date(page.created_at).toLocaleDateString("tr-TR")
+                          : "-"}
                       </TableCell>
+
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {page.is_published && (
@@ -162,6 +159,7 @@ export default function PageList() {
                               variant="ghost"
                               size="sm"
                               onClick={() => window.open(`/${page.slug}`, "_blank")}
+                              title="Sayfayı görüntüle"
                             >
                               <ExternalLink className="w-4 h-4" />
                             </Button>
@@ -170,12 +168,14 @@ export default function PageList() {
                             variant="ghost"
                             size="sm"
                             onClick={() => navigate(`/admin/pages/edit/${page.id}`)}
+                            title="Düzenle"
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
+
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm">
+                              <Button variant="ghost" size="sm" disabled={deleting} title="Sil">
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </AlertDialogTrigger>
@@ -183,7 +183,7 @@ export default function PageList() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Bu sayfayı silmek istediğinizden emin misiniz?
+                                  Bu sayfayı kalıcı olarak silmek üzeresiniz.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -212,7 +212,7 @@ export default function PageList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
+                    setCurrentPage((p) => Math.max(1, p - 1));
                   }}
                 />
               </PaginationItem>
@@ -235,7 +235,7 @@ export default function PageList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                    setCurrentPage((p) => Math.min(totalPages, p + 1));
                   }}
                 />
               </PaginationItem>

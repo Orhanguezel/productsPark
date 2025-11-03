@@ -1,29 +1,61 @@
-// FILE: src/pages/admin/blog/BlogForm.tsx  (konumunu kendi projene göre koru)
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client"; // yalnızca storage için
-import { blogAdmin } from "@/integrations/metahub/client/admin/blog";
+import {
+  useGetBlogPostAdminByIdQuery,
+  useCreateBlogPostAdminMutation,
+  useUpdateBlogPostAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/blog_admin.endpoints";
+import {
+  useUploadStorageAssetAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import type { UpsertBlogBody } from "@/integrations/metahub/db/types/blog";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "@/hooks/use-toast";
-import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AdminLayout } from "@/components/admin/AdminLayout";
+import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 
+/* ---------------- utils ---------------- */
+const slugify = (v: string) =>
+  (v || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+
+const stripHtml = (s: string) => s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;")
+   .replace(/</g, "&lt;")
+   .replace(/>/g, "&gt;")
+   .replace(/"/g, "&quot;")
+   .replace(/'/g, "&#39;");
+
+/* ---------------- types ---------------- */
 type FormState = {
   title: string;
   slug: string;
   excerpt: string;
-  content: string;
-  category: string;
+  content_html: string;
+
   author_name: string;
+
+  // Kapak görseli (legacy url + storage id)
   image_url: string;
+  image_asset_id: string;
+  image_alt: string;
+
   is_published: boolean;
+
+  // legacy (opsiyonel)
+  category: string;
   is_featured: boolean;
   display_order: number;
 };
@@ -32,94 +64,239 @@ const initialState: FormState = {
   title: "",
   slug: "",
   excerpt: "",
-  content: "",
-  category: "",
-  author_name: "",
+  content_html: "",
+
+  author_name: "Admin",
+
   image_url: "",
+  image_asset_id: "",
+  image_alt: "",
+
   is_published: false,
+
+  category: "",
   is_featured: false,
   display_order: 0,
 };
 
 export default function BlogForm() {
   const { id } = useParams();
+  const isEdit = Boolean(id);
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+
   const [formData, setFormData] = useState<FormState>(initialState);
+  const slugTouchedRef = useRef(false);
+  const quillRef = useRef<ReactQuill | null>(null);
 
-  useEffect(() => {
-  if (!id) return;
-
-  // id’yi IIFE parametresi olarak geçirince TS burada string’e daraltıyor
-  (async (pid: string) => {
-    try {
-      const { data, error } = await blogAdmin.getById(pid);
-      if (error || !data) throw error ?? new Error("not_found");
-      setFormData({
-        title: data.title,
-        slug: data.slug,
-        excerpt: data.excerpt ?? "",
-        content: data.content ?? "",
-        category: data.category ?? "",
-        author_name: data.author_name ?? "Admin",
-        image_url: data.image_url ?? "",
-        is_published: !!data.is_published,
-        is_featured: !!data.is_featured,
-        display_order: data.display_order ?? 0,
-      });
-    } catch (err) {
-      console.error("Error fetching post:", err);
-      toast({
-        title: "Hata",
-        description: "Blog yazısı yüklenirken bir hata oluştu.",
-        variant: "destructive",
-      });
-    }
-  })(id);
-}, [id]);
-
-
-  const toUpsertBody = (s: FormState) => ({
-    title: s.title,
-    slug: s.slug,
-    excerpt: s.excerpt || null,
-    content: s.content || null,
-    category: s.category || null,
-    author_name: s.author_name || null, // admin endpoint toApiBody -> author
-    image_url: s.image_url || null,     // admin endpoint toApiBody -> featured_image
-    is_published: s.is_published,
-    is_featured: s.is_featured,
-    display_order: s.display_order,
+  const { data: postData, isFetching } = useGetBlogPostAdminByIdQuery(id as string, {
+    skip: !isEdit,
   });
 
+  const [createPost, { isLoading: creating }] = useCreateBlogPostAdminMutation();
+  const [updatePost, { isLoading: updating }] = useUpdateBlogPostAdminMutation();
+  const [uploadAsset, { isLoading: uploading }] = useUploadStorageAssetAdminMutation();
+
+  useEffect(() => {
+    if (!postData) return;
+    setFormData((prev) => ({
+      ...prev,
+      title: postData.title ?? "",
+      slug: postData.slug ?? "",
+      excerpt: (postData.excerpt as string) ?? "",
+      content_html: (postData.content as string) ?? "",
+      author_name: postData.author_name ?? "Admin",
+
+      image_url: postData.image_url ?? "",
+      image_asset_id: (postData as any).image_asset_id ?? "",
+      image_alt: (postData as any).image_alt ?? "",
+
+      is_published: !!postData.is_published,
+
+      category: (postData as any).category ?? "",
+      is_featured: !!(postData as any).is_featured,
+      display_order: Number((postData as any).display_order ?? 0),
+    }));
+    slugTouchedRef.current = true;
+  }, [postData]);
+
+  // title değişince, slug elle dokunulmadıysa otomatik üret
+  useEffect(() => {
+    if (!slugTouchedRef.current && formData.title) {
+      setFormData((s) => ({ ...s, slug: slugify(s.title) }));
+    }
+  }, [formData.title]);
+
+  // SEO önizleme verileri
+  const seoTitle = (formData.title || "").trim();
+  const rawDesc = (formData.excerpt || stripHtml(formData.content_html)).trim();
+  const seoDesc = rawDesc.slice(0, 160);
+  const previewUrl = "/" + (formData.slug || slugify(formData.title) || "blog-yazisi");
+
+  const loading = isFetching || creating || updating;
+
+  /* --------------- FE -> BE body --------------- */
+  const toUpsertBody = (s: FormState): UpsertBlogBody => ({
+    title: s.title.trim(),
+    slug: (s.slug || slugify(s.title)).trim(),
+    excerpt: s.excerpt || null,
+    content: s.content_html || null,
+
+    image_url: s.image_url || null,
+    image_asset_id: s.image_asset_id || null,
+    image_alt: s.image_alt || null,
+
+    author_name: s.author_name || null,
+    is_published: !!s.is_published,
+
+    // legacy
+    category: s.category || null,
+    is_featured: !!s.is_featured,
+    display_order: Number(s.display_order ?? 0),
+  });
+
+  /* --------------- Kapak görseli yükleme --------------- */
+  const handleCoverUpload = async (file: File) => {
+    try {
+      const folderSafe = (formData.slug || slugify(formData.title) || "posts").replace(/[^a-z0-9/_-]/g, "");
+      const folder = `blog/${folderSafe}`;
+
+      const asset = await uploadAsset({
+        file,
+        bucket: "blog",
+        folder,
+        metadata: { module: "blog", kind: "cover" },
+      }).unwrap();
+
+      setFormData((s) => ({
+        ...s,
+        image_url: asset.url ?? s.image_url,
+        image_asset_id: asset.id ?? s.image_asset_id,
+      }));
+
+      toast.success("Kapak görseli yüklendi.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Görsel yüklenirken hata oluştu.");
+    }
+  };
+
+  /* --------------- Quill içine görsel ekleme --------------- */
+  const insertImageIntoQuill = (url: string, alt?: string) => {
+    const q = quillRef.current?.getEditor();
+    if (!q) return;
+
+    // Alt metin girilmişse <img alt="..."> olarak yapıştır
+    if (alt && alt.trim()) {
+      const safeAlt = escapeHtml(alt.trim());
+      const html = `<img src="${url}" alt="${safeAlt}" />`;
+      const range = q.getSelection(true);
+      const index = range ? range.index : q.getLength();
+      // clipboard ile html yapıştır
+      q.clipboard.dangerouslyPasteHTML(index, html);
+      q.setSelection(index + 1, 0);
+    } else {
+      // standart quill image embed
+      const range = q.getSelection(true);
+      const index = range ? range.index : q.getLength();
+      q.insertEmbed(index, "image", url, "user");
+      q.setSelection(index + 1, 0);
+    }
+  };
+
+  const handleInlineImageUpload = async (file: File) => {
+    try {
+      const folderSafe = (formData.slug || slugify(formData.title) || "posts").replace(/[^a-z0-9/_-]/g, "");
+      const folder = `blog/${folderSafe}/inline`;
+
+      const asset = await uploadAsset({
+        file,
+        bucket: "blog",
+        folder,
+        metadata: { module: "blog", kind: "inline" },
+      }).unwrap();
+
+      const alt = window.prompt("Görsel alt metni (SEO için opsiyonel):") || "";
+      insertImageIntoQuill(asset.url || "", alt);
+      toast.success("Görsel eklendi.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("İçerik görseli yüklenirken hata oluştu.");
+    }
+  };
+
+  // Quill "image" toolbar butonu için custom handler
+  const handleQuillImageButton = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = (input.files && input.files[0]) || null;
+      if (!file) return;
+      await handleInlineImageUpload(file);
+    };
+    input.click();
+  };
+
+  const quillModules = useMemo(
+    () => ({
+      toolbar: {
+        container: [
+          [{ header: [1, 2, 3, 4, 5, 6, false] }],
+          ["bold", "italic", "underline", "strike"],
+          [{ list: "ordered" }, { list: "bullet" }],
+          [{ color: [] }, { background: [] }],
+          ["link", "image"], // ← image butonu aktif
+          ["clean"],
+        ],
+        handlers: {
+          image: handleQuillImageButton, // ← özel upload handler
+        },
+      },
+    }),
+    [formData.slug, formData.title]
+  );
+
+  const quillFormats = [
+    "header",
+    "bold",
+    "italic",
+    "underline",
+    "strike",
+    "list",
+    "bullet",
+    "color",
+    "background",
+    "link",
+    "image",
+  ];
+
+  /* --------------- Submit --------------- */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+
+    const body = toUpsertBody(formData);
+    if (!body.slug) {
+      toast.error("Slug üretilemedi. Başlık veya slug giriniz.");
+      return;
+    }
+
     try {
-      if (id) {
-        const { error } = await blogAdmin.update(id, toUpsertBody(formData));
-        if (error) throw error;
-        toast({ title: "Başarılı", description: "Blog yazısı güncellendi." });
+      if (isEdit && id) {
+        await updatePost({ id, body }).unwrap();
+        toast.success("Blog yazısı güncellendi.");
       } else {
-        const { error } = await blogAdmin.create(toUpsertBody(formData));
-        if (error) throw error;
-        toast({ title: "Başarılı", description: "Blog yazısı oluşturuldu." });
+        await createPost(body).unwrap();
+        toast.success("Blog yazısı oluşturuldu.");
       }
       navigate("/admin/blog");
-    } catch (error) {
-      console.error("Error saving blog post:", error);
-      toast({
-        title: "Hata",
-        description: "Blog yazısı kaydedilirken bir hata oluştu.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Kaydedilirken bir hata oluştu.");
     }
   };
 
   return (
-    <AdminLayout title={id ? "Blog Yazısını Düzenle" : "Yeni Blog Yazısı"}>
+    <AdminLayout title={isEdit ? "Blog Yazısını Düzenle" : "Yeni Blog Yazısı"}>
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate("/admin/blog")}>
@@ -128,149 +305,210 @@ export default function BlogForm() {
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Blog Yazısı Bilgileri</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+        {/* Form + Sağ Önizleme */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {/* FORM */}
+          <Card className="lg:col-span-7">
+            <CardHeader>
+              <CardTitle>Blog Yazısı Bilgileri</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Başlık / Slug */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Başlık *</Label>
+                    <Input
+                      id="title"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="slug">Slug (URL) *</Label>
+                    <Input
+                      id="slug"
+                      value={formData.slug}
+                      onChange={(e) => {
+                        slugTouchedRef.current = true;
+                        setFormData({ ...formData, slug: e.target.value });
+                      }}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      site.com/{formData.slug || slugify(formData.title) || "blog-yazisi"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Özet */}
                 <div className="space-y-2">
-                  <Label htmlFor="title">Başlık *</Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    required
+                  <Label htmlFor="excerpt">Özet</Label>
+                  <Textarea
+                    id="excerpt"
+                    value={formData.excerpt}
+                    onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
+                    rows={2}
                   />
                 </div>
+
+                {/* İçerik (inline image destekli) */}
                 <div className="space-y-2">
-                  <Label htmlFor="slug">Slug (URL) *</Label>
-                  <Input
-                    id="slug"
-                    value={formData.slug}
-                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                    required
+                  <Label>İçerik (HTML) *</Label>
+                  <ReactQuill
+                    ref={quillRef as any}
+                    theme="snow"
+                    value={formData.content_html}
+                    onChange={(value) => setFormData({ ...formData, content_html: value })}
+                    className="bg-background"
+                    modules={quillModules}
+                    formats={quillFormats}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Metin, başlık, liste, bağlantı ve <strong>görsel</strong> ekleyebilirsiniz.
+                  </p>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="excerpt">Özet</Label>
-                <Textarea
-                  id="excerpt"
-                  value={formData.excerpt}
-                  onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
-                  rows={2}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>İçerik (HTML) *</Label>
-                <ReactQuill
-                  theme="snow"
-                  value={formData.content}
-                  onChange={(value) => setFormData({ ...formData, content: value })}
-                  className="bg-background"
-                  modules={{
-                    toolbar: [
-                      [{ header: [1, 2, 3, 4, 5, 6, false] }],
-                      ["bold", "italic", "underline", "strike"],
-                      [{ list: "ordered" }, { list: "bullet" }],
-                      [{ color: [] }, { background: [] }],
-                      ["link", "image"],
-                      ["clean"],
-                    ],
-                  }}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="category">Kategori *</Label>
-                  <Input
-                    id="category"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    required
-                  />
+                {/* Kapak görseli */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="image_upload">Kapak Fotoğrafı</Label>
+                    <Input
+                      id="image_upload"
+                      type="file"
+                      accept="image/*"
+                      disabled={uploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        await handleCoverUpload(file);
+                      }}
+                    />
+                    {formData.image_url && (
+                      <img
+                        src={formData.image_url}
+                        alt={formData.image_alt || "Kapak"}
+                        className="mt-2 w-full max-w-md rounded border"
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="image_alt">Kapak Alt Metni (SEO)</Label>
+                    <Input
+                      id="image_alt"
+                      value={formData.image_alt}
+                      onChange={(e) => setFormData({ ...formData, image_alt: e.target.value })}
+                      placeholder="Örn: “Blog yazısı kapak görseli”"
+                    />
+                    {formData.image_asset_id && (
+                      <p className="text-xs text-muted-foreground">Asset ID: {formData.image_asset_id}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="author_name">Yazar Adı *</Label>
-                  <Input
-                    id="author_name"
-                    value={formData.author_name}
-                    onChange={(e) => setFormData({ ...formData, author_name: e.target.value })}
-                    required
-                  />
+
+                {/* Yazar + (opsiyonel) kategori */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="author_name">Yazar Adı *</Label>
+                    <Input
+                      id="author_name"
+                      value={formData.author_name}
+                      onChange={(e) => setFormData({ ...formData, author_name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Kategori (opsiyonel)</Label>
+                    <Input
+                      id="category"
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      placeholder="Genel"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="image_upload">Kapak Fotoğrafı</Label>
-                <Input
-                  id="image_upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-
-                    const ext = file.name.split(".").pop();
-                    const filePath = `${Date.now()}.${ext}`;
-
-                    const { error: uploadError } = await metahub.storage
-                      .from("blog-images")
-                      .upload(filePath, file);
-
-                    if (uploadError) {
-                      toast({ title: "Hata", description: "Görsel yüklenirken hata oluştu.", variant: "destructive" });
-                      return;
-                    }
-                    const { data } = metahub.storage.from("blog-images").getPublicUrl(filePath);
-                    setFormData({ ...formData, image_url: data.publicUrl });
-                    toast({ title: "Başarılı", description: "Kapak fotoğrafı yüklendi." });
-                  }}
-                />
-                {formData.image_url && (
-                  <img src={formData.image_url} alt="Preview" className="mt-2 w-full max-w-md rounded border" />
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="is_published">Yayınla</Label>
-                  <div className="flex items-center gap-2">
+                {/* Yayın durumu */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
                     <Switch
                       id="is_published"
-                      checked={formData.is_published}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_published: checked })}
+                      checked={!!formData.is_published}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, is_published: checked })
+                      }
                     />
+                    <Label htmlFor="is_published">Yayınla</Label>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {stripHtml(formData.content_html).split(/\s+/).filter(Boolean).length} kelime
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="is_featured">Öne Çıkan</Label>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="is_featured"
-                      checked={formData.is_featured}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_featured: checked })}
-                    />
-                  </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 justify-end">
+                  <Button type="button" variant="outline" onClick={() => navigate("/admin/blog")}>
+                    İptal
+                  </Button>
+                  <Button type="submit" className="gradient-primary" disabled={loading}>
+                    {loading ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Sağ: SEO & İçerik Önizleme */}
+          <Card className="lg:col-span-5">
+            <CardHeader>
+              <CardTitle>Önizleme</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* SEO snippet */}
+              <div className="rounded-lg border p-4">
+                <div className="text-xs text-muted-foreground">
+                  {(typeof window !== "undefined" ? window.location.origin : "site.com")}{previewUrl}
+                </div>
+                <div className="mt-1 text-base font-semibold leading-snug">
+                  {seoTitle || "Blog başlığı (örnek)"}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {seoDesc || "Meta açıklama veya içerik özeti burada görünecek."}
                 </div>
               </div>
 
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => navigate("/admin/blog")}>
-                  İptal
-                </Button>
-                <Button type="submit" className="gradient-primary" disabled={loading}>
-                  {loading ? "Kaydediliyor..." : id ? "Güncelle" : "Oluştur"}
-                </Button>
+              {/* İçerik canlı önizleme */}
+              <div className="rounded-lg border">
+                <div className="border-b p-3 text-sm font-medium">İçerik</div>
+                <div className="prose max-w-none p-4">
+                  {/* Admin panel: güvenli alan varsayımı; istersen DOMPurify ekleyebilirsin */}
+                  <article
+                    dangerouslySetInnerHTML={{
+                      __html: formData.content_html || "<p>Önizleme yok.</p>",
+                    }}
+                  />
+                </div>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+
+              {/* Kapak görseli önizleme */}
+              <div className="rounded-lg border">
+                <div className="border-b p-3 text-sm font-medium">Kapak Görseli</div>
+                <div className="p-4">
+                  {formData.image_url ? (
+                    <img
+                      src={formData.image_url}
+                      alt={formData.image_alt || "Kapak"}
+                      className="w-full max-w-lg rounded border"
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Görsel seçilmedi.</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </AdminLayout>
   );

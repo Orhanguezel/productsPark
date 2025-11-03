@@ -1,6 +1,7 @@
-// src/modules/blog/controller.ts
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
+import { eq } from "drizzle-orm";
+
 import {
   listBlogPosts,
   getBlogPostById,
@@ -9,12 +10,12 @@ import {
   updateBlogPost,
   deleteBlogPost,
 } from "./repository";
+import { db } from "@/db/client";
+import { storageAssets } from "@/modules/storage/schema";
+import { env } from "@/core/env";
 
-/** FE ile uyumlu ve tipli query parametreleri */
 type ListQuery = {
-  /** Supabase-benzeri: "created_at.desc" */
   order?: string;
-  /** Alternatif: sadece güvenli alanlar */
   sort?: "created_at" | "updated_at" | "published_at";
   orderDir?: "asc" | "desc";
   limit?: string;
@@ -24,12 +25,34 @@ type ListQuery = {
   slug?: string;
 };
 
+// --- shared helpers for image url ---
+const encSeg = (s: string) => encodeURIComponent(s);
+const encPath = (p: string) => p.split("/").map(encSeg).join("/");
+function publicUrlOf(bucket: string, path: string, providerUrl?: string | null): string {
+  if (providerUrl) return providerUrl;
+  const cdnBase = (env.CDN_PUBLIC_BASE || "").replace(/\/+$/, "");
+  if (cdnBase) return `${cdnBase}/${encSeg(bucket)}/${encPath(path)}`;
+  const apiBase = (env.PUBLIC_API_BASE || "").replace(/\/+$/, "");
+  return `${apiBase || ""}/storage/${encSeg(bucket)}/${encPath(path)}`;
+}
+async function resolveAssetUrl(assetId?: string | null): Promise<string | null> {
+  if (!assetId) return null;
+  const row = await db
+    .select()
+    .from(storageAssets)
+    .where(eq(storageAssets.id, assetId))
+    .limit(1);
+
+  const a = row[0];
+  if (!a) return null;
+  return publicUrlOf(a.bucket, a.path, a.url as string | null);
+}
+
+
 export const listPosts: RouteHandler<{ Querystring: ListQuery }> = async (req, reply) => {
   const q = req.query;
-
   const limitNum = q.limit ? Number(q.limit) : undefined;
   const offsetNum = q.offset ? Number(q.offset) : undefined;
-
   const safeLimit = typeof limitNum === "number" && Number.isFinite(limitNum) ? limitNum : undefined;
   const safeOffset = typeof offsetNum === "number" && Number.isFinite(offsetNum) ? offsetNum : undefined;
 
@@ -65,7 +88,12 @@ type CreateBody = {
   slug?: string;
   excerpt?: string | null;
   content: string;
-  featured_image?: string | null;
+
+  // resim alanları:
+  featured_image?: string | null;           // URL
+  featured_image_asset_id?: string | null;  // storage id
+  featured_image_alt?: string | null;
+
   author?: string | null;
   meta_title?: string | null;
   meta_description?: string | null;
@@ -84,13 +112,20 @@ export const createPost: RouteHandler<{ Body: CreateBody }> = async (req, reply)
     b.title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   const parsedDate = b.published_at ? new Date(b.published_at) : null;
 
+  const assetUrl = await resolveAssetUrl(b.featured_image_asset_id ?? null);
+  const finalUrl = assetUrl ?? (b.featured_image ?? null);
+
   const row = await createBlogPost({
     id: randomUUID(),
     title: b.title,
     slug: rawSlug,
     excerpt: b.excerpt ?? null,
     content: b.content,
-    featured_image: b.featured_image ?? null,
+
+    featured_image: finalUrl,
+    featured_image_asset_id: b.featured_image_asset_id ?? null,
+    featured_image_alt: b.featured_image_alt ?? null,
+
     author: b.author ?? null,
     meta_title: b.meta_title ?? null,
     meta_description: b.meta_description ?? null,
@@ -107,20 +142,28 @@ type PatchBody = Partial<CreateBody>;
 
 export const updatePost: RouteHandler<{ Params: { id: string }; Body: PatchBody }> = async (req, reply) => {
   const b = req.body ?? {};
+
+  const nextAssetId = b.featured_image_asset_id === undefined ? undefined : (b.featured_image_asset_id ?? null);
+  const nextUrl =
+    nextAssetId !== undefined
+      ? await resolveAssetUrl(nextAssetId)
+      : (b.featured_image === undefined ? undefined : (b.featured_image ?? null));
+
   const patched = await updateBlogPost(req.params.id, {
     title: b.title,
     slug: b.slug,
     excerpt: b.excerpt ?? null,
     content: b.content,
-    featured_image: b.featured_image === undefined ? undefined : (b.featured_image ?? null),
+
+    featured_image: nextUrl,
+    featured_image_asset_id: nextAssetId,
+    featured_image_alt: b.featured_image_alt === undefined ? undefined : (b.featured_image_alt ?? null),
+
     author: b.author ?? null,
     meta_title: b.meta_title ?? null,
     meta_description: b.meta_description ?? null,
     is_published: typeof b.is_published === "boolean" ? (b.is_published ? 1 : 0) : undefined,
-    published_at:
-      b.published_at === undefined
-        ? undefined
-        : (b.published_at ? new Date(b.published_at) : null),
+    published_at: b.published_at === undefined ? undefined : (b.published_at ? new Date(b.published_at) : null),
   });
 
   if (!patched) return reply.code(404).send({ error: { message: "not_found" } });

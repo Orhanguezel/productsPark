@@ -19,31 +19,49 @@ export const productCreateSchema = z.object({
   original_price: z.coerce.number().optional().nullable(),
   cost: z.coerce.number().optional().nullable(),
 
+  // Legacy URL (korunuyor)
   image_url: z.string().url().max(500).optional().nullable(),
+
+  // Yeni storage alanları
+  featured_image: z.string().url().max(500).optional().nullable(),
+  // Cloudinary/S3 public_id gibi UUID olmayan değerleri destekle
+  featured_image_asset_id: z.string().min(1).max(200).optional().nullable(),
+  featured_image_alt: z.string().max(255).optional().nullable(),
+
   gallery_urls: z.array(z.string().url()).optional().nullable(),
+  // Provider public_id’leri UUID olmayabilir
+  gallery_asset_ids: z.array(z.string().min(1)).optional().nullable(),
+
   features: z.array(z.string()).optional().nullable(),
 
   rating: z.coerce.number().min(0).max(5).optional(),
   review_count: z.coerce.number().int().min(0).optional(),
 
   product_type: z.string().max(50).optional().nullable(),
-  // FE beklediği kapsam:
   delivery_type: z.enum(["manual", "auto_stock", "file", "api"]).optional().nullable(),
 
-  custom_fields: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string(),
-      type: z.enum(["text", "email", "phone", "url", "textarea"]),
-      placeholder: z.string().optional().nullable(),
-      required: z.boolean().default(false),
-    })
-  ).optional().nullable(),
+  custom_fields: z
+    .array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        type: z.enum(["text", "email", "phone", "url", "textarea"]),
+        placeholder: z.string().optional().nullable(),
+        required: z.boolean().default(false),
+      })
+    )
+    .optional()
+    .nullable(),
 
-  quantity_options: z.array(z.object({
-    quantity: z.coerce.number().int().min(1),
-    price: z.coerce.number().min(0),
-  })).optional().nullable(),
+  quantity_options: z
+    .array(
+      z.object({
+        quantity: z.coerce.number().int().min(1),
+        price: z.coerce.number().min(0),
+      })
+    )
+    .optional()
+    .nullable(),
 
   api_provider_id: z.string().uuid().optional().nullable(),
   api_product_id: z.string().max(64).optional().nullable(),
@@ -59,11 +77,16 @@ export const productCreateSchema = z.object({
   demo_embed_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
   demo_button_text: z.string().max(100).optional().nullable(),
 
-  badges: z.array(z.object({
-    text: z.string(),
-    icon: z.string().optional().nullable(),
-    active: z.boolean(),
-  })).optional().nullable(),
+  badges: z
+    .array(
+      z.object({
+        text: z.string(),
+        icon: z.string().optional().nullable(),
+        active: z.boolean(),
+      })
+    )
+    .optional()
+    .nullable(),
 
   sku: z.string().max(100).optional().nullable(),
   stock_quantity: z.coerce.number().int().min(0).optional().default(0),
@@ -71,10 +94,19 @@ export const productCreateSchema = z.object({
   is_active: z.coerce.number().int().min(0).max(1).optional().default(1),
   is_featured: z.coerce.number().int().min(0).max(1).optional().default(0),
 
-  // DB’de var, FE ile uyumlu:
   requires_shipping: z.coerce.number().int().min(0).max(1).optional().default(1),
-});
 
+  // opsiyoneller
+  is_digital: z.coerce.number().int().min(0).max(1).optional().default(0),
+  auto_delivery_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
+  pre_order_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
+  min_order: z.coerce.number().int().optional().nullable(),
+  max_order: z.coerce.number().int().optional().nullable(),
+  min_barem: z.coerce.number().int().optional().nullable(),
+  max_barem: z.coerce.number().int().optional().nullable(),
+  barem_step: z.coerce.number().int().optional().nullable(),
+  tax_type: z.coerce.number().int().optional().nullable(),
+});
 export const productUpdateSchema = productCreateSchema.partial();
 
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
@@ -93,7 +125,7 @@ export const productFaqUpdateSchema = productFaqCreateSchema.partial();
 export type ProductFaqCreateInput = z.infer<typeof productFaqCreateSchema>;
 export type ProductFaqUpdateInput = z.infer<typeof productFaqUpdateSchema>;
 
-/** product_options */
+/** product_options (şimdilik kullanılmıyor ama şema tam) */
 export const productOptionCreateSchema = z.object({
   id: z.string().uuid().optional(),
   product_id: z.string().uuid(),
@@ -123,7 +155,7 @@ export type ProductReviewUpdateInput = z.infer<typeof productReviewUpdateSchema>
 export const productStockCreateSchema = z.object({
   id: z.string().uuid().optional(),
   product_id: z.string().uuid(),
-  code: z.string().min(1).max(255),
+  stock_content: z.string().min(1).max(255), // FE/DB uyumlu alan
   is_used: z.coerce.number().int().min(0).max(1).optional().default(0),
   used_at: z.coerce.date().optional().nullable(),
   order_item_id: z.string().uuid().optional().nullable(),

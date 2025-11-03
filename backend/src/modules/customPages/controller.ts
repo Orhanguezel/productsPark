@@ -1,4 +1,3 @@
-// src/modules/customPages/controller.ts
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import {
@@ -20,14 +19,12 @@ type ListQuery = {
   is_published?: "0" | "1" | "true" | "false";
   q?: string;
   slug?: string;
-  // FE’den gelebiliyor; BE’de yoksayacağız:
   select?: string;
 };
 
 export const listPages: RouteHandler<{ Querystring: ListQuery }> = async (req, reply) => {
   try {
     const { select: _select, ...q } = req.query ?? {};
-
     const limitNum  = q.limit  ? Number(q.limit)  : undefined;
     const offsetNum = q.offset ? Number(q.offset) : undefined;
 
@@ -64,27 +61,37 @@ export const getPageBySlug: RouteHandler<{ Params: { slug: string } }> = async (
   return reply.send(row);
 };
 
-/** CREATE */
+/** CREATE (public — istersen kapat) */
 type CreateBody = {
   title: string;
   slug?: string;
-  content_html: string;                 // FE rahat girsin
+  content_html: string;
   meta_title?: string | null;
   meta_description?: string | null;
   is_published?: boolean;
+
+  // Görsel alanları
+  featured_image?: string | null;
+  featured_image_asset_id?: string | null;
+  featured_image_alt?: string | null;
 };
 
 export const createPage: RouteHandler<{ Body: CreateBody }> = async (req, reply) => {
   const b = req.body;
   if (!b?.title || !b?.content_html) {
     return reply.code(400).send({ error: { message: "missing_required_fields" } });
-  }
+    }
 
   const row = await createCustomPage({
     id: randomUUID(),
     title: b.title,
     slug: (b.slug && b.slug.trim()) || b.title.trim().toLowerCase().replace(/\s+/g, "-"),
     content: packContent(b.content_html),
+
+    featured_image: b.featured_image ?? null,
+    featured_image_asset_id: b.featured_image_asset_id ?? null,
+    featured_image_alt: b.featured_image_alt ?? null,
+
     meta_title: b.meta_title ?? null,
     meta_description: b.meta_description ?? null,
     is_published: b.is_published ? 1 : 0,
@@ -98,15 +105,19 @@ export const createPage: RouteHandler<{ Body: CreateBody }> = async (req, reply)
 /** UPDATE (patch) */
 type PatchBody = Partial<CreateBody>;
 
-export const updatePage: RouteHandler<{ Params: { id: string }; Body: PatchBody }> = async (
-  req,
-  reply,
-) => {
+export const updatePage: RouteHandler<{ Params: { id: string }; Body: PatchBody }> = async (req, reply) => {
   const b = req.body ?? {};
   const patched = await updateCustomPage(req.params.id, {
     title: b.title,
     slug: b.slug,
     content: typeof b.content_html === "string" ? packContent(b.content_html) : undefined,
+
+    featured_image: typeof b.featured_image !== "undefined" ? (b.featured_image ?? null) : undefined,
+    featured_image_asset_id:
+      typeof b.featured_image_asset_id !== "undefined" ? (b.featured_image_asset_id ?? null) : undefined,
+    featured_image_alt:
+      typeof b.featured_image_alt !== "undefined" ? (b.featured_image_alt ?? null) : undefined,
+
     meta_title: b.meta_title ?? null,
     meta_description: b.meta_description ?? null,
     is_published: typeof b.is_published === "boolean" ? (b.is_published ? 1 : 0) : undefined,

@@ -1,3 +1,5 @@
+// src/modules/payments/admin.routes.ts
+
 import type { FastifyInstance } from 'fastify';
 import {
   // Providers

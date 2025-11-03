@@ -1,4 +1,5 @@
 import type { RouteHandler } from 'fastify';
+import { randomUUID } from 'crypto';
 import { db } from '@/db/client';
 import { categories } from './schema';
 import { eq, sql } from 'drizzle-orm';
@@ -9,8 +10,28 @@ import {
   type CategoryUpdateInput,
 } from './validation';
 import { buildInsertPayload, buildUpdatePayload } from './controller';
+import { storageAssets } from '@/modules/storage/schema';
+import { env } from '@/core/env';
 
-// MySQL hata yardımcıları
+// ===== Storage URL helpers (blog ile aynı desen) =====
+const encSeg = (s: string) => encodeURIComponent(s);
+const encPath = (p: string) => p.split("/").map(encSeg).join("/");
+function publicUrlOf(bucket: string, path: string, providerUrl?: string | null): string {
+  if (providerUrl) return providerUrl;
+  const cdnBase = (env.CDN_PUBLIC_BASE || "").replace(/\/+$/, "");
+  if (cdnBase) return `${cdnBase}/${encSeg(bucket)}/${encPath(path)}`;
+  const apiBase = (env.PUBLIC_API_BASE || "").replace(/\/+$/, "");
+  return `${apiBase || ""}/storage/${encSeg(bucket)}/${encPath(path)}`;
+}
+async function resolveAssetUrl(assetId?: string | null): Promise<string | null> {
+  if (!assetId) return null;
+  const rows = await db.select().from(storageAssets).where(eq(storageAssets.id, assetId)).limit(1);
+  const a = rows[0];
+  if (!a) return null;
+  return publicUrlOf(a.bucket, a.path, (a as any).url ?? null);
+}
+
+// ===== MySQL hata yardımcıları =====
 function isDup(err: any) {
   const code = err?.code ?? err?.errno;
   return code === 'ER_DUP_ENTRY' || code === 1062;
@@ -27,7 +48,17 @@ export const adminCreateCategory: RouteHandler<{ Body: CategoryCreateInput }> = 
     return reply.code(400).send({ error: { message: 'invalid_body', issues: parsed.error.flatten() } });
   }
 
+  // Temel payload (ham değerler)
   const payload = buildInsertPayload(parsed.data);
+
+  // ✅ Storage asset varsa URL’yi çöz ve image_url’a yaz
+  if (parsed.data.image_asset_id !== undefined) {
+    const finalUrl = await resolveAssetUrl(parsed.data.image_asset_id as string | null);
+    payload.image_url = finalUrl ?? (payload.image_url ?? null);
+  }
+  // image_alt & image_asset_id’yi DB’ye yazalım
+  (payload as any).image_asset_id = (parsed.data.image_asset_id ?? null) as string | null;
+  (payload as any).image_alt = (parsed.data.image_alt ?? null) as string | null;
 
   // Kendini ebeveyn yapmayı önle
   if (payload.parent_id && payload.parent_id === payload.id) {
@@ -35,14 +66,10 @@ export const adminCreateCategory: RouteHandler<{ Body: CategoryCreateInput }> = 
   }
 
   try {
-    await db.insert(categories).values(payload);
+    await db.insert(categories).values(payload as any);
   } catch (err: any) {
-    if (isDup(err)) {
-      return reply.code(409).send({ error: { message: 'duplicate_slug' } });
-    }
-    if (isFk(err)) {
-      return reply.code(400).send({ error: { message: 'invalid_parent_id' } });
-    }
+    if (isDup(err)) return reply.code(409).send({ error: { message: 'duplicate_slug' } });
+    if (isFk(err)) return reply.code(400).send({ error: { message: 'invalid_parent_id' } });
     return reply.code(500).send({ error: { message: 'db_error', detail: String(err?.message ?? err) } });
   }
 
@@ -50,7 +77,7 @@ export const adminCreateCategory: RouteHandler<{ Body: CategoryCreateInput }> = 
   return reply.code(201).send(row);
 };
 
-/** PUT /categories/:id (admin) — idempotent replace/patch */
+/** PUT /categories/:id (admin) */
 export const adminPutCategory: RouteHandler<{ Params: { id: string }; Body: CategoryUpdateInput }> = async (req, reply) => {
   const { id } = req.params;
 
@@ -59,9 +86,28 @@ export const adminPutCategory: RouteHandler<{ Params: { id: string }; Body: Cate
     return reply.code(400).send({ error: { message: 'invalid_body', issues: parsed.error.flatten() } });
   }
 
+  // Ham set (timestamp vs.)
   const set = buildUpdatePayload(parsed.data);
-  if ('parent_id' in set && set.parent_id === id) {
-    set.parent_id = null; // kendine bağlanma
+
+  // ✅ Görsel alanları (öncelik asset_id)
+  let nextAssetId: string | null | undefined = undefined;
+  if ('image_asset_id' in parsed.data) {
+    nextAssetId = (parsed.data.image_asset_id ?? null) as string | null;
+    (set as any).image_asset_id = nextAssetId;
+    const urlFromAsset = await resolveAssetUrl(nextAssetId);
+    (set as any).image_url = urlFromAsset ?? (set as any).image_url ?? null;
+  }
+  if ('image_alt' in parsed.data) {
+    (set as any).image_alt = (parsed.data.image_alt ?? null) as string | null;
+  }
+  // image_url ayrıca gönderildiyse ve asset_id gelmediyse onu kullan
+  if ('image_url' in parsed.data && nextAssetId === undefined) {
+    (set as any).image_url = (parsed.data.image_url ?? null) as string | null;
+  }
+
+  // Kendine bağlanmayı önle
+  if ('parent_id' in set && (set as any).parent_id === id) {
+    (set as any).parent_id = null;
   }
 
   try {
@@ -87,8 +133,24 @@ export const adminPatchCategory: RouteHandler<{ Params: { id: string }; Body: Ca
   }
 
   const set = buildUpdatePayload(parsed.data);
-  if ('parent_id' in set && set.parent_id === id) {
-    set.parent_id = null; // kendine bağlanma
+
+  // ✅ Görsel alanları
+  let nextAssetId: string | null | undefined = undefined;
+  if ('image_asset_id' in parsed.data) {
+    nextAssetId = (parsed.data.image_asset_id ?? null) as string | null;
+    (set as any).image_asset_id = nextAssetId;
+    const urlFromAsset = await resolveAssetUrl(nextAssetId);
+    (set as any).image_url = urlFromAsset ?? (set as any).image_url ?? null;
+  }
+  if ('image_alt' in parsed.data) {
+    (set as any).image_alt = (parsed.data.image_alt ?? null) as string | null;
+  }
+  if ('image_url' in parsed.data && nextAssetId === undefined) {
+    (set as any).image_url = (parsed.data.image_url ?? null) as string | null;
+  }
+
+  if ('parent_id' in set && (set as any).parent_id === id) {
+    (set as any).parent_id = null;
   }
 
   try {
@@ -104,14 +166,14 @@ export const adminPatchCategory: RouteHandler<{ Params: { id: string }; Body: Ca
   return reply.send(rows[0]);
 };
 
-/** DELETE /categories/:id (admin) */
+/** DELETE /categories/:id (admin) — değişmedi */
 export const adminDeleteCategory: RouteHandler<{ Params: { id: string } }> = async (req, reply) => {
   const { id } = req.params;
   await db.delete(categories).where(eq(categories.id, id));
   return reply.code(204).send();
 };
 
-/** POST /categories/reorder (admin) */
+/** POST /categories/reorder (admin) — değişmedi (updated_at SQL) */
 export const adminReorderCategories: RouteHandler<{ Body: { items: Array<{ id: string; display_order: number }> } }> =
   async (req, reply) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -123,7 +185,6 @@ export const adminReorderCategories: RouteHandler<{ Body: { items: Array<{ id: s
         .update(categories)
         .set({
           display_order: n,
-          // 🟢 string | SQL bekler
           updated_at: sql`CURRENT_TIMESTAMP(3)`,
         })
         .where(eq(categories.id, it.id));
@@ -131,39 +192,28 @@ export const adminReorderCategories: RouteHandler<{ Body: { items: Array<{ id: s
     return reply.send({ ok: true });
   };
 
-/** PATCH /categories/:id/active (admin) */
+/** Toggle’lar — değişmedi */
 export const adminToggleActive: RouteHandler<{ Params: { id: string }; Body: { is_active: boolean } }> =
   async (req, reply) => {
     const { id } = req.params;
     const v = !!req.body?.is_active;
     await db
       .update(categories)
-      .set({
-        // 🟢 boolean kolon
-        is_active: v,
-        updated_at: sql`CURRENT_TIMESTAMP(3)`,
-      })
+      .set({ is_active: v, updated_at: sql`CURRENT_TIMESTAMP(3)` })
       .where(eq(categories.id, id));
-
     const rows = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
     if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
     return reply.send(rows[0]);
   };
 
-/** PATCH /categories/:id/featured (admin) */
 export const adminToggleFeatured: RouteHandler<{ Params: { id: string }; Body: { is_featured: boolean } }> =
   async (req, reply) => {
     const { id } = req.params;
     const v = !!req.body?.is_featured;
     await db
       .update(categories)
-      .set({
-        // 🟢 boolean kolon
-        is_featured: v,
-        updated_at: sql`CURRENT_TIMESTAMP(3)`,
-      })
+      .set({ is_featured: v, updated_at: sql`CURRENT_TIMESTAMP(3)` })
       .where(eq(categories.id, id));
-
     const rows = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
     if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
     return reply.send(rows[0]);

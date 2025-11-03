@@ -1,5 +1,5 @@
 import {
-  mysqlTable, char, varchar, decimal, int, datetime, boolean, index, uniqueIndex
+  mysqlTable, char, varchar, decimal, int, datetime, boolean, index, uniqueIndex,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
@@ -18,7 +18,10 @@ export const coupons = mysqlTable(
     valid_until: datetime("valid_until", { fsp: 3 }),
     is_active: boolean("is_active").notNull().default(true),
     created_at: datetime("created_at", { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
-    updated_at: datetime("updated_at", { fsp: 3 }).notNull(),
+    updated_at: datetime("updated_at", { fsp: 3 })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdateFn(() => new Date()),
   },
   (t) => [
     uniqueIndex("coupons_code_uq").on(t.code),
@@ -27,3 +30,6 @@ export const coupons = mysqlTable(
     index("coupons_valid_until_idx").on(t.valid_until),
   ]
 );
+
+export type CouponRow    = typeof coupons.$inferSelect;
+export type CouponInsert = typeof coupons.$inferInsert;

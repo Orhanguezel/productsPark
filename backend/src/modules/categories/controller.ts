@@ -10,14 +10,12 @@ import {
   type CategoryUpdateInput,
 } from './validation';
 
-const nullIfEmpty = (v: unknown) => (v === '' ? null : v);
-
-// FE’den gelen her türü -> boolean
+const nullIfEmpty = (v: unknown) => (v === "" ? null : v);
 function toBool(v: unknown): boolean {
-  if (typeof v === 'boolean') return v;
-  if (typeof v === 'number') return v !== 0;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
   const s = String(v).toLowerCase();
-  return s === '1' || s === 'true';
+  return s === "1" || s === "true";
 }
 
 const ORDER_WHITELIST = {
@@ -122,8 +120,8 @@ export const getCategoryBySlug: RouteHandler<{ Params: { slug: string } }> = asy
 /** Ortak payload yardımcıları (admin controller kullanıyor) */
 export function buildInsertPayload(input: CategoryCreateInput) {
   const id = input.id ?? randomUUID();
-  const name = String(input.name ?? '').trim();
-  const slug = String(input.slug ?? '').trim();
+  const name = String(input.name ?? "").trim();
+  const slug = String(input.slug ?? "").trim();
 
   return {
     id,
@@ -133,17 +131,19 @@ export function buildInsertPayload(input: CategoryCreateInput) {
     image_url: (nullIfEmpty(input.image_url) as string | null) ?? null,
     icon: (nullIfEmpty(input.icon) as string | null) ?? null,
     parent_id: (nullIfEmpty(input.parent_id) as string | null) ?? null,
-    // 🟢 boolean kolonlar
+
+    // 👇 yeni alanlar
+    article_content: (nullIfEmpty(input.article_content) as string | null) ?? null,
+    article_enabled: input.article_enabled === undefined ? false : toBool(input.article_enabled),
+
     is_active: input.is_active === undefined ? true : toBool(input.is_active),
     is_featured: input.is_featured === undefined ? false : toBool(input.is_featured),
     display_order: input.display_order ?? 0,
-    // updated_at göndermiyoruz; DB default/ON UPDATE çalışır
   };
 }
 
 export function buildUpdatePayload(patch: CategoryUpdateInput) {
   const set: Record<string, unknown> = {
-    // 🟢 Drizzle tipine uygun: string | SQL bekler
     updated_at: sql`CURRENT_TIMESTAMP(3)`,
   };
 
@@ -154,10 +154,13 @@ export function buildUpdatePayload(patch: CategoryUpdateInput) {
   if (patch.icon !== undefined) set.icon = (nullIfEmpty(patch.icon) as string | null);
   if (patch.parent_id !== undefined) set.parent_id = (nullIfEmpty(patch.parent_id) as string | null);
 
-  // 🟢 boolean kolonlar
+  // 👇 yeni alanlar
+  if (patch.article_content !== undefined) set.article_content = (nullIfEmpty(patch.article_content) as string | null);
+  if (patch.article_enabled !== undefined) set.article_enabled = toBool(patch.article_enabled);
+
   if (patch.is_active !== undefined) set.is_active = toBool(patch.is_active);
   if (patch.is_featured !== undefined) set.is_featured = toBool(patch.is_featured);
-
   if (patch.display_order !== undefined) set.display_order = Number(patch.display_order) || 0;
+
   return set;
 }

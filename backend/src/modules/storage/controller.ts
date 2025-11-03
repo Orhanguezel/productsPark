@@ -12,7 +12,12 @@ import {
   signMultipartBodySchema,
   type SignMultipartBody,
 } from "./validation";
-import { getCloudinaryConfig, uploadBufferAuto, destroyPublicId, buildCloudinaryUrl } from "./cloudinary";
+import {
+  getCloudinaryConfig,
+  uploadBufferAuto,
+  destroyCloudinaryById,
+  renameCloudinaryPublicId,
+} from "./cloudinary";
 import type { MultipartFile, MultipartValue } from "@fastify/multipart";
 import { env } from "@/core/env";
 
@@ -79,7 +84,7 @@ export const publicServe: RouteHandler<{ Params: { bucket: string; "*": string }
   return reply.code(404).send({ message: "not_found" });
 };
 
-/** POST /storage/:bucket/upload (FormData) */
+/** POST /storage/:bucket/upload (FormData) — server-side signed upload */
 export const uploadToBucket: RouteHandler<{
   Params: { bucket: string };
   Querystring: { path?: string; upsert?: string };
@@ -125,7 +130,13 @@ export const uploadToBucket: RouteHandler<{
     width: up.width ?? null,
     height: up.height ?? null,
     url: up.secure_url,
-    hash: null,
+    hash: up.etag ?? null,
+    etag: up.etag ?? null,
+    provider: "cloudinary" as const,
+    provider_public_id: up.public_id ?? null,           // "folder/name"
+    provider_resource_type: up.resource_type ?? null,    // "image" | "video" | "raw"
+    provider_format: up.format ?? null,
+    provider_version: typeof up.version === "number" ? up.version : null,
     metadata: null as Record<string, string> | null,
   };
   const record = omitNullish(recordBase);
@@ -149,7 +160,9 @@ export const signPut: RouteHandler<{ Body: SignPutBody }> = async (_req, reply) 
   return reply.code(501).send({ message: "s3_not_configured" });
 };
 
-/** POST /storage/uploads/sign-multipart → Cloudinary unsigned */
+/** POST /storage/uploads/sign-multipart → Cloudinary unsigned form fields
+ *  Not: public_url DÖNDÜRME — gerçek URL Cloudinary yanıtında.
+ */
 export const signMultipart: RouteHandler<{ Body: SignMultipartBody }> = async (req, reply) => {
   const parsed = signMultipartBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -165,13 +178,12 @@ export const signMultipart: RouteHandler<{ Body: SignMultipartBody }> = async (r
   const publicId = clean.replace(/\.[^.]+$/, ""); // sadece basename
 
   const upload_url = `https://api.cloudinary.com/v1_1/${cfg.cloudName}/auto/upload`;
-  const public_url = buildCloudinaryUrl(cfg.cloudName, publicId, folder);
   const fields: Record<string, string> = {
     upload_preset: cfg.uploadPreset!,
     folder: folder ?? "",
     public_id: publicId,
   };
-  return reply.send({ upload_url, public_url, fields });
+  return reply.send({ upload_url, fields });
 };
 
 /* ---------------------------------- ADMIN ---------------------------------- */
@@ -252,7 +264,13 @@ export const adminCreateAsset: RouteHandler = async (req, reply) => {
     width: up.width ?? null,
     height: up.height ?? null,
     url: up.secure_url,
-    hash: null,
+    hash: up.etag ?? null,
+    etag: up.etag ?? null,
+    provider: "cloudinary" as const,
+    provider_public_id: up.public_id ?? null,
+    provider_resource_type: up.resource_type ?? null,
+    provider_format: up.format ?? null,
+    provider_version: typeof up.version === "number" ? up.version : null,
     metadata, // object veya null
   };
   const rec = omitNullish(recBase);
@@ -290,16 +308,37 @@ export const adminPatchAsset: RouteHandler<{ Params: { id: string }; Body: Stora
 
   const patch = parsed.data;
   const sets: Record<string, unknown> = { updated_at: dsql`CURRENT_TIMESTAMP(3)` };
+  const cur = await getAssetById(req.params.id);
+  if (!cur) return reply.code(404).send({ error: { message: "not_found" } });
 
   if (patch.name !== undefined) sets.name = patch.name;
+
   if (patch.folder !== undefined) {
-    sets.folder = patch.folder;
-    const cur = await getAssetById(req.params.id);
-    if (cur) {
+    // Hem uzak (Cloudinary rename) hem DB path/görsel URL update
+    if (cur.provider_public_id) {
+      const baseName = (cur.provider_public_id.split("/").pop() || cur.name).replace(/^\//, "");
+      const newPublicId = patch.folder ? `${patch.folder}/${baseName}` : baseName;
+
+      const renamed = await renameCloudinaryPublicId(
+        cur.provider_public_id,
+        newPublicId,
+        cur.provider_resource_type || "image"
+      );
+
+      sets.folder = patch.folder;
+      sets.path = patch.folder ? `${patch.folder}/${cur.name}` : cur.name;
+      sets.provider_public_id = renamed.public_id ?? newPublicId;
+      sets.url = renamed.secure_url ?? cur.url;
+      sets.provider_version = typeof renamed.version === "number" ? renamed.version : cur.provider_version;
+      sets.provider_format = renamed.format ?? cur.provider_format;
+    } else {
+      // Fallback: sadece DB path taşı
       const baseName = cur.path.split("/").pop()!;
+      sets.folder = patch.folder;
       sets.path = patch.folder ? `${patch.folder}/${baseName}` : baseName;
     }
   }
+
   if (patch.metadata !== undefined) sets.metadata = patch.metadata;
 
   await db.update(storageAssets).set(sets).where(eq(storageAssets.id, req.params.id));
@@ -313,8 +352,8 @@ export const adminDeleteAsset: RouteHandler<{ Params: { id: string } }> = async 
   const row = await getAssetById(req.params.id);
   if (!row) return reply.code(404).send({ error: { message: "not_found" } });
   try {
-    const publicIdPath = row.path.replace(/\.[^.]+$/, ""); // folder/name (ext’siz)
-    await destroyPublicId(publicIdPath);
+    const publicId = row.provider_public_id || row.path.replace(/\.[^.]+$/, "");
+    await destroyCloudinaryById(publicId, row.provider_resource_type || undefined);
   } catch {}
   await db.delete(storageAssets).where(eq(storageAssets.id, req.params.id));
   return reply.code(204).send();
@@ -327,8 +366,8 @@ export const adminBulkDelete: RouteHandler<{ Body: { ids: string[] } }> = async 
     const row = await getAssetById(id);
     if (!row) continue;
     try {
-      const publicIdPath = row.path.replace(/\.[^.]+$/, "");
-      await destroyPublicId(publicIdPath);
+      const publicId = row.provider_public_id || row.path.replace(/\.[^.]+$/, "");
+      await destroyCloudinaryById(publicId, row.provider_resource_type || undefined);
     } catch {}
     await db.delete(storageAssets).where(eq(storageAssets.id, id));
     deleted++;

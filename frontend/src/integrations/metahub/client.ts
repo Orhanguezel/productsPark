@@ -38,7 +38,6 @@ import * as notify from "./ui/toast/helpers";
 import * as bulk from "./utils/bulk";
 import * as dsl from "./search/dsl";
 import * as routePrefetch from "./rtk/helpers/routePrefetch";
-import { notifications } from "./client/notifications/client";
 import { activity } from "./client/activity/client";
 import { audit } from "./client/audit/client";
 import * as exportsUtil from "./utils/exports";
@@ -69,7 +68,6 @@ import { ordersAdmin } from "./client/admin/orders";
 import { cartsAdmin } from "./client/admin/carts";
 import { paymentsAdmin } from "./client/admin/payments";
 import { refundsAdmin } from "./client/admin/refunds";
-import { campaignsAdmin } from "./client/admin/campaigns";
 import { giftCardsAdmin } from "./client/admin/giftCards";
 import { payoutsAdmin } from "./client/admin/payouts";
 import { invoicesAdmin } from "./client/admin/invoices";
@@ -131,7 +129,6 @@ export const metahub = {
   bulk,
   dsl,
   routePrefetch,
-  notifications,
   activity,
   audit,
   exports: exportsUtil,
@@ -160,7 +157,6 @@ export const metahub = {
     carts: cartsAdmin,
     payments: paymentsAdmin,
     refunds: refundsAdmin,
-    campaigns: campaignsAdmin,
     giftCards: giftCardsAdmin,
     payouts: payoutsAdmin,
     invoices: invoicesAdmin,

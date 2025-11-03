@@ -1,0 +1,41 @@
+import {
+  Home, ShoppingBag, Grid3x3, Info, Mail, BookOpen, LifeBuoy, Settings, User,
+  Instagram, Youtube, Facebook, Twitter, Twitch, Music, Music2, Gamepad2,
+  Crosshair, Heart, Chrome, Send, MessageSquare, Camera, Pin, Linkedin, Waves,
+} from "lucide-react";
+
+export const availableIcons = [
+  { name: "Home", Icon: Home },
+  { name: "ShoppingBag", Icon: ShoppingBag },
+  { name: "Grid3x3", Icon: Grid3x3 },
+  { name: "Info", Icon: Info },
+  { name: "Mail", Icon: Mail },
+  { name: "BookOpen", Icon: BookOpen },
+  { name: "LifeBuoy", Icon: LifeBuoy },
+  { name: "Settings", Icon: Settings },
+  { name: "User", Icon: User },
+  { name: "Instagram", Icon: Instagram },
+  { name: "TikTok", Icon: Music2 },
+  { name: "YouTube", Icon: Youtube },
+  { name: "Facebook", Icon: Facebook },
+  { name: "Twitter", Icon: Twitter },
+  { name: "Snapchat", Icon: Camera },
+  { name: "Reddit", Icon: MessageSquare },
+  { name: "Spotify", Icon: Music },
+  { name: "Telegram", Icon: Send },
+  { name: "Discord", Icon: MessageSquare },
+  { name: "Twitch", Icon: Twitch },
+  { name: "X", Icon: Twitter },
+  { name: "Pinterest", Icon: Pin },
+  { name: "Linkedin", Icon: Linkedin },
+  { name: "PUBG", Icon: Gamepad2 },
+  { name: "Valorant", Icon: Crosshair },
+  { name: "LOL", Icon: Gamepad2 },
+  { name: "CS2", Icon: Crosshair },
+  { name: "SoundCloud", Icon: Waves },
+  { name: "Tinder", Icon: Heart },
+  { name: "Google", Icon: Chrome },
+  { name: "Gmail", Icon: Mail },
+] as const;
+
+export type IconName = typeof availableIcons[number]["name"];

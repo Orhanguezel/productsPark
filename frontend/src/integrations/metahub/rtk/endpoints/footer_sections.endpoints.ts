@@ -1,47 +1,89 @@
-
-
 // =============================================================
 // FILE: src/integrations/metahub/rtk/endpoints/footer_sections.endpoints.ts
 // =============================================================
-import { baseApi as baseApi_m2 } from "../baseApi";
+import { baseApi } from "../baseApi";
+import type {
+  ApiFooterSection,
+  FooterSection,
+  FooterPublicListParams,
+  FooterLink,
+} from "@/integrations/metahub/db/types/footer";
 
-const tryParse_m2 = <T>(x: unknown): T => {
-  if (typeof x === "string") { try { return JSON.parse(x) as T; } catch { /* noop */ } }
-  return x as T;
+/* utils */
+const toNum = (x: unknown): number =>
+  typeof x === "number" ? x : Number(x ?? 0);
+
+const toBool = (x: unknown): boolean => {
+  if (x === null || x === undefined) return true;
+  if (typeof x === "boolean") return x;
+  if (typeof x === "number") return x !== 0;
+  const s = String(x).trim().toLowerCase();
+  return s === "1" || s === "true";
 };
 
-type BoolLike2 = 0 | 1 | boolean;
-
-export type FooterSection = {
-  id: string;
-  key: string;           // e.g., "company", "support"
-  title?: string | null;
-  locale?: string | null;
-  content_html?: string | null; // rich text
-  links?: Array<{ label: string; href: string; external?: boolean }>; // may arrive as JSON-string
-  is_active?: BoolLike2;
-  created_at?: string;
-  updated_at?: string;
+const safeParseLinks = (s: unknown): FooterLink[] => {
+  if (Array.isArray(s)) return s as FooterLink[];
+  if (typeof s !== "string") return [];
+  try {
+    const parsed = JSON.parse(s);
+    return Array.isArray(parsed) ? (parsed as FooterLink[]) : [];
+  } catch {
+    return [];
+  }
 };
 
-export type ApiFooterSection = Omit<FooterSection, "links"> & { links?: string | FooterSection["links"] };
-
-const normalizeFooterSection = (f: ApiFooterSection): FooterSection => ({
-  ...f,
-  links: f.links ? tryParse_m2<FooterSection["links"]>(f.links) : undefined,
+const normalizePublic = (f: ApiFooterSection): FooterSection => ({
+  id: f.id,
+  title: String(f.title ?? ""),
+  links: safeParseLinks(f.links),
+  display_order: toNum(f.display_order ?? 0),
+  is_active: toBool(f.is_active),
+  created_at: f.created_at ?? null,
+  updated_at: f.updated_at ?? null,
 });
 
-export const footerSectionsApi = baseApi_m2.injectEndpoints({
+const toParams = (p?: FooterPublicListParams | void) => {
+  if (!p) return undefined;
+  const params: Record<string, string> = {};
+  if (p.q) params.q = p.q;
+  if (typeof p.is_active === "boolean") params.is_active = String(p.is_active);
+  if (p.limit != null) params.limit = String(p.limit);
+  if (p.offset != null) params.offset = String(p.offset);
+  if (p.order) params.order = p.order;
+  return params;
+};
+
+const BASE = "/footer_sections";
+
+export const footerSectionsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    listFooterSections: b.query<FooterSection[], { locale?: string; is_active?: BoolLike2 }>({
-      query: (params) => ({ url: "/footer_sections", params }),
-      transformResponse: (res: unknown): FooterSection[] => Array.isArray(res) ? (res as ApiFooterSection[]).map(normalizeFooterSection) : [],
-      providesTags: (result) => result
-        ? [...result.map((i) => ({ type: "FooterSection" as const, id: i.id })), { type: "FooterSections" as const, id: "LIST" }]
-        : [{ type: "FooterSections" as const, id: "LIST" }],
+    listFooterSections: b.query<FooterSection[], FooterPublicListParams | void>({
+      query: (q) => {
+        const params = toParams(q);
+        return params ? { url: BASE, params } : { url: BASE };
+      },
+      transformResponse: (res: unknown): FooterSection[] =>
+        Array.isArray(res) ? (res as ApiFooterSection[]).map(normalizePublic) : [],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((i) => ({ type: "FooterSections" as const, id: i.id })),
+              { type: "FooterSections" as const, id: "LIST" },
+            ]
+          : [{ type: "FooterSections" as const, id: "LIST" }],
+      keepUnusedDataFor: 60,
+    }),
+
+    getFooterSectionById: b.query<FooterSection, string>({
+      query: (id) => ({ url: `${BASE}/${id}` }),
+      transformResponse: (res: unknown): FooterSection => normalizePublic(res as ApiFooterSection),
+      providesTags: (_r, _e, id) => [{ type: "FooterSections", id }],
     }),
   }),
   overrideExisting: true,
 });
 
-export const { useListFooterSectionsQuery } = footerSectionsApi;
+export const {
+  useListFooterSectionsQuery,
+  useGetFooterSectionByIdQuery,
+} = footerSectionsApi;

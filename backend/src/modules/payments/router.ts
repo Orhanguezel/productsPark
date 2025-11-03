@@ -1,3 +1,5 @@
+// src/modules/payments/router.ts
+
 import type { FastifyInstance } from 'fastify';
 import {
   listPaymentProvidersHandler,

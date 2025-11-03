@@ -1,6 +1,12 @@
+// modules/topbar/router.ts (public)
 import type { FastifyInstance } from 'fastify';
-import { listTopbarSettings } from './controller';
+import {
+  listTopbarSettings,
+  getTopbarSettingById,
+} from './controller';
+import type { TopbarPublicListQuery } from './validation';
 
 export async function registerTopbar(app: FastifyInstance) {
-  app.get('/topbar_settings', listTopbarSettings);
+  app.get<{ Querystring: TopbarPublicListQuery }>('/topbar_settings', listTopbarSettings);
+  app.get<{ Params: { id: string } }>('/topbar_settings/:id', getTopbarSettingById);
 }

@@ -1,26 +1,14 @@
-import { baseApi as baseApi6 } from "../baseApi";
+// src/integrations/metahub/rtk/endpoints/ticket_replies.endpoints.ts
 
-export type TicketReply = {
-  id: string;
-  ticket_id: string;
-  user_id?: string | null;
-  message: string;
-  is_admin: boolean;
-  created_at: string;
-};
+import { baseApi} from "../baseApi";
+import type { ApiTicketReply, TicketReply } from "../../db/types/support";
+
+
 
 const isTrue = (v: unknown) =>
   v === true || v === 1 || v === "1" || v === "true";
 
-/** Hem snake hem camel destekle */
-type ApiTicketReply = {
-  id?: unknown;
-  ticket_id?: unknown; ticketId?: unknown;
-  user_id?: unknown; userId?: unknown;
-  message?: unknown;
-  is_admin?: unknown; isAdmin?: unknown;
-  created_at?: unknown; createdAt?: unknown;
-};
+
 
 const normalizeReply = (r: ApiTicketReply): TicketReply => ({
   id: String(r.id),
@@ -31,7 +19,7 @@ const normalizeReply = (r: ApiTicketReply): TicketReply => ({
   created_at: String(r.created_at ?? r.createdAt ?? ""),
 });
 
-export const ticketRepliesApi = baseApi6.injectEndpoints({
+export const ticketRepliesApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
 
     listTicketRepliesByTicket: b.query<TicketReply[], string>({
@@ -56,8 +44,9 @@ export const ticketRepliesApi = baseApi6.injectEndpoints({
           user_id: body.user_id ?? null,
           userId: body.user_id ?? null,
           message: body.message,
-          is_admin: body.is_admin ? 1 : 0,
-          isAdmin: body.is_admin ? 1 : 0,
+          ...(typeof body.is_admin === "boolean"
+            ? { is_admin: body.is_admin, isAdmin: body.is_admin }
+            : {}),
         },
       }),
       transformResponse: (res: unknown): TicketReply => normalizeReply(res as ApiTicketReply),

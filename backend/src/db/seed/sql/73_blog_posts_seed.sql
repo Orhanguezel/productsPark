@@ -1,12 +1,13 @@
 -- =============================================================
 -- FILE: 73_blog_posts_seed.sql
 -- Initial data (idempotent via ON DUPLICATE KEY UPDATE)
--- Matches Drizzle schema (datetime(3) columns are accepted without fractional part too)
+-- Matches Drizzle schema (datetime(3) accepted without fractional too)
 -- =============================================================
 
 INSERT INTO `blog_posts`
-(`id`, `title`, `slug`, `excerpt`, `content`, `featured_image`, `author`,
- `meta_title`, `meta_description`,
+(`id`, `title`, `slug`, `excerpt`, `content`,
+ `featured_image`, `featured_image_asset_id`, `featured_image_alt`,
+ `author`, `meta_title`, `meta_description`,
  `is_published`, `published_at`, `created_at`, `updated_at`)
 VALUES
 -- 1
@@ -16,6 +17,8 @@ VALUES
  'Sosyal medya pazarlamasında öne çıkan son trendler ve bu trendleri işinizde nasıl kullanabileceğiniz.',
  '<h2>Sosyal Medya Pazarlamasının Geleceği</h2><p>2024 yılında sosyal medya pazarlaması, markaların müşterileriyle etkileşime geçmesinin en önemli yollarından biri olmaya devam ediyor.</p><h3>Video İçerik Hakimiyeti</h3><p>Kısa video içerikler, sosyal medya platformlarında en çok tüketilen içerik türü haline geldi. TikTok, Instagram Reels ve YouTube Shorts gibi platformlar, markaların geniş kitlelere ulaşmasını sağlıyor.</p><h3>Influencer İşbirlikleri</h3><p>Mikro ve makro influencer''larla yapılan işbirlikleri, marka bilinirliğini artırmak ve hedef kitleye ulaşmak için etkili bir strateji olmaya devam ediyor.</p>',
  'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=600&fit=crop',
+ NULL,
+ 'Sosyal Medya Pazarlamasında 2024 Trendleri',
  'Admin',
  NULL, NULL,
  1, '2025-10-12 11:34:11', '2025-10-12 11:34:11', '2025-10-12 11:34:11'),
@@ -27,6 +30,8 @@ VALUES
  '2025 yılının en popüler oyun lisansları ve önerileri. Hangi oyunları tercih etmelisiniz?',
  '<h2>2025 Yılının En Çok Tercih Edilen Oyunları</h2><p>Bu yıl oyun dünyasında birçok yenilik ve heyecan verici içerik bulunuyor. İşte en çok tercih edilen oyunlar:</p><h3>Aksiyon Oyunları</h3><p>Bu kategoride en popüler oyunlar arasında son çıkan AAA yapımlar yer alıyor.</p><h3>Strateji Oyunları</h3><p>Düşünmeyi seven oyuncular için harika seçenekler mevcut.</p><h3>Multiplayer Deneyimleri</h3><p>Arkadaşlarınızla oynayabileceğiniz en iyi co-op oyunlar.</p>',
  'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&h=600&fit=crop',
+ NULL,
+ 'En İyi Oyun Lisansları 2025s',
  'Ahmet Yılmaz',
  NULL, NULL,
  1, '2025-10-06 22:06:38', '2025-10-06 22:06:38', '2025-10-06 22:30:37'),
@@ -38,6 +43,8 @@ VALUES
  'Dijital ürün satışında başarılı olmak için bilmeniz gereken temel stratejiler ve ipuçları.',
  '<h2>Dijital Ürün Satışının Temelleri</h2><p>Dijital ürün satışı, günümüzün en karlı iş modellerinden biri haline geldi. Bu yazıda, dijital ürün satışında başarılı olmanız için bilmeniz gereken temel stratejileri paylaşacağız.</p><h3>Hedef Kitlenizi Tanıyın</h3><p>Başarılı bir dijital ürün satışı için öncelikle hedef kitlenizi iyi tanımalısınız. Müşterilerinizin ihtiyaçlarını, beklentilerini ve sorunlarını anlamak, size doğru ürünleri sunma konusunda yardımcı olacaktır.</p><h3>Kaliteli Hizmet Sunun</h3><p>Dijital ürün satışında müşteri memnuniyeti her şeyden önemlidir. Hızlı teslimat, güvenilir ödeme sistemleri ve 7/24 destek hizmeti sunarak müşterilerinizin güvenini kazanabilirsiniz.</p>',
  'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&h=600&fit=crop',
+ NULL,
+ 'Dijital Ürün Satışında Başarı İpuçları',
  'Admin',
  NULL, NULL,
  1, '2025-10-12 11:34:11', '2025-10-12 11:34:11', '2025-10-12 11:34:11'),
@@ -49,6 +56,8 @@ VALUES
  'Oyun kredileri ve e-pin''leri güvenli bir şekilde nasıl satın alır ve kullanırsınız? Detaylı rehberimizle öğrenin.',
  '<h2>E-Pin ve Oyun Kredileri Nedir?</h2><p>E-pin''ler ve oyun kredileri, dijital oyunlar ve platformlar için kullanılan ön ödemeli kodlardır. Bu rehberde, e-pin''leri güvenli bir şekilde nasıl satın alacağınızı ve kullanacağınızı öğreneceksiniz.</p><h3>Güvenli Satın Alma İpuçları</h3><p>E-pin satın alırken mutlaka güvenilir platformları tercih edin. Satıcının yorumlarını kontrol edin ve güvenli ödeme yöntemlerini kullanın.</p><h3>Kullanım Adımları</h3><p>E-pin''inizi aldıktan sonra, ilgili platformun kod girme bölümüne gidin ve kodunuzu girin. Kredi veya içerik hesabınıza anında yüklenecektir.</p>',
  'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=600&fit=crop',
+ NULL,
+ 'Oyun Kredileri ve E-Pin Kullanım Rehberi',
  'Admin',
  NULL, NULL,
  1, '2025-10-12 11:34:11', '2025-10-12 11:34:11', '2025-10-12 11:34:11'),
@@ -60,6 +69,8 @@ VALUES
  'İşletmeniz veya kişisel kullanımınız için en uygun Office lisansını seçme rehberi.',
  '<h2>Office Lisans Türleri</h2><p>Microsoft Office birçok farklı lisans seçeneği sunuyor. Hangisinin sizin için uygun olduğunu belirleyelim.</p><h3>Microsoft 365 Personal</h3><p>Bireysel kullanıcılar için ideal olan bu paket, 1 PC veya Mac üzerinde kullanılabilir.</p><h3>Microsoft 365 Family</h3><p>Aile üyeleriyle paylaşabileceğiniz, 6 kişiye kadar lisans sunan ekonomik paket.</p><h3>Office Home &amp; Business</h3><p>Küçük işletmeler için tek seferlik satın alma seçeneği ile maliyet avantajı.</p><h3>Karar Verirken Nelere Dikkat Edilmeli?</h3><p>İhtiyacınız olan programlar, cihaz sayısı ve bütçenizi göz önünde bulundurarak karar verin.</p>',
  NULL,
+ NULL,
+ 'Microsoft Office Lisansı Nasıl Seçilir?',
  'Ayşa',
  NULL, NULL,
  1, '2025-10-06 22:06:38', '2025-10-06 22:06:38', '2025-10-09 09:29:03'),
@@ -71,6 +82,8 @@ VALUES
  'İki popüler müzik platformunu karşılaştırdık. Hangisi sizin için daha uygun?',
  '<h2>Müzik Platformları Karşılaştırması</h2><p>Günümüzde müzik dinleme alışkanlıklarımız tamamen değişti. Peki hangi platform sizin için daha uygun?</p><h3>Spotify Premium Avantajları</h3><ul><li>Geniş müzik kütüphanesi</li><li>Kişiselleştirilmiş çalma listeleri</li><li>Yüksek ses kalitesi</li><li>Offline dinleme</li></ul><h3>YouTube Music Avantajları</h3><ul><li>YouTube videolarına erişim</li><li>Geniş içerik yelpazesi</li><li>Remix ve cover versiyonlar</li><li>YouTube Premium ile entegrasyon</li></ul><h3>Fiyat Karşılaştırması</h3><p>Her iki platform da rekabetçi fiyatlar sunuyor. Öğrenci ve aile paketleriyle maliyet avantajı sağlayabilirsiniz.</p>',
  'https://images.unsplash.com/photo-1614680376593-902f74cf0d41?w=800&h=600&fit=crop',
+ NULL,
+ 'Spotify Premium vs YouTube Music',
  'Mehmet Kaya',
  NULL, NULL,
  1, '2025-10-06 22:06:38', '2025-10-06 22:06:38', '2025-10-06 22:06:38'),
@@ -82,18 +95,22 @@ VALUES
  'Dijital ürünleri satın alırken güvenliğinizi sağlamak için bilmeniz gereken önemli ipuçları.',
  '<h2>Güvenli Alışverişin Temel Kuralları</h2><p>Dijital ürünler satın alırken dikkat etmeniz gereken en önemli noktalar nelerdir? Bu yazıda sizin için önemli güvenlik ipuçlarını derledik.</p><h3>1. Güvenilir Platformları Tercih Edin</h3><p>Her zaman SSL sertifikası olan ve güvenli ödeme yöntemlerine sahip platformları kullanın.</p><h3>2. Şifre Güvenliği</h3><p>Hesaplarınız için güçlü ve benzersiz şifreler kullanın. İki faktörlü kimlik doğrulamayı aktif edin.</p><h3>3. Ödeme Bilgilerinizi Koruyun</h3><p>Kredi kartı bilgilerinizi sadece güvenilir platformlarda paylaşın ve düzenli olarak hesap hareketlerinizi kontrol edin.</p>',
  'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&h=600&fit=crop',
+ NULL,
+ 'Dijital Ürünlerde Güvenlik İpuçları',
  'Dijimin Ekibi',
  NULL, NULL,
  1, '2025-10-06 22:06:38', '2025-10-06 22:06:38', '2025-10-06 22:06:38')
 ON DUPLICATE KEY UPDATE
-  `title`            = VALUES(`title`),
-  `slug`             = VALUES(`slug`),
-  `excerpt`          = VALUES(`excerpt`),
-  `content`          = VALUES(`content`),
-  `featured_image`   = VALUES(`featured_image`),
-  `author`           = VALUES(`author`),
-  `meta_title`       = VALUES(`meta_title`),
-  `meta_description` = VALUES(`meta_description`),
-  `is_published`     = VALUES(`is_published`),
-  `published_at`     = VALUES(`published_at`),
-  `updated_at`       = VALUES(`updated_at`);
+  `title`                      = VALUES(`title`),
+  `slug`                       = VALUES(`slug`),
+  `excerpt`                    = VALUES(`excerpt`),
+  `content`                    = VALUES(`content`),
+  `featured_image`             = VALUES(`featured_image`),
+  `featured_image_asset_id`    = VALUES(`featured_image_asset_id`),
+  `featured_image_alt`         = VALUES(`featured_image_alt`),
+  `author`                     = VALUES(`author`),
+  `meta_title`                 = VALUES(`meta_title`),
+  `meta_description`           = VALUES(`meta_description`),
+  `is_published`               = VALUES(`is_published`),
+  `published_at`               = VALUES(`published_at`),
+  `updated_at`                 = VALUES(`updated_at`);

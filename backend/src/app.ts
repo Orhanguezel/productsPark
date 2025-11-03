@@ -42,7 +42,14 @@ import { registerAdminOrders } from '@/modules/orders/admin.routes';
 import { registerPaymentsAdmin } from "@/modules/payments/admin.routes";
 import { registerUserAdmin } from "@/modules/auth/admin.routes";
 import { registerEmailTemplatesAdmin } from "@/modules/email-templates/admin.routes";
+import { registerPopupsAdmin } from '@/modules/popups/admin.routes';
+import { registerCouponsAdmin } from "@/modules/coupons/admin.routes";
+import { registerSupportAdmin } from "@/modules/support/admin.routes";
 import { registerApiProviders } from "@/modules/api_providers/router";
+import { registerFooterSectionsAdmin } from "@/modules/footerSections/admin.routes";
+import { registerTopbarAdmin } from "@/modules/topbarSettings/admin.routes";
+import { registerFakeNotificationConfig } from './modules/siteSettings/fakeNotificationConfig.router';
+import { registerFakeOrderNotifications } from './modules/fakeOrderNotifications/router';
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
   if (!v) return true;
@@ -130,6 +137,13 @@ export async function createApp() {
   await registerPaymentsAdmin(app);
   await registerUserAdmin(app);
   await registerEmailTemplatesAdmin(app);
+  await registerPopupsAdmin(app);
+  await registerCouponsAdmin(app);
+  await registerSupportAdmin(app);
+  await registerFooterSectionsAdmin(app);
+  await registerTopbarAdmin(app);
+  await registerFakeOrderNotifications(app);
+  await registerFakeNotificationConfig(app);
   await registerAuth(app);
   await registerRest(app);
   await registerStorage(app);

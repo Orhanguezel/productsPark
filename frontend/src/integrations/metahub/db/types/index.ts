@@ -5,12 +5,10 @@
 export type { UnknownRow } from "./common";
 
 // Domain exports (public API uyumu için aynı isimlerle dışa açıyoruz)
-export type { ApiProviderRow } from "./apiProviders";
 export type { CategoryRow } from "./categories";
 export type { SettingValue,SiteSettingRow,TopbarSettingRow,EmailTemplateRow,ValueType } from "./site";
 export type {
   ProductRow,
-  ProductView,
   ProductStockRow,
   ProductReviewRow,
   ProductFaqRow,
@@ -118,6 +116,5 @@ export type TableRow<TName extends string> =
   TName extends "payment_providers" ? import("./payments").PaymentProviderRow :
   TName extends "orders" ? import("./orders").OrderView :
   TName extends "order_items" ? import("./orders").OrderItemView :
-  TName extends "api_providers" ? import("./apiProviders").ApiProviderRow :
   // Diğer (şimdilik tiplenmemiş) tablolar
   import("./common").UnknownRow;

@@ -2,70 +2,84 @@
 // FILE: src/integrations/metahub/rtk/endpoints/admin/footer_sections_admin.endpoints.ts
 // ----------------------------------------------------------------------
 import { baseApi } from "../../baseApi";
+import type {
+  ApiFooterSection,
+  FooterSection,
+  FooterSectionListParams,
+  UpsertFooterSectionBody,
+  ReorderFooterSectionItem,
+  FooterLink,
+} from "@/integrations/metahub/db/types/footer";
 
-const toNum = (x: unknown): number => (typeof x === "number" ? x : Number(x ?? 0));
+/* utils */
+const toNum = (x: unknown): number =>
+  typeof x === "number" ? x : Number(x ?? 0);
+
 const toBool = (x: unknown): boolean => {
+  if (x === null || x === undefined) return true; // BE default'u true
   if (typeof x === "boolean") return x;
   if (typeof x === "number") return x !== 0;
-  const s = String(x ?? "").trim().toLowerCase();
+  const s = String(x).trim().toLowerCase();
   return s === "1" || s === "true";
 };
 
-export type ApiFooterSection = {
-  id: string;
-  title?: string | null;
-  is_active?: boolean | 0 | 1 | "0" | "1" | "true" | "false";
-  display_order?: number | string | null;
-  position?: number | string | null;
-  created_at?: string;
-  updated_at?: string;
+const safeParseLinks = (s: unknown): FooterLink[] => {
+  if (Array.isArray(s)) return s as FooterLink[];
+  if (typeof s !== "string") return [];
+  try {
+    const parsed = JSON.parse(s);
+    return Array.isArray(parsed) ? (parsed as FooterLink[]) : [];
+  } catch {
+    return [];
+  }
 };
 
-export type FooterSection = {
-  id: string;
-  title: string;
-  is_active: boolean;
-  display_order: number;
-  created_at?: string;
-  updated_at?: string;
+const getUnknown = (obj: object, key: string): unknown =>
+  (obj as Record<string, unknown>)[key];
+
+const normalize = (p: ApiFooterSection): FooterSection => {
+  const linksRaw = getUnknown(p, "links");
+  return {
+    id: p.id,
+    title: String(p.title ?? ""),
+    is_active: toBool(p.is_active),
+    links: safeParseLinks(linksRaw),
+    display_order: toNum(p.display_order ?? 0),
+    created_at: p.created_at ?? null,
+    updated_at: p.updated_at ?? null,
+  };
 };
 
-const normalize = (p: ApiFooterSection): FooterSection => ({
-  id: p.id,
-  title: String(p.title ?? ""),
-  is_active: toBool(p.is_active),
-  display_order: toNum(p.display_order ?? p.position ?? 0),
-  created_at: p.created_at,
-  updated_at: p.updated_at,
-});
-
-export type FooterSectionListParams = {
-  is_active?: boolean;
-  limit?: number;
-  offset?: number;
-  sort?: "display_order" | "created_at" | "title";
-  order?: "asc" | "desc";
-};
-
-export type UpsertFooterSectionBody = {
-  title: string;
-  is_active?: boolean;
-  display_order?: number;
-};
-
+/** FE -> BE body map (links dizi -> JSON string) */
 const toApiBody = (b: UpsertFooterSectionBody) => ({
   title: b.title,
   is_active: b.is_active ?? true,
+  links: JSON.stringify(b.links ?? []),
   display_order: b.display_order ?? 0,
-  position: b.display_order ?? 0, // uyumluluk
 });
+
+/** Query param map (admin) */
+const toParams = (p?: FooterSectionListParams | void) => {
+  if (!p) return undefined;
+  const params: Record<string, string> = {};
+  if (p.q) params.q = p.q;
+  if (typeof p.is_active === "boolean") params.is_active = String(p.is_active);
+  if (p.limit != null) params.limit = String(p.limit);
+  if (p.offset != null) params.offset = String(p.offset);
+  if (p.sort) params.sort = p.sort; // "display_order" | "created_at" | "title"
+  if (p.order) params.order = p.order;
+  return params;
+};
 
 const BASE = "/admin/footer_sections";
 
 export const footerSectionsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listFooterSectionsAdmin: b.query<FooterSection[], FooterSectionListParams | void>({
-      query: () => ({ url: `${BASE}` }),
+      query: (q) => {
+        const params = toParams(q);
+        return params ? { url: BASE, params } : { url: BASE };
+      },
       transformResponse: (res: unknown): FooterSection[] =>
         Array.isArray(res) ? (res as ApiFooterSection[]).map(normalize) : [],
       providesTags: (result) =>
@@ -85,7 +99,7 @@ export const footerSectionsAdminApi = baseApi.injectEndpoints({
     }),
 
     createFooterSectionAdmin: b.mutation<FooterSection, UpsertFooterSectionBody>({
-      query: (body) => ({ url: `${BASE}`, method: "POST", body: toApiBody(body) }),
+      query: (body) => ({ url: BASE, method: "POST", body: toApiBody(body) }),
       transformResponse: (res: unknown): FooterSection => normalize(res as ApiFooterSection),
       invalidatesTags: [{ type: "FooterSections", id: "LIST" }],
     }),
@@ -101,14 +115,14 @@ export const footerSectionsAdminApi = baseApi.injectEndpoints({
 
     deleteFooterSectionAdmin: b.mutation<{ ok: true }, string>({
       query: (id) => ({ url: `${BASE}/${id}`, method: "DELETE" }),
-      transformResponse: (): { ok: true } => ({ ok: true }),
+      transformResponse: (): { ok: true } => ({ ok: true }), // 204'e uyumlu
       invalidatesTags: (_r, _e, id) => [
         { type: "FooterSections", id },
         { type: "FooterSections", id: "LIST" },
       ],
     }),
 
-    reorderFooterSectionsAdmin: b.mutation<{ ok: true }, Array<{ id: string; display_order: number }>>({
+    reorderFooterSectionsAdmin: b.mutation<{ ok: true }, ReorderFooterSectionItem[]>({
       query: (items) => ({ url: `${BASE}/reorder`, method: "POST", body: { items } }),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "FooterSections", id: "LIST" }],

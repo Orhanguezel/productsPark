@@ -1,7 +1,3 @@
-// =============================================================
-// FILE: src/modules/customPages/validation.ts
-// (Sadece Zod validasyonları ve tipler)
-// =============================================================
 import { z } from "zod";
 
 export const boolLike = z.union([
@@ -13,7 +9,6 @@ export const boolLike = z.union([
 
 /** LIST query (admin/public aynı) */
 export const customPageListQuerySchema = z.object({
-  /** "created_at.desc" benzeri */
   order: z.string().optional(),
   sort: z.enum(["created_at", "updated_at"]).optional(),
   orderDir: z.enum(["asc", "desc"]).optional(),
@@ -22,7 +17,6 @@ export const customPageListQuerySchema = z.object({
   is_published: boolLike.optional(),
   q: z.string().optional(),
   slug: z.string().optional(),
-  /** FE’den gelebilir; BE yoksayabilir */
   select: z.string().optional(),
 });
 export type CustomPageListQuery = z.infer<typeof customPageListQuerySchema>;
@@ -35,8 +29,14 @@ export const upsertCustomPageBodySchema = z.object({
     .min(1).max(255)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug sadece küçük harf, rakam ve tire içermelidir")
     .trim(),
-  /** düz HTML */
+  /** düz HTML (repo.packContent ile {"html": "..."}’a sarılır) */
   content: z.string().min(1),
+
+  /** Görsel alanları */
+  featured_image: z.string().url().nullable().optional(),
+  featured_image_asset_id: z.string().length(36).nullable().optional(),
+  featured_image_alt: z.string().max(255).nullable().optional(),
+
   meta_title: z.string().max(255).nullable().optional(),
   meta_description: z.string().max(500).nullable().optional(),
   is_published: boolLike.optional().default(false),

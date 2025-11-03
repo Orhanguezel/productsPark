@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
+import {
+  useListBlogPostsAdminQuery,
+  useDeleteBlogPostAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/blog_admin.endpoints";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/hooks/use-toast";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import {
   Pagination,
@@ -13,81 +15,44 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { AdminLayout } from "@/components/admin/AdminLayout";
-
-interface BlogPost {
-  id: string;
-  title: string;
-  category: string;
-  author_name: string;
-  is_published: boolean;
-  is_featured: boolean;
-  created_at: string;
-}
+import { toast } from "sonner";
+import { useMemo, useState } from "react";
 
 export default function BlogList() {
   const navigate = useNavigate();
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: posts = [], isFetching } = useListBlogPostsAdminQuery(
+    { sort: "created_at", order: "desc", limit: 200, offset: 0 },
+    { refetchOnMountOrArgChange: true }
+  );
+  const [delPost, { isLoading: deleting }] = useDeleteBlogPostAdminMutation();
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchPosts();
-  }, []);
-
-  const fetchPosts = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("blog_posts")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setPosts(data || []);
-    } catch (error) {
-      console.error("Error fetching blog posts:", error);
-      toast({
-        title: "Hata",
-        description: "Blog yazıları yüklenirken bir hata oluştu.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(posts.length / itemsPerPage)), [posts.length]);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPosts = posts.slice(startIndex, startIndex + itemsPerPage);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Bu blog yazısını silmek istediğinizden emin misiniz?")) return;
-
     try {
-      const { error } = await metahub.from("blog_posts").delete().eq("id", id);
-
-      if (error) throw error;
-      toast({ title: "Başarılı", description: "Blog yazısı silindi." });
-      fetchPosts();
-    } catch (error) {
-      console.error("Error deleting blog post:", error);
-      toast({
-        title: "Hata",
-        description: "Blog yazısı silinirken bir hata oluştu.",
-        variant: "destructive",
-      });
+      await delPost(id).unwrap();
+      toast.success("Blog yazısı silindi.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Blog yazısı silinirken bir hata oluştu.");
     }
   };
 
-  if (loading) return <AdminLayout title="Blog Yazıları"><div>Yükleniyor...</div></AdminLayout>;
-
-  const totalPages = Math.ceil(posts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPosts = posts.slice(startIndex, startIndex + itemsPerPage);
+  if (isFetching) {
+    return (
+      <AdminLayout title="Blog Yazıları">
+        <div>Yükleniyor...</div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout title="Blog Yazıları">
@@ -104,7 +69,6 @@ export default function BlogList() {
           <TableHeader>
             <TableRow>
               <TableHead>Başlık</TableHead>
-              <TableHead>Kategori</TableHead>
               <TableHead>Yazar</TableHead>
               <TableHead>Durum</TableHead>
               <TableHead>Tarih</TableHead>
@@ -115,20 +79,16 @@ export default function BlogList() {
             {paginatedPosts.map((post) => (
               <TableRow key={post.id}>
                 <TableCell className="font-medium">{post.title}</TableCell>
-                <TableCell>{post.category}</TableCell>
-                <TableCell>{post.author_name}</TableCell>
+                <TableCell>{post.author_name || "—"}</TableCell>
                 <TableCell>
                   {post.is_published ? (
                     <span className="text-green-600">Yayında</span>
                   ) : (
                     <span className="text-yellow-600">Taslak</span>
                   )}
-                  {post.is_featured && (
-                    <span className="ml-2 text-primary">★ Öne Çıkan</span>
-                  )}
                 </TableCell>
                 <TableCell>
-                  {new Date(post.created_at).toLocaleDateString("tr-TR")}
+                  {post.created_at ? new Date(post.created_at).toLocaleDateString("tr-TR") : "—"}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button
@@ -141,6 +101,7 @@ export default function BlogList() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    disabled={deleting}
                     onClick={() => handleDelete(post.id)}
                   >
                     <Trash2 className="w-4 h-4 text-destructive" />

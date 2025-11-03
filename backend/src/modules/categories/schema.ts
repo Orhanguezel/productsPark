@@ -1,15 +1,5 @@
-// src/db/schema/categories.ts
 import {
-  mysqlTable,
-  char,
-  varchar,
-  text,
-  int,
-  tinyint,
-  datetime,
-  index,
-  uniqueIndex,
-  foreignKey,
+  mysqlTable, char, varchar, text, int, tinyint, datetime, index, uniqueIndex, foreignKey,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
@@ -21,17 +11,26 @@ export const categories = mysqlTable(
     slug: varchar("slug", { length: 255 }).notNull(),
 
     description: text("description"),
+
+    /** Legacy URL alanı (geriye dönük) */
     image_url: varchar("image_url", { length: 500 }),
+
+    /** Storage bağlantısı (yeni) */
+    image_asset_id: char("image_asset_id", { length: 36 }),
+    image_alt: varchar("image_alt", { length: 255 }),
+
     icon: varchar("icon", { length: 100 }),
     parent_id: char("parent_id", { length: 36 }),
 
-    // FE: boolean -> DB: TINYINT(1)
+    // Yeni alanlar
+    article_content: text("article_content"),
+    article_enabled: tinyint("article_enabled").notNull().default(0).$type<boolean>(),
+
     is_active: tinyint("is_active").notNull().default(1).$type<boolean>(),
     is_featured: tinyint("is_featured").notNull().default(0).$type<boolean>(),
 
     display_order: int("display_order").notNull().default(0),
 
-    // FE string bekliyor → .$type<string>()
     created_at: datetime("created_at", { fsp: 3 })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`)
@@ -41,21 +40,21 @@ export const categories = mysqlTable(
       .default(sql`CURRENT_TIMESTAMP(3)`)
       .$type<string>(),
   },
-  (t) => ({
-    ux_slug: uniqueIndex("categories_slug_uq").on(t.slug),
-    categories_parent_id_idx: index("categories_parent_id_idx").on(t.parent_id),
-    categories_active_idx: index("categories_active_idx").on(t.is_active),
-    categories_order_idx: index("categories_order_idx").on(t.display_order),
+  (t) => [
+    uniqueIndex("categories_slug_uq").on(t.slug),
+    index("categories_parent_id_idx").on(t.parent_id),
+    index("categories_active_idx").on(t.is_active),
+    index("categories_order_idx").on(t.display_order),
+    index("categories_image_asset_idx").on(t.image_asset_id), // ✅
 
-    // Self FK (parent_id -> categories.id)
-    fk_categories_parent: foreignKey({
+    foreignKey({
       columns: [t.parent_id],
       foreignColumns: [t.id],
       name: "fk_categories_parent",
     })
       .onDelete("set null")
       .onUpdate("cascade"),
-  })
+  ]
 );
 
 export type Category = typeof categories.$inferSelect;

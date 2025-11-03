@@ -16,6 +16,8 @@ const extractHtml = (raw: unknown): string => {
   if (isObj(raw) && typeof raw["html"] === "string") return raw["html"] as string;
   return "";
 };
+const str = (v: unknown): string =>
+  typeof v === "string" ? v : v == null ? "" : String(v);
 
 const toArrayOfStrings = (v: unknown): string[] => {
   if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
@@ -35,19 +37,21 @@ const toArrayOfStrings = (v: unknown): string[] => {
 
 // row -> view
 const toView = (row: unknown): EmailTemplateView => {
-  const r = (row ?? {}) as Partial<EmailTemplateRow>;
-  const html = r.body_html ?? r.content;
-  return {
-    id: String(r.id ?? ""),
-    key: String(r.template_key ?? ""),
-    name: String(r.template_name ?? ""),
-    subject: String(r.subject ?? ""),
-    content_html: extractHtml(html),
-    variables: toArrayOfStrings(r.variables),
-    is_active: toBool(r.is_active),
-    locale: (typeof r.locale === "string" ? r.locale : null) ?? null,
-    created_at: typeof r.created_at === "string" ? r.created_at : undefined,
-    updated_at: typeof r.updated_at === "string" ? r.updated_at : undefined,
+   const r = (row ?? {}) as Record<string, unknown>;
+  const htmlSrc = r["body_html"] ?? r["content"] ?? r["html"] ?? r["body"];
+   return {
+    id: str(r["id"]),
+    key: str(r["template_key"] ?? r["key"]),
+    // ŞABLON ADI: template_name yoksa olası alternatiflere bak
+    name: str(r["template_name"] ?? r["name"] ?? r["title"]),
+    // KONU: subject yoksa alternatif adlara bak
+    subject: str(r["subject"] ?? r["mail_subject"] ?? r["title"]),
+    content_html: extractHtml(htmlSrc),
+    variables: toArrayOfStrings(r["variables"]),
+    is_active: toBool(r["is_active"]),
+    locale: typeof r["locale"] === "string" ? (r["locale"] as string) : null,
+    created_at: typeof r["created_at"] === "string" ? (r["created_at"] as string) : undefined,
+    updated_at: typeof r["updated_at"] === "string" ? (r["updated_at"] as string) : undefined,
   };
 };
 
