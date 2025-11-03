@@ -1,15 +1,23 @@
 // src/types/fastify-mysql.d.ts
 import "fastify";
 
-type MySQL = { query<T = unknown[]>(sql: string, params?: unknown[]): Promise<[T, unknown]> };
+type MySQL = {
+  query<T = unknown[]>(
+    sql: string,
+    params?: unknown[]
+  ): Promise<[T, unknown]>;
+};
 
 declare module "fastify" {
   interface FastifyInstance {
-    mysql?: MySQL;
-    db?: MySQL;
+    // ✅ opsiyonel değil
+    mysql: MySQL;
+    // ✅ mysql alias'ı olarak plugin'de decorate ediyoruz
+    db: MySQL;
+    // Projede mariadb kullanılmıyorsa bunu opsiyonel bırakabilirsin
     mariadb?: MySQL;
   }
   interface FastifyRequest {
-    mysql?: MySQL;
+    mysql: MySQL;
   }
 }
