@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
+import "@/styles/richtext.css"; // ⬅️ wrap yardımcı olur
 
 export default function BlogList() {
   const navigate = useNavigate();
@@ -65,52 +66,59 @@ export default function BlogList() {
           </Button>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Başlık</TableHead>
-              <TableHead>Yazar</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedPosts.map((post) => (
-              <TableRow key={post.id}>
-                <TableCell className="font-medium">{post.title}</TableCell>
-                <TableCell>{post.author_name || "—"}</TableCell>
-                <TableCell>
-                  {post.is_published ? (
-                    <span className="text-green-600">Yayında</span>
-                  ) : (
-                    <span className="text-yellow-600">Taslak</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {post.created_at ? new Date(post.created_at).toLocaleDateString("tr-TR") : "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate(`/admin/blog/edit/${post.id}`)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={deleting}
-                    onClick={() => handleDelete(post.id)}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </TableCell>
+        {/* Tabloyu yatayda güvene al */}
+        <div className="overflow-x-auto rounded border">
+          <Table className="min-w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-1/2">Başlık</TableHead>
+                <TableHead className="w-1/6">Yazar</TableHead>
+                <TableHead className="w-1/6">Durum</TableHead>
+                <TableHead className="w-1/6">Tarih</TableHead>
+                <TableHead className="text-right w-[120px]">İşlemler</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {paginatedPosts.map((post) => (
+                <TableRow key={post.id}>
+                  <TableCell className="font-medium break-words [overflow-wrap:anywhere]">
+                    {post.title}
+                  </TableCell>
+                  <TableCell className="break-words [overflow-wrap:anywhere]">
+                    {post.author_name || "—"}
+                  </TableCell>
+                  <TableCell>
+                    {post.is_published ? (
+                      <span className="text-green-600">Yayında</span>
+                    ) : (
+                      <span className="text-yellow-600">Taslak</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {post.created_at ? new Date(post.created_at).toLocaleDateString("tr-TR") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate(`/admin/blog/edit/${post.id}`)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={deleting}
+                      onClick={() => handleDelete(post.id)}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
 
         {totalPages > 1 && (
           <Pagination>

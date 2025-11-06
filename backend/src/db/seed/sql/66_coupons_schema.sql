@@ -1,23 +1,48 @@
+-- =============================================================
+-- COUPONS SCHEMA
+-- =============================================================
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
 CREATE TABLE IF NOT EXISTS `coupons` (
-  `id`            CHAR(36)     NOT NULL,
-  `code`          VARCHAR(50)  NOT NULL,
-  `discount_type` ENUM('percentage','fixed') NOT NULL,
+  `id`             CHAR(36)      NOT NULL,
+  `code`           VARCHAR(50)   NOT NULL,
+  `discount_type`  ENUM('percentage','fixed') NOT NULL,
   `discount_value` DECIMAL(10,2) NOT NULL,
-  `min_purchase`  DECIMAL(10,2) DEFAULT NULL,
-  `max_discount`  DECIMAL(10,2) DEFAULT NULL,
-  `usage_limit`   INT          DEFAULT NULL,
-  `used_count`    INT          NOT NULL DEFAULT 0,
-  `valid_from`    DATETIME(3)  DEFAULT NULL,
-  `valid_until`   DATETIME(3)  DEFAULT NULL,
-  `is_active`     TINYINT(1)   NOT NULL DEFAULT 1,
-  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `min_purchase`   DECIMAL(10,2) DEFAULT NULL,
+  `max_discount`   DECIMAL(10,2) DEFAULT NULL,
+  `usage_limit`    INT           DEFAULT NULL,
+  `used_count`     INT           NOT NULL DEFAULT 0,
+  `valid_from`     DATETIME(3)   DEFAULT NULL,
+  `valid_until`    DATETIME(3)   DEFAULT NULL,
+  `is_active`      TINYINT(1)    NOT NULL DEFAULT 1,
+  `created_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `coupons_code_uq` (`code`),
   KEY `coupons_active_idx` (`is_active`),
   KEY `coupons_valid_from_idx` (`valid_from`),
   KEY `coupons_valid_until_idx` (`valid_until`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================
+-- COUPONS SEED
+-- =============================================================
+SET NAMES utf8mb4;
+SET time_zone = '+00:00';
+
+INSERT INTO `coupons`
+(`id`,`code`,`discount_type`,`discount_value`,`min_purchase`,`max_discount`,`usage_limit`,`used_count`,`valid_from`,`valid_until`,`is_active`,`created_at`,`updated_at`)
+VALUES
+('07e668cd-2f84-4182-a35e-f55cebf893d8','2025','percentage',25.00,500.00,NULL,NULL,3,'2025-10-07 00:00:00',NULL,1,'2025-10-07 13:17:24.000','2025-10-15 20:33:57.000')
+ON DUPLICATE KEY UPDATE
+  `discount_type` = VALUES(`discount_type`),
+  `discount_value` = VALUES(`discount_value`),
+  `min_purchase`  = VALUES(`min_purchase`),
+  `max_discount`  = VALUES(`max_discount`),
+  `usage_limit`   = VALUES(`usage_limit`),
+  `used_count`    = VALUES(`used_count`),
+  `valid_from`    = VALUES(`valid_from`),
+  `valid_until`   = VALUES(`valid_until`),
+  `is_active`     = VALUES(`is_active`),
+  `updated_at`    = VALUES(`updated_at`);

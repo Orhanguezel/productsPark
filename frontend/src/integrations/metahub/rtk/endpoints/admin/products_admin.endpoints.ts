@@ -16,29 +16,39 @@ import type {
 } from "@/integrations/metahub/db/types/products";
 
 const BASE = "/admin/products";
-
-// ---------- helpers ----------
 type QueryParams = Record<string, string | number | boolean | undefined>;
+
+/* ---------- type guards & utils ---------- */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+const pluckArray = (res: unknown, keys: string[]): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isRecord(res)) {
+    for (const k of keys) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
+};
 
 const toNumber = (x: unknown): number => {
   if (typeof x === "number") return x;
   const n = Number(x as unknown);
   return Number.isFinite(n) ? n : 0;
 };
-
 const toNullableNumber = (x: unknown): number | null => {
   if (x === null || x === undefined || x === "") return null;
   const n = Number(x as unknown);
   return Number.isFinite(n) ? n : null;
 };
-
 const toBool = (x: unknown): boolean => {
   if (typeof x === "boolean") return x;
   if (typeof x === "number") return x !== 0;
   const s = String(x ?? "").toLowerCase();
   return s === "true" || s === "1";
 };
-
 const toArray = (v: unknown): string[] | null => {
   if (v == null) return null;
   if (Array.isArray(v)) return v.map(String).filter(Boolean);
@@ -46,12 +56,10 @@ const toArray = (v: unknown): string[] | null => {
     const s = v.trim();
     if (!s) return null;
     try {
-      if ((s.startsWith("[") && s.endsWith("]")) || (s.startsWith('"') && s.endsWith('"'))) {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) return parsed.map((x) => String(x)).filter(Boolean);
-      }
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x)).filter(Boolean);
     } catch {
-      // ignore
+      /* csv fallback */
     }
     return s.split(",").map((x) => x.trim()).filter(Boolean);
   }
@@ -63,19 +71,8 @@ const toQueryParams = (params?: ProductsAdminListParams): QueryParams => {
   const qp: QueryParams = {};
   if (params.q) qp.q = params.q;
   if (params.category_id) qp.category_id = params.category_id;
-
-  if (params.is_active !== undefined) {
-    qp.is_active = params.is_active === true ? 1 : params.is_active === false ? 0 : params.is_active;
-  }
-  if (params.show_on_homepage !== undefined) {
-    qp.show_on_homepage =
-      params.show_on_homepage === true
-        ? 1
-        : params.show_on_homepage === false
-        ? 0
-        : params.show_on_homepage;
-  }
-
+  if (params.is_active !== undefined) qp.is_active = params.is_active ? 1 : 0;
+  if (params.show_on_homepage !== undefined) qp.show_on_homepage = params.show_on_homepage ? 1 : 0;
   if (typeof params.min_price === "number") qp.min_price = params.min_price;
   if (typeof params.max_price === "number") qp.max_price = params.max_price;
   if (typeof params.limit === "number") qp.limit = params.limit;
@@ -85,13 +82,12 @@ const toQueryParams = (params?: ProductsAdminListParams): QueryParams => {
   return qp;
 };
 
-// ApiProduct -> ProductAdmin (BE alan adlarıyla normalize)
 const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
   const galleryUrls = toArray(p.gallery_urls) ?? toArray(p.images);
   return {
-    id: String((p as unknown as { id: unknown }).id),
-    name: String((p as unknown as { name: unknown }).name ?? ""),
-    slug: String((p as unknown as { slug: unknown }).slug ?? ""),
+    id: String((p as { id: unknown }).id),
+    name: String((p as { name?: unknown }).name ?? ""),
+    slug: String((p as { slug?: unknown }).slug ?? ""),
 
     description: (p.description ?? null) as string | null,
     short_description: (p.short_description ?? null) as string | null,
@@ -99,10 +95,8 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
 
     price: toNumber(p.price),
     original_price: toNullableNumber((p.original_price ?? p.compare_at_price) as unknown),
-
     cost: toNullableNumber(p.cost as unknown),
 
-    // görseller
     image_url: (p.image_url ?? null) as string | null,
     featured_image: (p.featured_image ?? p.image_url ?? null) as string | null,
     featured_image_asset_id: (p.featured_image_asset_id ?? null) as string | null,
@@ -110,14 +104,13 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
 
     gallery_urls: galleryUrls,
     gallery_asset_ids: toArray(p.gallery_asset_ids),
-
     features: toArray(p.features),
 
     rating: toNumber(p.rating ?? 0),
     review_count: toNumber(p.review_count ?? 0),
 
     product_type: (p.product_type ?? null) as string | null,
-    delivery_type: (p.delivery_type ?? null) as ProductAdmin["delivery_type"],
+    delivery_type: (p.delivery_type as ProductAdmin["delivery_type"]),
 
     custom_fields: (p.custom_fields as ProductAdmin["custom_fields"]) ?? null,
     quantity_options: (p.quantity_options as ProductAdmin["quantity_options"]) ?? null,
@@ -138,7 +131,7 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
     badges: (p.badges as ProductAdmin["badges"]) ?? null,
 
     sku: (p.sku ?? null) as string | null,
-    stock_quantity: toNumber(p.stock_quantity),
+    stock_quantity: toNumber((p as { stock_quantity?: unknown }).stock_quantity),
 
     is_active: toBool(p.is_active ?? false) ? 1 : 0,
     is_featured: toBool(p.is_featured ?? false) ? 1 : 0,
@@ -161,6 +154,16 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
 
     file_url: (p.file_url ?? null) as string | null,
 
+    brand_id: (p.brand_id ?? null) as string | null,
+    vendor: (p.vendor ?? null) as string | null,
+    barcode: (p.barcode ?? null) as string | null,
+    gtin: (p.gtin ?? null) as string | null,
+    mpn: (p.mpn ?? null) as string | null,
+    weight_grams: toNullableNumber(p.weight_grams as unknown),
+    size_length_mm: toNullableNumber(p.size_length_mm as unknown),
+    size_width_mm: toNullableNumber(p.size_width_mm as unknown),
+    size_height_mm: toNullableNumber(p.size_height_mm as unknown),
+
     created_at: String(p.created_at ?? ""),
     updated_at: (p.updated_at ?? undefined) as string | undefined,
 
@@ -168,27 +171,21 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
   };
 };
 
-// (opsiyonel) FE -> BE body (şu an BE alan adları FE’de de aynı, doğrudan geçiyoruz)
 const toApiBody = (body: UpsertProductBody | PatchProductBody) => body;
 
-// ---------- api ----------
+/* ---------- API ---------- */
 export const productsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    // === PRODUCTS ===
     listProductsAdmin: b.query<ProductAdmin[], ProductsAdminListParams | void>({
-      query: () =>
-        ({ url: `${BASE}`, params: toQueryParams() } as FetchArgs),
+      query: (params): FetchArgs => {
+        const qp = params ? toQueryParams(params as ProductsAdminListParams) : {};
+        return { url: `${BASE}`, params: qp } as FetchArgs;
+      },
       transformResponse: (res: unknown): ProductAdmin[] => {
-        let rows: unknown[] = [];
-        if (Array.isArray(res)) {
-          rows = res;
-        } else if (res !== null && typeof res === "object") {
-          const data = (res as Record<string, unknown>)["data"];
-          if (Array.isArray(data)) rows = data;
-        }
+        const rows = pluckArray(res, ["data", "items", "rows", "result", "products"]);
         return rows
-          .filter((x) => x !== null && typeof x === "object")
-          .map((x) => normalizeAdminProduct(x as ApiProduct));
+          .filter(isRecord)
+          .map((x) => normalizeAdminProduct(x as unknown as ApiProduct));
       },
       providesTags: (result) =>
         result
@@ -203,15 +200,16 @@ export const productsAdminApi = baseApi.injectEndpoints({
     getProductAdmin: b.query<ProductAdmin, string>({
       query: (id) => ({ url: `${BASE}/${encodeURIComponent(id)}` } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin => {
-        let obj: unknown = res;
-        if (Array.isArray(res)) obj = res[0];
+        const obj = Array.isArray(res) ? (res[0] as unknown) : res;
         return normalizeAdminProduct(obj as ApiProduct);
       },
       providesTags: (_r, _e, id) => [{ type: "Product", id }],
+      keepUnusedDataFor: 300,
     }),
 
     createProductAdmin: b.mutation<ProductAdmin, UpsertProductBody>({
-      query: (body) => ({ url: `${BASE}`, method: "POST", body: toApiBody(body) } as FetchArgs),
+      query: (body) =>
+        ({ url: `${BASE}`, method: "POST", body: toApiBody(body) } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: [{ type: "Products", id: "LIST" }],
@@ -229,7 +227,8 @@ export const productsAdminApi = baseApi.injectEndpoints({
     }),
 
     deleteProductAdmin: b.mutation<{ ok: true }, string>({
-      query: (id) => ({ url: `${BASE}/${encodeURIComponent(id)}`, method: "DELETE" } as FetchArgs),
+      query: (id) =>
+        ({ url: `${BASE}/${encodeURIComponent(id)}`, method: "DELETE" } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
@@ -270,21 +269,26 @@ export const productsAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
-    // === REVIEWS / FAQS ===
     replaceReviewsAdmin: b.mutation<{ ok: true }, { id: string; reviews: Review[] }>({
       query: ({ id, reviews }) =>
         ({ url: `${BASE}/${encodeURIComponent(id)}/reviews`, method: "PUT", body: { reviews } } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }],
+      invalidatesTags: (_r, _e, a) => [
+        { type: "Product", id: a.id },
+        { type: "ProductReviews", id: a.id },
+      ],
     }),
+
     replaceFaqsAdmin: b.mutation<{ ok: true }, { id: string; faqs: FAQ[] }>({
       query: ({ id, faqs }) =>
         ({ url: `${BASE}/${encodeURIComponent(id)}/faqs`, method: "PUT", body: { faqs } } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: (_r, _e, a) => [{ type: "Product", id: a.id }],
+      invalidatesTags: (_r, _e, a) => [
+        { type: "Product", id: a.id },
+        { type: "ProductFAQs", id: a.id },
+      ],
     }),
 
-    // === STOCK (auto_stock) ===
     setProductStockAdmin: b.mutation<{ updated_stock_quantity: number }, { id: string; lines: string[] }>({
       query: ({ id, lines }) =>
         ({ url: `${BASE}/${encodeURIComponent(id)}/stock`, method: "PUT", body: { lines } } as FetchArgs),
@@ -298,21 +302,16 @@ export const productsAdminApi = baseApi.injectEndpoints({
     listUsedStockAdmin: b.query<UsedStockItem[], string>({
       query: (id) => ({ url: `${BASE}/${encodeURIComponent(id)}/stock/used` } as FetchArgs),
       transformResponse: (res: unknown): UsedStockItem[] => {
-        let arr: unknown[] = [];
-        if (Array.isArray(res)) {
-          arr = res;
-        } else if (res !== null && typeof res === "object") {
-          const data = (res as Record<string, unknown>)["data"];
-          if (Array.isArray(data)) arr = data;
-        }
-        return arr.filter((x): x is UsedStockItem => x !== null && typeof x === "object");
+        const arr = pluckArray(res, ["data", "items", "rows", "stock"]);
+        return arr.filter(isRecord).map((x) => x as unknown as UsedStockItem);
       },
       providesTags: (_r, _e, id) => [{ type: "Product", id }],
+      keepUnusedDataFor: 60,
     }),
 
-    // === CATEGORIES ===
     listCategoriesAdmin: b.query<Pick<CategoryRow, "id" | "name" | "parent_id" | "is_featured">[], void>({
       query: () => ({ url: "/admin/categories", method: "GET" } as FetchArgs),
+      keepUnusedDataFor: 300,
     }),
   }),
   overrideExisting: true,

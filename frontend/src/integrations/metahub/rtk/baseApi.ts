@@ -1,6 +1,3 @@
-// =============================================================
-// FILE: src/integrations/metahub/rtk/baseApi.ts
-// =============================================================
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type {
   BaseQueryFn,
@@ -12,21 +9,16 @@ import { metahubTags } from "./tags";
 import { tokenStore } from "@/integrations/metahub/core/token";
 import { BASE_URL as DB_BASE_URL } from "@/integrations/metahub/db/from/constants";
 
-/** ---------- Base URL resolve (constants.ts'tan) ---------- */
-function trimSlash(x: string) {
-  return x.replace(/\/+$/, "");
-}
+/** ---------- Base URL resolve ---------- */
+function trimSlash(x: string) { return x.replace(/\/+$/, ""); }
 function guessDevBackend(): string {
   try {
     const loc = typeof window !== "undefined" ? window.location : null;
     const host = loc?.hostname || "localhost";
     const proto = loc?.protocol || "http:";
     return `${proto}//${host}:8081`;
-  } catch {
-    return "http://localhost:8081";
-  }
+  } catch { return "http://localhost:8081"; }
 }
-// constants.ts boş bırakılırsa: DEV→8081, PROD→/api
 const BASE_URL = trimSlash(DB_BASE_URL || (import.meta.env.DEV ? guessDevBackend() : "/api"));
 
 /** ---------- helpers & guards ---------- */
@@ -49,6 +41,28 @@ function mapPaymentMethod(v: unknown): unknown {
   return v;
 }
 
+const pruneUndef = <T extends Record<string, unknown>>(o: T): T => {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(o)) {
+    const v = o[k];
+    if (v !== undefined) out[k] = v;
+  }
+  return out as T;
+};
+
+const toIsoOrNull = (v: unknown): string | null => {
+  if (v == null || v === "") return null;
+  if (typeof v === "string") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  if (typeof v === "number" || v instanceof Date) {
+    const d = new Date(v as number | Date);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  return null;
+};
+
 interface OrderCompatBody extends Record<string, unknown> {
   payment_method?: unknown;
   items?: unknown;
@@ -62,7 +76,7 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
   const urlNoSlash = (a.url ?? "").replace(/\/+$/, "");
   const isGet = !a.method || a.method.toUpperCase() === "GET";
 
-  // GET /profiles?id=UUID&limit=1 -> /profiles/UUID
+  // Supa benzeri GET /profiles?id=..&limit=1 → /profiles/:id
   if (urlNoSlash === "/profiles" && isGet) {
     const params = isRecord(a.params) ? (a.params as Record<string, unknown>) : undefined;
     const id = typeof params?.id === "string" ? params.id : null;
@@ -76,7 +90,7 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
     }
   }
 
-  // Orders POST compat
+  // Orders → payment_method map + items default
   if (urlNoSlash === "/orders" && a.method?.toUpperCase() === "POST" && isRecord(a.body)) {
     const b: OrderCompatBody = { ...(a.body as Record<string, unknown>) };
     if (typeof b.payment_method !== "undefined") b.payment_method = mapPaymentMethod(b.payment_method);
@@ -84,11 +98,37 @@ function compatAdjustArgs(args: AnyArgs): AnyArgs {
     a.body = b;
   }
 
-  // Payment Requests POST compat
+  // Payment Requests → payment_method map
   if (urlNoSlash === "/payment_requests" && a.method?.toUpperCase() === "POST" && isRecord(a.body)) {
     const b: Record<string, unknown> = { ...(a.body as Record<string, unknown>) };
     if (typeof b.payment_method !== "undefined") b.payment_method = mapPaymentMethod(b.payment_method);
     a.body = b;
+  }
+
+  // Wallet Deposit Requests POST: isimleri BE ile aynı bırak
+  if (urlNoSlash === "/wallet_deposit_requests" && a.method?.toUpperCase() === "POST" && isRecord(a.body)) {
+    const b = { ...(a.body as Record<string, unknown>) };
+    if (typeof b.payment_method !== "undefined") b.payment_method = mapPaymentMethod(b.payment_method);
+    // payment_proof, admin_notes isimleri DEĞİŞTİRİLMİYOR
+    a.body = pruneUndef(b);
+  }
+
+  // Wallet Deposit Requests PATCH: isimler BE ile aynı; sadece status lowercase + processed_at ISO
+  if (urlNoSlash.startsWith("/wallet_deposit_requests/") && a.method?.toUpperCase() === "PATCH" && isRecord(a.body)) {
+    const pIn = { ...(a.body as Record<string, unknown>) };
+    if (typeof pIn.status === "string") pIn.status = pIn.status.toLowerCase();
+    if ("processed_at" in pIn) pIn.processed_at = toIsoOrNull(pIn.processed_at);
+    // admin_notes / payment_proof isimleri aynı kalır
+    a.body = pruneUndef(pIn);
+  }
+
+  // admin/users mini-batch: ids[] → "a,b,c"
+  if (urlNoSlash === "/admin/users" && isGet && isRecord(a.params)) {
+    const p = { ...(a.params as Record<string, unknown>) };
+    if (Array.isArray(p.ids)) {
+      p.ids = (p.ids as unknown[]).map(String).join(",");
+    }
+    a.params = p;
   }
 
   return a;
@@ -101,7 +141,6 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
   baseUrl: BASE_URL,
   credentials: "include",
   prepareHeaders: (headers) => {
-    // auth atlama
     if (headers.get("x-skip-auth") === "1") {
       headers.delete("x-skip-auth");
       if (!headers.has("Accept")) headers.set("Accept", "application/json");
@@ -115,9 +154,7 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
     }
 
     const token = tokenStore.get();
-    if (token && !headers.has("authorization")) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
+    if (token && !headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
     if (!headers.has("Accept-Language")) {
       const lang =
@@ -134,9 +171,7 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
     try {
       const t = await response.text();
       return t || null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   },
   validateStatus: (res) => res.ok,
 }) as RBQ;
@@ -155,14 +190,9 @@ const AUTH_SKIP_REAUTH = new Set<string>([
 
 function extractPath(u: string): string {
   try {
-    if (/^https?:\/\//i.test(u)) {
-      const url = new URL(u);
-      return url.pathname.replace(/\/+$/, "");
-    }
+    if (/^https?:\/\//i.test(u)) return new URL(u).pathname.replace(/\/+$/, "");
     return u.replace(/^https?:\/\/[^/]+/i, "").replace(/\/+$/, "");
-  } catch {
-    return u.replace(/\/+$/, "");
-  }
+  } catch { return u.replace(/\/+$/, ""); }
 }
 
 const baseQueryWithReauth: RBQ = async (args, api, extra) => {

@@ -38,8 +38,8 @@ const normalize = (c: ApiCoupon): Coupon => ({
   applicable_to: (c.applicable_to as Coupon["applicable_to"]) ?? "all",
   category_ids: parseArr(c.category_ids),
   product_ids: parseArr(c.product_ids),
-  created_at: c.created_at,
-  updated_at: c.updated_at,
+  created_at: c.created_at ?? undefined,
+  updated_at: c.updated_at ?? undefined,
 });
 
 export type PublicCouponListParams = {

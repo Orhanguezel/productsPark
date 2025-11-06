@@ -1,6 +1,4 @@
-// -------------------------------------------------------------
-// FILE: src/modules/api_providers/router.ts
-// -------------------------------------------------------------
+// src/modules/api_providers/router.ts
 import type { FastifyInstance } from "fastify";
 import { requireAuth } from "@/common/middleware/auth";
 import {
@@ -9,13 +7,18 @@ import {
   adminCreateApiProvider,
   adminUpdateApiProvider,
   adminDeleteApiProvider,
+  adminCheckApiProviderBalance, // <-- NEW
 } from "./controller";
 
+const BASE = "/admin/api-providers";
+
 export async function registerApiProviders(app: FastifyInstance) {
-  // ADMIN (korumalı)
-  app.get("/admin/api-providers", { preHandler: [requireAuth] }, adminListApiProviders);
-  app.get("/admin/api-providers/:id", { preHandler: [requireAuth] }, adminGetApiProvider);
-  app.post("/admin/api-providers", { preHandler: [requireAuth] }, adminCreateApiProvider);
-  app.put("/admin/api-providers/:id", { preHandler: [requireAuth] }, adminUpdateApiProvider);
-  app.delete("/admin/api-providers/:id", { preHandler: [requireAuth] }, adminDeleteApiProvider);
+  app.get(`${BASE}`, { preHandler: [requireAuth] }, adminListApiProviders);
+  app.get(`${BASE}/:id`, { preHandler: [requireAuth] }, adminGetApiProvider);
+  app.post(`${BASE}`, { preHandler: [requireAuth] }, adminCreateApiProvider);
+  app.put(`${BASE}/:id`, { preHandler: [requireAuth] }, adminUpdateApiProvider);
+  app.delete(`${BASE}/:id`, { preHandler: [requireAuth] }, adminDeleteApiProvider);
+
+  // NEW: balance check
+  app.post(`${BASE}/:id/check-balance`, { preHandler: [requireAuth] }, adminCheckApiProviderBalance);
 }

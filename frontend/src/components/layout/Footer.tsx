@@ -48,24 +48,22 @@ const Footer = () => {
   });
 
   const fetchMenuItems = useCallback(async () => {
-    const { data } = await metahub
+    const { data, error } = await metahub
       .from<MenuItem>("menu_items")
       .select("id, title, url, is_active, section_id")
       .eq("location", "footer")
       .eq("is_active", true)
-      .order("display_order", { ascending: true });
+      .order("order_num", { ascending: true });
 
-    if (data) setMenuItems(data);
+    if (!error && data) setMenuItems(data);
   }, []);
 
   const fetchFooterSections = useCallback(async () => {
-    const { data } = await metahub
+    const { data, error } = await metahub
       .from<FooterSection>("footer_sections")
       .select("*")
-      .eq("is_active", true)
-      .order("display_order", { ascending: true });
-
-    if (data) setFooterSections(data);
+      .eq("is_active", true);
+    if (!error && data) setFooterSections(data);
   }, []);
 
   const fetchSocialLinks = useCallback(async () => {
@@ -138,6 +136,8 @@ const Footer = () => {
     void fetchSocialLinks();
     void fetchFooterSettings();
   }, [fetchMenuItems, fetchFooterSections, fetchSocialLinks, fetchFooterSettings]);
+
+  const orphanItems = menuItems.filter((i) => !i.section_id);
 
   return (
     <footer className="bg-muted text-foreground border-t border-border">
@@ -214,6 +214,22 @@ const Footer = () => {
               </div>
             );
           })}
+
+           {/* İsteğe bağlı: bölümsüz linkleri ayrı bir sütunda göster */}
+          {orphanItems.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-4 text-foreground">Bağlantılar</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {orphanItems.map((item) => (
+                  <li key={item.id}>
+                    <a href={item.url} className="hover:text-primary transition-smooth">
+                      {item.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Contact */}
           <div>

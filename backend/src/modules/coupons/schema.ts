@@ -8,6 +8,7 @@ export const coupons = mysqlTable(
   {
     id: char("id", { length: 36 }).primaryKey().notNull(),
     code: varchar("code", { length: 50 }).notNull(),
+    // MySQL ENUM olsa da FE/BE esnekliği için varchar tutuyoruz
     discount_type: varchar("discount_type", { length: 20 }).notNull(), // 'percentage' | 'fixed'
     discount_value: decimal("discount_value", { precision: 10, scale: 2 }).notNull().default("0.00"),
     min_purchase: decimal("min_purchase", { precision: 10, scale: 2 }),

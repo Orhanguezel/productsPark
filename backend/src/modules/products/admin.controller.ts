@@ -4,7 +4,7 @@
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import { db } from "@/db/client";
-import { and, desc, eq, like, sql, asc, inArray } from "drizzle-orm";
+import { and, desc, eq, like, sql, asc, inArray, or } from "drizzle-orm";
 import {
   products,
   productFaqs,
@@ -20,6 +20,11 @@ import {
   productReviewCreateSchema,
 } from "./validation";
 
+/* storage */
+import { storageAssets } from "@/modules/storage/schema";
+
+
+
 const now = () => new Date();
 const toNumber = (x: any) =>
   x === null || x === undefined ? x : Number.isNaN(Number(x)) ? x : Number(x);
@@ -30,11 +35,7 @@ const parseJson = <T,>(val: any): T | null => {
   if (typeof val === "string") {
     const s = val.trim();
     if (!s) return null;
-    try {
-      return JSON.parse(s) as T;
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(s) as T; } catch { return null; }
   }
   if (typeof val === "object") return val as T;
   return null;
@@ -60,7 +61,7 @@ function normalizeProduct(row: any) {
   p.quantity_options = parseJson(p.quantity_options);
   p.badges = parseJson(p.badges);
 
-  // booleans (0/1 kolonlar)
+  // booleans
   const b = (x: any) => (typeof x === "boolean" ? x : Number(x) === 1);
   p.is_active = b(p.is_active);
   p.is_featured = b(p.is_featured);
@@ -71,18 +72,98 @@ function normalizeProduct(row: any) {
   if ("auto_delivery_enabled" in p) p.auto_delivery_enabled = b(p.auto_delivery_enabled);
   if ("pre_order_enabled" in p) p.pre_order_enabled = b(p.pre_order_enabled);
 
-  // UI eşitleme (show_on_homepage yoksa is_featured’e bağla)
+  // show_on_homepage alias
   p.show_on_homepage = "show_on_homepage" in p ? b(p.show_on_homepage) : b(p.is_featured);
-
-  // featured_image / featured_image_asset_id / featured_image_alt → passthrough
   return p;
+}
+
+/* ============================ */
+/* Storage hydrate yardımcıları */
+/* ============================ */
+
+type MinimalAsset = {
+  id: string;
+  provider_public_id: string | null;
+  url: string; // non-null
+};
+
+type AssetRow = {
+  id: string;
+  provider_public_id: string | null;
+  url: string | null; // DB'de nullable olabilir
+};
+
+async function fetchAssetsByAnyId(ids: string[]): Promise<Map<string, MinimalAsset>> {
+  if (!ids?.length) return new Map();
+
+  const keys = Array.from(new Set(ids.filter(Boolean))).slice(0, 500); // güvenli limit
+  if (!keys.length) return new Map();
+
+  const rows: AssetRow[] = await db
+    .select({
+      id: storageAssets.id,
+      provider_public_id: storageAssets.provider_public_id,
+      url: storageAssets.url,
+    })
+    .from(storageAssets)
+    .where(
+      or(
+        inArray(storageAssets.id, keys as string[]),
+        inArray(storageAssets.provider_public_id, keys as string[])
+      )
+    );
+
+  const map = new Map<string, MinimalAsset>();
+  for (const r of rows) {
+    if (!r.url) continue; // ✅ type guard: null url'leri atla
+    const a: MinimalAsset = { id: r.id, provider_public_id: r.provider_public_id, url: r.url };
+    // hem asset id, hem provider_public_id ile erişilebilir olsun
+    map.set(r.id, a);
+    if (r.provider_public_id) map.set(r.provider_public_id, a);
+  }
+
+  return map;
+}
+
+async function hydrateAssetsFromStorage<T extends Record<string, any>>(obj: T) {
+  const patch: Record<string, any> = {};
+
+  // SINGLE: featured_image_asset_id → featured_image url
+  const singleId = obj.featured_image_asset_id as string | undefined | null;
+  // ARRAY: gallery_asset_ids → gallery_urls
+  const galleryIds = (obj.gallery_asset_ids as string[] | undefined | null) || [];
+
+  const ids = [
+    ...(singleId ? [singleId] : []),
+    ...galleryIds,
+  ];
+
+  if (!ids.length) return patch;
+
+  const assetMap = await fetchAssetsByAnyId(ids);
+
+  if (singleId) {
+    const a = assetMap.get(singleId);
+    if (a?.url) {
+      patch.featured_image = a.url;
+      // featured_image_asset_id override etmiyoruz; FE ne gönderdiyse onu saklıyoruz
+    }
+  }
+
+  if (galleryIds.length) {
+    const urls = galleryIds
+      .map((k) => assetMap.get(k)?.url)
+      .filter((u): u is string => !!u);
+    patch.gallery_urls = urls.length ? urls : null; // boşsa null set edelim
+  }
+
+  return patch;
 }
 
 /* ============================================= */
 /* PRODUCTS (ADMIN)                              */
 /* ============================================= */
 
-/** GET /admin/products */
 export const adminListProducts: RouteHandler = async (req, reply) => {
   const q = (req.query || {}) as {
     q?: string;
@@ -101,17 +182,11 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
   if (q.q) conds.push(like(products.name, `%${q.q}%`));
   if (q.category_id) conds.push(eq(products.category_id, q.category_id));
   if (q.is_active !== undefined) {
-    const v =
-      typeof q.is_active === "boolean"
-        ? q.is_active
-        : q.is_active === "1" || q.is_active === "true";
+    const v = typeof q.is_active === "boolean" ? q.is_active : q.is_active === "1" || q.is_active === "true";
     conds.push(eq(products.is_active, (v ? 1 : 0) as any));
   }
   if (q.show_on_homepage !== undefined) {
-    const v =
-      typeof q.show_on_homepage === "boolean"
-        ? q.show_on_homepage
-        : q.show_on_homepage === "1" || q.show_on_homepage === "true";
+    const v = typeof q.show_on_homepage === "boolean" ? q.show_on_homepage : q.show_on_homepage === "1" || q.show_on_homepage === "true";
     conds.push(eq(products.is_featured, (v ? 1 : 0) as any));
   }
   if (q.min_price) conds.push(sql`${products.price} >= ${q.min_price}`);
@@ -143,7 +218,6 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
   return reply.send(rows.map(normalizeProduct));
 };
 
-/** GET /admin/products/:id */
 export const adminGetProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
@@ -151,27 +225,22 @@ export const adminGetProduct: RouteHandler = async (req, reply) => {
   return reply.send(normalizeProduct(rows[0]));
 };
 
-/** POST /admin/products */
 export const adminCreateProduct: RouteHandler = async (req, reply) => {
   try {
     const input = productCreateSchema.parse(req.body ?? {});
     // FK guard
     if (input.category_id) {
-      const [cat] = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.id, input.category_id))
-        .limit(1);
-      if (!cat) {
-        return reply
-          .code(409)
-          .send({ error: { message: "category_not_found", details: input.category_id } });
-      }
+      const [cat] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, input.category_id)).limit(1);
+      if (!cat) return reply.code(409).send({ error: { message: "category_not_found", details: input.category_id } });
     }
+
+    // 🔗 Storage hydrate (featured_image / gallery_urls)
+    const hydrated = await hydrateAssetsFromStorage(input);
 
     const id = input.id ?? randomUUID();
     await (db.insert(products) as any).values({
       ...input,
+      ...hydrated,
       id,
       created_at: now(),
       updated_at: now(),
@@ -195,27 +264,21 @@ export const adminCreateProduct: RouteHandler = async (req, reply) => {
   }
 };
 
-/** PATCH /admin/products/:id */
 export const adminUpdateProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
     const patch = productUpdateSchema.parse(req.body ?? {});
 
     if (patch.category_id) {
-      const [cat] = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.id, patch.category_id))
-        .limit(1);
-      if (!cat) {
-        return reply
-          .code(409)
-          .send({ error: { message: "category_not_found", details: patch.category_id } });
-      }
+      const [cat] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, patch.category_id)).limit(1);
+      if (!cat) return reply.code(409).send({ error: { message: "category_not_found", details: patch.category_id } });
     }
 
+    // 🔗 Storage hydrate (yalnızca ilgili alanlar patch’te varsa dokun)
+    const hydrated = await hydrateAssetsFromStorage(patch);
+
     await (db.update(products) as any)
-      .set({ ...patch, updated_at: now() })
+      .set({ ...patch, ...hydrated, updated_at: now() })
       .where(eq(products.id, id));
 
     const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
@@ -237,14 +300,12 @@ export const adminUpdateProduct: RouteHandler = async (req, reply) => {
   }
 };
 
-/** DELETE /admin/products/:id */
 export const adminDeleteProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   await (db.delete(products) as any).where(eq(products.id, id));
   return reply.code(204).send();
 };
 
-/** POST /admin/products/bulk/active */
 export const adminBulkSetActive: RouteHandler = async (req, reply) => {
   const body = (req.body || {}) as { ids?: string[]; is_active?: boolean };
   if (!Array.isArray(body.ids) || body.ids.length === 0) {
@@ -257,12 +318,10 @@ export const adminBulkSetActive: RouteHandler = async (req, reply) => {
   return reply.send({ ok: true as const });
 };
 
-/** POST /admin/products/bulk/reorder  (DB’de display_order yoksa no-op) */
 export const adminReorderProducts: RouteHandler = async (_req, reply) => {
   return reply.send({ ok: true as const });
 };
 
-/** PATCH /admin/products/:id/active */
 export const adminToggleActive: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const { is_active } = (req.body || {}) as { is_active: boolean };
@@ -273,7 +332,6 @@ export const adminToggleActive: RouteHandler = async (req, reply) => {
   return reply.send(normalizeProduct(row));
 };
 
-/** PATCH /admin/products/:id/homepage  (show_on_homepage→is_featured fallback) */
 export const adminToggleHomepage: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const { show_on_homepage } = (req.body || {}) as { show_on_homepage: boolean };
@@ -285,10 +343,31 @@ export const adminToggleHomepage: RouteHandler = async (req, reply) => {
 };
 
 /* ============================================= */
-/* REVIEWS / FAQS (replace modeli)               */
+/* REVIEWS / FAQS (replace modeli + rating agg)  */
 /* ============================================= */
 
-/** PUT /admin/products/:id/reviews  -> önce sil, sonra ekle */
+async function recomputeRatingAndCount(productId: string) {
+  // is_active = 1 olan yorumlar
+  const [{ avgRating, cnt }] = await db
+    .select({
+      avgRating: sql<number>`COALESCE(AVG(${productReviews.rating}), 0)`,
+      cnt: sql<number>`COUNT(*)`,
+    })
+    .from(productReviews)
+    .where(and(eq(productReviews.product_id, productId), eq(productReviews.is_active, 1 as any)));
+
+  const rating = Number(avgRating || 0);
+  const reviewCount = Number(cnt || 0);
+
+  await (db.update(products) as any)
+    .set({
+      rating: sql`${rating}`,
+      review_count: sql`${reviewCount}`,
+      updated_at: now(),
+    })
+    .where(eq(products.id, productId));
+}
+
 export const adminReplaceReviews: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const body = (req.body || {}) as { reviews?: any[] };
@@ -304,7 +383,7 @@ export const adminReplaceReviews: RouteHandler = async (req, reply) => {
       comment: parsed.comment ?? null,
       is_active: toBool(parsed.is_active ?? 1) ? 1 : 0,
       customer_name: parsed.customer_name ?? null,
-      review_date: parsed.review_date ?? now(),
+      review_date: parsed.review_date ?? now(), // z.coerce.date çalışır
       created_at: now(),
       updated_at: now(),
     };
@@ -314,10 +393,13 @@ export const adminReplaceReviews: RouteHandler = async (req, reply) => {
   if (rowsToInsert.length) {
     await (db.insert(productReviews) as any).values(rowsToInsert);
   }
+
+  // 🔢 rating & review_count güncelle
+  await recomputeRatingAndCount(id);
+
   return reply.send({ ok: true as const });
 };
 
-/** PUT /admin/products/:id/faqs  -> önce sil, sonra ekle */
 export const adminReplaceFaqs: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const body = (req.body || {}) as { faqs?: any[] };
@@ -345,10 +427,9 @@ export const adminReplaceFaqs: RouteHandler = async (req, reply) => {
 };
 
 /* ============================================= */
-/* STOCK (auto_stock)                            */
+/* STOCK                                         */
 /* ============================================= */
 
-/** PUT /admin/products/:id/stock { lines: string[] } */
 export const adminSetProductStock: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const { lines } = (req.body || {}) as { lines?: string[] };
@@ -365,7 +446,7 @@ export const adminSetProductStock: RouteHandler = async (req, reply) => {
       items.map((line) => ({
         id: randomUUID(),
         product_id: id,
-        stock_content: line, // FE & DB ile uyumlu alan
+        stock_content: line,
         is_used: 0,
         used_at: null,
         created_at: now(),
@@ -387,10 +468,8 @@ export const adminSetProductStock: RouteHandler = async (req, reply) => {
   return reply.send({ updated_stock_quantity: Number(cnt || 0) });
 };
 
-/** GET /admin/products/:id/stock/used */
 export const adminListUsedStock: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
-
   const rows = await db
     .select()
     .from(productStock)
@@ -411,11 +490,7 @@ export const adminListUsedStock: RouteHandler = async (req, reply) => {
   return reply.send(out);
 };
 
-/* ============================================= */
-/* CATEGORIES                                    */
-/* ============================================= */
-
-/** GET /admin/categories */
+/* CATEGORIES */
 export const adminListCategories: RouteHandler = async (_req, reply) => {
   const rows = await db
     .select({

@@ -3,78 +3,120 @@
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
-import type {
-  Category,
-  ApiCategory,
-  UpsertCategoryBody,
-} from "../../../db/types/categories";
+import type { Category, ApiCategory, UpsertCategoryBody } from "../../../db/types/categories";
 
 /* ----------------------------- helpers ----------------------------- */
 
-const toNumber = (x: unknown): number =>
-  typeof x === "number" ? x : Number(x);
+type UnknownRec = Readonly<Record<string, unknown>>;
+const isObj = (v: unknown): v is UnknownRec => !!v && typeof v === "object" && !Array.isArray(v);
 
-const toBool = (x: unknown): boolean => {
-  if (typeof x === "boolean") return x;
-  if (typeof x === "number") return x !== 0;
-  const s = String(x).toLowerCase();
-  return s === "true" || s === "1";
-};
-
+const toNum = (x: unknown): number => (typeof x === "number" ? x : Number(x));
 const toStr = (v: unknown): string => (v == null ? "" : String(v));
 
-/** Güvenli string alan seçici (unknown → string|null) */
-const pickFirstString = (src: unknown, keys: string[]): string | null => {
-  if (!src || typeof src !== "object") return null;
-  const obj = src as Record<string, unknown>;
+const toBoolLoose = (x: unknown, fallback = false): boolean => {
+  if (typeof x === "boolean") return x;
+  if (typeof x === "number") return x !== 0;
+  const s = String(x ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on", "active", "enabled"].includes(s)) return true;
+  if (["0", "false", "no", "n", "off", "inactive", "disabled"].includes(s)) return false;
+  return fallback;
+};
+
+const pickFirst = <T = unknown>(src: unknown, keys: readonly string[], map?: (v: unknown) => T): T | null => {
+  if (!isObj(src)) return null;
   for (const k of keys) {
-    const val = obj[k];
-    if (val != null) return String(val);
+    const val = src[k];
+    if (val != null) return map ? map(val) : (val as T);
   }
   return null;
 };
 
-/** slug & seo alanları için BE uyumluluğu */
-const pickSlug = (c: unknown): string =>
-  pickFirstString(c, ["slug", "category_slug", "url_slug"]) ?? "";
+const pickString = (src: unknown, keys: readonly string[]): string | null =>
+  pickFirst<string>(src, keys, (v) => toStr(v).trim());
+
+const pickNumber = (src: unknown, keys: readonly string[], d = 0): number =>
+  pickFirst<number>(src, keys, (v) => toNum(v)) ?? d;
+
+const pickBool = (src: unknown, keys: readonly string[], d = false): boolean =>
+  pickFirst<boolean>(src, keys, (v) => toBoolLoose(v, d)) ?? d;
+
+/** basit slugify (tr karakterleri sadeleştir) */
+const slugify = (v: string): string =>
+  (v || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const pickSlug = (c: unknown, name: string): string => {
+  const s = pickString(c, ["slug", "category_slug", "url_slug"]);
+  return (s && s.length > 0) ? s : slugify(name);
+};
+
+/** Görsel alanları — farklı isim varyantları + nested image.url */
+const pickImageUrl = (c: UnknownRec): string | null => {
+  const direct = pickString(c, ["image_url", "banner_image_url", "featured_image", "cover_image_url", "image", "imageUrl"]);
+  if (direct) return direct;
+  const img = c["image"];
+  if (isObj(img)) {
+    const nested = pickString(img, ["url", "src"]);
+    if (nested) return nested;
+  }
+  return null;
+};
+
+const pickImageAssetId = (c: unknown): string | null =>
+  pickString(c, ["image_asset_id", "featured_image_asset_id", "asset_id", "imageId"]);
+
+const pickImageAlt = (c: unknown): string | null =>
+  pickString(c, ["image_alt", "alt", "alt_text", "altText"]);
 
 const pickSeoTitle = (c: unknown): string | null =>
-  pickFirstString(c, ["seo_title", "meta_title"]);
+  pickString(c, ["seo_title", "meta_title", "title"]);
 
 const pickSeoDescription = (c: unknown): string | null =>
-  pickFirstString(c, ["seo_description", "meta_description"]);
+  pickString(c, ["seo_description", "meta_description"]);
 
-/** Normalize incoming API record */
-const normalizeCategory = (c: ApiCategory): Category => ({
-  id: toStr((c as unknown as { id?: unknown }).id).trim(),
-  name: toStr((c as unknown as { name?: unknown }).name).trim(),
-  slug: toStr(pickSlug(c)).trim(),
-  description: ((c as unknown as { description?: unknown }).description ?? null) as string | null,
+/** Normalize (liste & tek kayıt) — any kullanmadan */
+const normalizeCategory = (src: ApiCategory): Category => {
+  const o = src as unknown as UnknownRec;
+  const name = toStr(o.name).trim();
 
-  image_url: ((c as unknown as { image_url?: unknown }).image_url ?? null) as string | null,
-  image_asset_id: ((c as unknown as { image_asset_id?: unknown }).image_asset_id ?? null) as string | null,
-  image_alt: ((c as unknown as { image_alt?: unknown }).image_alt ?? null) as string | null,
+  // Booleans: response hiç getirmediyse güvenli varsayılanlar
+  const activeRaw = pickFirst(o, ["is_active", "active", "enabled", "status"]);
+  const is_active = activeRaw == null ? true : toBoolLoose(activeRaw, true);
 
-  icon: ((c as unknown as { icon?: unknown }).icon ?? null) as string | null,
-  parent_id: ((c as unknown as { parent_id?: unknown }).parent_id ?? null) as string | null,
+  const featuredRaw = pickFirst(o, ["is_featured", "featured", "isFeatured"]);
+  const is_featured = featuredRaw == null ? false : toBoolLoose(featuredRaw, false);
 
-  is_active: toBool((c as unknown as { is_active: unknown }).is_active),
-  is_featured: toBool((c as unknown as { is_featured: unknown }).is_featured),
-  display_order: toNumber((c as unknown as { display_order: unknown }).display_order),
+  return {
+    id: toStr(o.id).trim(),
+    name,
+    slug: pickSlug(o, name),
+    description: (o.description ?? null) as string | null,
 
-  // seo_* || meta_* uyumu
-  seo_title: pickSeoTitle(c),
-  seo_description: pickSeoDescription(c),
+    image_url: pickImageUrl(o),
+    image_asset_id: pickImageAssetId(o),
+    image_alt: pickImageAlt(o),
 
-  article_enabled:
-    (c as unknown as { article_enabled?: unknown }).article_enabled == null
-      ? null
-      : toBool((c as unknown as { article_enabled?: unknown }).article_enabled),
-  article_content: ((c as unknown as { article_content?: unknown }).article_content ?? null) as string | null,
+    icon: (o.icon ?? null) as string | null,
+    parent_id: (pickString(o, ["parent_id", "parentId", "parent"]) ?? null),
 
-  created_at: (c as unknown as { created_at?: string }).created_at,
-  updated_at: (c as unknown as { updated_at?: string }).updated_at,
-});
+    is_active,
+    is_featured,
+    display_order: pickNumber(o, ["display_order", "order", "sort", "position", "rank", "priority"], 0),
+
+    seo_title: pickSeoTitle(o),
+    seo_description: pickSeoDescription(o),
+
+    article_enabled: pickFirst<boolean>(o, ["article_enabled"], (v) => toBoolLoose(v)) ?? null,
+    article_content: (o.article_content ?? null) as string | null,
+
+    created_at: o.created_at as string | undefined,
+    updated_at: o.updated_at as string | undefined,
+  };
+};
 
 /* --------------------------- query params --------------------------- */
 
@@ -107,9 +149,8 @@ const toQueryParams = (p?: ListParams): QueryParamsStrict | null => {
 
 /* ------------------------------ endpoints ------------------------------ */
 
-const BASE = "/categories";
+const BASE = "/categories"; // BE admin router bu prefix ile çalışıyor (senin projende doğru)
 
-/** BE uyumluluğu: isteklerde seo_* kopyasını meta_* olarak da gönder */
 const withCompat = (body: UpsertCategoryBody) => ({
   ...body,
   meta_title: body.seo_title ?? (body as { meta_title?: string | null }).meta_title ?? undefined,
@@ -119,16 +160,27 @@ const withCompat = (body: UpsertCategoryBody) => ({
     undefined,
 });
 
+/** [data|items|rows|result|categories] pluck */
+const pluckArray = (res: unknown): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isObj(res)) {
+    for (const k of ["data", "items", "rows", "result", "categories"] as const) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
+};
+
 export const categoriesAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCategoriesAdmin: b.query<Category[], ListParams | void>({
       query: (params): FetchArgs => {
         const qp = toQueryParams(params as ListParams | undefined);
-        // exactOptionalPropertyTypes uyumu: boşsa params hiç eklenmesin
         return qp ? { url: `${BASE}`, params: qp } : { url: `${BASE}` };
       },
       transformResponse: (res: unknown): Category[] =>
-        Array.isArray(res) ? (res as ApiCategory[]).map(normalizeCategory) : [],
+        pluckArray(res).map((x) => normalizeCategory(x as ApiCategory)),
       providesTags: (result) =>
         result
           ? [
@@ -164,18 +216,12 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
               draft.unshift(created);
             }),
           );
-        } catch {
-          /* no-op */
-        }
+        } catch { /* no-op */ }
       },
     }),
 
     updateCategoryAdmin: b.mutation<Category, { id: string; body: UpsertCategoryBody }>({
-      query: ({ id, body }): FetchArgs => ({
-        url: `${BASE}/${id}`,
-        method: "PUT",
-        body: withCompat(body),
-      }),
+      query: ({ id, body }): FetchArgs => ({ url: `${BASE}/${id}`, method: "PUT", body: withCompat(body) }),
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
       invalidatesTags: (_r, _e, arg) => [
         { type: "Categories", id: arg.id },
@@ -186,11 +232,12 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
           categoriesAdminApi.util.updateQueryData("listCategoriesAdmin", undefined, (draft) => {
             const it = draft.find((d) => d.id === id);
             if (!it) return;
+
             if (body.name !== undefined) it.name = body.name;
             if (body.slug !== undefined) it.slug = (body.slug || "").trim();
             if (body.description !== undefined) it.description = body.description ?? null;
 
-            if (body.image_url !== undefined) it.image_url = body.image_url ?? null;
+            if (body.image_url !== undefined) it.image_url = body.image_url ?? it.image_url ?? null;
             if (body.image_asset_id !== undefined) it.image_asset_id = body.image_asset_id ?? null;
             if (body.image_alt !== undefined) it.image_alt = body.image_alt ?? null;
 
@@ -241,11 +288,7 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
             if (i >= 0) draft.splice(i, 1);
           }),
         );
-        try {
-          await queryFulfilled;
-        } catch {
-          patch.undo();
-        }
+        try { await queryFulfilled; } catch { patch.undo(); }
       },
     }),
 
@@ -261,25 +304,15 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
               const n = map.get(d.id);
               if (typeof n === "number") d.display_order = n;
             });
-            draft.sort(
-              (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name),
-            );
+            draft.sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name));
           }),
         );
-        try {
-          await queryFulfilled;
-        } catch {
-          patch.undo();
-        }
+        try { await queryFulfilled; } catch { patch.undo(); }
       },
     }),
 
     toggleActiveCategoryAdmin: b.mutation<Category, { id: string; is_active: boolean }>({
-      query: ({ id, is_active }): FetchArgs => ({
-        url: `${BASE}/${id}/active`,
-        method: "PATCH",
-        body: { is_active },
-      }),
+      query: ({ id, is_active }): FetchArgs => ({ url: `${BASE}/${id}/active`, method: "PATCH", body: { is_active } }),
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
       invalidatesTags: (_r, _e, arg) => [
         { type: "Categories", id: arg.id },
@@ -292,20 +325,12 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
             if (item) item.is_active = is_active;
           }),
         );
-        try {
-          await queryFulfilled;
-        } catch {
-          patch.undo();
-        }
+        try { await queryFulfilled; } catch { patch.undo(); }
       },
     }),
 
     toggleFeaturedCategoryAdmin: b.mutation<Category, { id: string; is_featured: boolean }>({
-      query: ({ id, is_featured }): FetchArgs => ({
-        url: `${BASE}/${id}/featured`,
-        method: "PATCH",
-        body: { is_featured },
-      }),
+      query: ({ id, is_featured }): FetchArgs => ({ url: `${BASE}/${id}/featured`, method: "PATCH", body: { is_featured } }),
       transformResponse: (res: unknown): Category => normalizeCategory(res as ApiCategory),
       invalidatesTags: (_r, _e, arg) => [
         { type: "Categories", id: arg.id },
@@ -318,11 +343,7 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
             if (item) item.is_featured = is_featured;
           }),
         );
-        try {
-          await queryFulfilled;
-        } catch {
-          patch.undo();
-        }
+        try { await queryFulfilled; } catch { patch.undo(); }
       },
     }),
   }),

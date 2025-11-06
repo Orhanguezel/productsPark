@@ -20,26 +20,31 @@ export const popups = mysqlTable(
     title: varchar("title", { length: 255 }).notNull(),
     content: text("content").notNull(),
 
-    /** Eski alan (URL) – GERİYE DÖNÜK UYUMLULUK */
+    // Eski (URL) – geriye dönük
     image_url: varchar("image_url", { length: 500 }),
 
-    /** Yeni alanlar: storage ile bağ */
+    // Storage entegrasyonu
     image_asset_id: char("image_asset_id", { length: 36 }),
     image_alt: varchar("image_alt", { length: 255 }),
 
     button_text: varchar("button_text", { length: 100 }),
     button_url: varchar("button_url", { length: 500 }),
 
-    // TINYINT(1) → boolean
+    // Görünürlük
     is_active: tinyint("is_active").notNull().default(0).$type<boolean>(),
-    show_once: tinyint("show_once").notNull().default(0).$type<boolean>(),
+    show_once: tinyint("show_once").notNull().default(0).$type<boolean>(), // FE: display_frequency === 'once'
+    delay: int("delay").notNull().default(0), // FE: delay_seconds
 
-    // saniye cinsinden gecikme
-    delay: int("delay").notNull().default(0),
-
-    // null olabilir (kampanya takvimi)
+    // Tarih aralığı
     valid_from: datetime("valid_from", { fsp: 3 }),
     valid_until: datetime("valid_until", { fsp: 3 }),
+
+    // 🔹 FE'de kullanılan ek alanlar
+    product_id: char("product_id", { length: 36 }),
+    coupon_code: varchar("coupon_code", { length: 64 }),
+    display_pages: varchar("display_pages", { length: 24 }).default("all"),
+    priority: int("priority"),
+    duration_seconds: int("duration_seconds"),
 
     created_at: datetime("created_at", { fsp: 3 })
       .notNull()
@@ -55,6 +60,11 @@ export const popups = mysqlTable(
     index("popups_valid_until_idx").on(t.valid_until),
     index("popups_created_idx").on(t.created_at),
     index("popups_image_asset_idx").on(t.image_asset_id),
+
+    // yeni alanlar için index
+    index("popups_product_idx").on(t.product_id),
+    index("popups_coupon_idx").on(t.coupon_code),
+    index("popups_priority_idx").on(t.priority),
   ]
 );
 

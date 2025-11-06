@@ -24,6 +24,7 @@ const normType = (s?: string | null): "percentage" | "fixed" => {
   const v = String(s ?? "").toLowerCase();
   return v === "percentage" || v === "percent" ? "percentage" : "fixed";
 };
+
 const normalize = (c: ApiCoupon): Coupon => ({
   id: c.id,
   code: c.code,
@@ -40,9 +41,10 @@ const normalize = (c: ApiCoupon): Coupon => ({
   applicable_to: (c.applicable_to as Coupon["applicable_to"]) ?? "all",
   category_ids: parseArr(c.category_ids),
   product_ids: parseArr(c.product_ids),
-  created_at: c.created_at,
-  updated_at: c.updated_at,
+  created_at: c.created_at ?? undefined,
+  updated_at: c.updated_at ?? undefined,
 });
+
 
 export type CreateCouponBody = {
   code: string;

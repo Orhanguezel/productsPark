@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Trash2, Zap, Shield, Clock, Headphones, Sparkles, Plus } from "lucide-react";
-import type { CustomField, Badge } from "../types";
+import type { CustomField, Badge } from "@/integrations/metahub/db/types/products";
 
 type Props = {
   quantityOptions: { quantity: number; price: number }[];

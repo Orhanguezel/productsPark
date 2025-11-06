@@ -15,6 +15,9 @@ type UserRow = typeof users.$inferSelect;
 const toBool = (v: unknown): boolean =>
   typeof v === "boolean" ? v : Number(v) === 1;
 
+const toNum = (v: unknown): number => (typeof v === "number" ? v : Number(v ?? 0));
+
+
 /** Zod şemaları */
 const listQuery = z.object({
   q: z.string().optional(),
@@ -48,53 +51,61 @@ export function makeAdminController(_app: FastifyInstance) {
     list: async (req: FastifyRequest, reply: FastifyReply) => {
       const q = listQuery.parse(req.query ?? {});
 
-      // where koşullarını topla
       const conds: any[] = [];
       if (q.q) conds.push(like(users.email, `%${q.q}%`));
-      if (typeof q.is_active === "boolean")
-        conds.push(eq(users.is_active, q.is_active ? 1 : 0));
+      if (typeof q.is_active === "boolean") conds.push(eq(users.is_active, q.is_active ? 1 : 0));
+      const where = conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
 
-      const where =
-        conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
-
-      // sıralama
       const sortCol =
-        q.sort === "email"
-          ? users.email
-          : q.sort === "last_login_at"
-          ? users.last_sign_in_at
-          : users.created_at;
-
+        q.sort === "email" ? users.email
+        : q.sort === "last_login_at" ? users.last_sign_in_at
+        : users.created_at;
       const orderFn = q.order === "asc" ? asc : desc;
 
       const base = await db
-        .select()
+        .select()              // wallet_balance zaten users satırında
         .from(users)
         .where(where)
         .orderBy(orderFn(sortCol))
         .limit(q.limit)
         .offset(q.offset);
 
-      // role ekle
       const withRole = await Promise.all(
-        base.map(async (u) => ({ ...u, role: await getPrimaryRole(u.id) }))
+        base.map(async (u) => ({
+          ...u,
+          role: await getPrimaryRole(u.id),
+        }))
       );
 
-      // isteğe bağlı role filtresi
+      // (opsiyonel) role filtresi
       const filtered = q.role ? withRole.filter((u) => u.role === q.role) : withRole;
 
-      return reply.send(filtered);
+      // 👉 FE için wallet_balance'ı number olarak gönder
+      const out = filtered.map((u) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name ?? null,
+        phone: u.phone ?? null,
+        email_verified: u.email_verified,
+        is_active: u.is_active,
+        created_at: u.created_at,
+        last_login_at: u.last_sign_in_at,
+        role: (u as any).role,
+        wallet_balance: toNum(u.wallet_balance),
+      }));
+
+      return reply.send(out);
     },
 
     /** GET /admin/users/:id */
     get: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
       if (!u) return reply.status(404).send({ error: { message: "not_found" } });
 
       const role = await getPrimaryRole(u.id);
+
+      // 👉 Burada da wallet_balance number olarak dön
       return reply.send({
         id: u.id,
         email: u.email,
@@ -105,24 +116,21 @@ export function makeAdminController(_app: FastifyInstance) {
         created_at: u.created_at,
         last_login_at: u.last_sign_in_at,
         role,
+        wallet_balance: toNum(u.wallet_balance),
       });
     },
 
-    /** PATCH /admin/users/:id  (profil alanları ve/veya is_active) */
+    /** PATCH /admin/users/:id */
     update: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
       const body = updateUserBody.parse(req.body ?? {});
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
       if (!u) return reply.status(404).send({ error: { message: "not_found" } });
 
       const patch: Partial<UserRow> = {
         ...(body.full_name ? { full_name: body.full_name } : {}),
         ...(body.phone ? { phone: body.phone } : {}),
-        ...(body.is_active != null
-          ? { is_active: toBool(body.is_active) ? 1 : 0 }
-          : {}),
+        ...(body.is_active != null ? { is_active: toBool(body.is_active) ? 1 : 0 } : {}),
         updated_at: new Date(),
       };
 
@@ -131,6 +139,7 @@ export function makeAdminController(_app: FastifyInstance) {
 
       return reply.send({ ok: true, id, role });
     },
+
 
     /** POST /admin/users/:id/active  { is_active } */
     setActive: async (req: FastifyRequest, reply: FastifyReply) => {

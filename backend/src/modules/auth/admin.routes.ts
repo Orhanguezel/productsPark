@@ -1,21 +1,24 @@
 // src/modules/auth/admin.routes.ts
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { makeAdminController } from "./admin.controller";
 import { requireAuth } from "@/common/middleware/auth";
 import { requireAdmin } from "@/common/middleware/roles";
 
 export async function registerUserAdmin(app: FastifyInstance) {
   const c = makeAdminController(app);
+  const BASE="/admin/users";
 
-  // Hepsi admin korumalı
-  const guard = { preHandler: [requireAuth, requireAdmin] as const };
+  // ✔ Tek preHandler: önce auth, sonra admin
+  const adminGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    await requireAuth(req, reply);
+    if (reply.sent) return;
+    await requireAdmin(req, reply);
+  };
 
-  app.get("/admin/users", { preHandler: [requireAuth] }, c.list);
-  app.get("/admin/users/:id", { preHandler: [requireAuth] }, c.get);
-
-  app.patch("/admin/users/:id", { preHandler: [requireAuth] }, c.update);
-  app.post("/admin/users/:id/active", { preHandler: [requireAuth] }, c.setActive);
-  app.post("/admin/users/:id/roles", { preHandler: [requireAuth] }, c.setRoles);
-
-  app.delete("/admin/users/:id", { preHandler: [requireAuth] }, c.remove);
+  app.get(`${BASE}`,               { preHandler: adminGuard }, c.list);
+  app.get(`${BASE}/:id`,           { preHandler: adminGuard }, c.get);
+  app.patch(`${BASE}/:id`,         { preHandler: adminGuard }, c.update);
+  app.post(`${BASE}/:id/active`,   { preHandler: adminGuard }, c.setActive);
+  app.post(`${BASE}/:id/roles`,    { preHandler: adminGuard }, c.setRoles);
+  app.delete(`${BASE}/:id`,        { preHandler: adminGuard }, c.remove);
 }

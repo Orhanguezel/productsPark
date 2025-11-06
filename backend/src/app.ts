@@ -30,9 +30,9 @@ import { registerUserRoles } from "@/modules/userRoles/router";
 import { registerTopbar } from '@/modules/topbarSettings/router';
 import { registerFooterSections } from "@/modules/footerSections/router";
 import { registerSupport } from "@/modules/support/router";
-import { registerWalletTransactions } from "@/modules/wallet_transactions/router";
-import { registerWalletDeposits } from "@/modules/wallet_deposit_requests/router";
+import { registerWallet } from "@/modules/wallet/router";
 import { registerPayments } from '@/modules/payments/router';
+
 import { registerProductsAdmin } from "@/modules/products/admin.routes";
 import { registerBlogAdmin } from "@/modules/blog/admin.routes";
 import { registerMenuItemsAdmin } from "@/modules/menuItems/admin.routes";
@@ -142,6 +142,8 @@ export async function createApp() {
   await registerSupportAdmin(app);
   await registerFooterSectionsAdmin(app);
   await registerTopbarAdmin(app);
+
+
   await registerFakeOrderNotifications(app);
   await registerFakeNotificationConfig(app);
   await registerAuth(app);
@@ -164,8 +166,7 @@ export async function createApp() {
   await registerCoupons(app);
   await registerFooterSections(app);
   await registerSupport(app);
-  await registerWalletTransactions(app);
-  await registerWalletDeposits(app);
+  await registerWallet(app);
   await registerPayments(app);
   await registerApiProviders(app);
 

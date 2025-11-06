@@ -3,7 +3,6 @@
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
 import type {
-  MenuItemRow,
   ApiMenuItemAdmin,
   MenuItemAdmin,
   MenuAdminListParams,
@@ -11,9 +10,7 @@ import type {
 } from "../../../db/types/menu";
 
 /** Utils */
-const toNum = (x: unknown): number =>
-  typeof x === "number" ? x : Number(x ?? 0);
-
+const toNum = (x: unknown): number => (typeof x === "number" ? x : Number(x ?? 0));
 const toBool = (x: unknown): boolean => {
   if (typeof x === "boolean") return x;
   if (typeof x === "number") return x !== 0;
@@ -28,17 +25,15 @@ const normalizeMenuItem = (p: ApiMenuItemAdmin): MenuItemAdmin => ({
   section_id: (p.section_id ?? null) as string | null,
   icon: (p.icon ?? null) as string | null,
   is_active: toBool(p.is_active),
-
   href: null,
   slug: null,
   parent_id: p.parent_id ?? null,
   position: toNum(p.display_order ?? 0),
   order_num: toNum(p.display_order ?? 0),
-  location: p.location,
+  location: p.location, // "header" | "footer"
   locale: null,
   created_at: p.created_at,
   updated_at: p.updated_at,
-
   type: p.type ?? "custom",
   page_id: p.page_id ?? null,
   display_order: toNum(p.display_order ?? 0),
@@ -52,7 +47,7 @@ const toApiBody = (b: UpsertMenuItemBody) => ({
   type: b.type,
   page_id: b.type === "page" ? b.page_id ?? null : null,
   parent_id: b.parent_id ?? null,
-  location: b.location,
+  location: b.location,                 // kritik
   icon: b.icon ?? null,
   section_id: b.location === "footer" ? b.section_id ?? null : null,
   is_active: b.is_active ?? true,
@@ -84,10 +79,8 @@ export const menuAdminApi = baseApi.injectEndpoints({
         const params = toParams(q);
         return params ? { url: BASE, params } : { url: BASE };
       },
-      transformResponse: (res: unknown): MenuItemAdmin[] => {
-        if (!Array.isArray(res)) return [];
-        return (res as unknown as ApiMenuItemAdmin[]).map(normalizeMenuItem);
-      },
+      transformResponse: (res: unknown): MenuItemAdmin[] =>
+        Array.isArray(res) ? (res as ApiMenuItemAdmin[]).map(normalizeMenuItem) : [],
       providesTags: (result) =>
         result
           ? [
@@ -100,30 +93,19 @@ export const menuAdminApi = baseApi.injectEndpoints({
 
     getMenuItemAdminById: b.query<MenuItemAdmin, string>({
       query: (id) => ({ url: `${BASE}/${id}` }),
-      transformResponse: (res: unknown): MenuItemAdmin =>
-        normalizeMenuItem(res as ApiMenuItemAdmin),
+      transformResponse: (res: unknown): MenuItemAdmin => normalizeMenuItem(res as ApiMenuItemAdmin),
       providesTags: (_r, _e, id) => [{ type: "MenuItems", id }],
     }),
 
     createMenuItemAdmin: b.mutation<MenuItemAdmin, UpsertMenuItemBody>({
-      query: (body) => ({
-        url: BASE,
-        method: "POST",
-        body: toApiBody(body),
-      }),
-      transformResponse: (res: unknown): MenuItemAdmin =>
-        normalizeMenuItem(res as ApiMenuItemAdmin),
+      query: (body) => ({ url: BASE, method: "POST", body: toApiBody(body) }),
+      transformResponse: (res: unknown): MenuItemAdmin => normalizeMenuItem(res as ApiMenuItemAdmin),
       invalidatesTags: [{ type: "MenuItems", id: "LIST" }],
     }),
 
     updateMenuItemAdmin: b.mutation<MenuItemAdmin, { id: string; body: UpsertMenuItemBody }>({
-      query: ({ id, body }) => ({
-        url: `${BASE}/${id}`,
-        method: "PATCH",
-        body: toApiBody(body),
-      }),
-      transformResponse: (res: unknown): MenuItemAdmin =>
-        normalizeMenuItem(res as ApiMenuItemAdmin),
+      query: ({ id, body }) => ({ url: `${BASE}/${id}`, method: "PATCH", body: toApiBody(body) }),
+      transformResponse: (res: unknown): MenuItemAdmin => normalizeMenuItem(res as ApiMenuItemAdmin),
       invalidatesTags: (_r, _e, arg) => [
         { type: "MenuItems", id: arg.id },
         { type: "MenuItems", id: "LIST" },
@@ -139,13 +121,8 @@ export const menuAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
-    /** Reorder (toplu) */
     reorderMenuItemsAdmin: b.mutation<{ ok: true }, Array<{ id: string; display_order: number }>>({
-      query: (items) => ({
-        url: `${BASE}/reorder`,
-        method: "POST",
-        body: { items },
-      }),
+      query: (items) => ({ url: `${BASE}/reorder`, method: "POST", body: { items } }),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "MenuItems", id: "LIST" }],
     }),

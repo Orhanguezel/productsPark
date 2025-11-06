@@ -1,5 +1,8 @@
+// =============================================================
+// FILE: FooterMenuForm.tsx
+// =============================================================
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -27,7 +30,6 @@ export type FooterMenuFormProps = {
   loading: boolean;
   pages: Page[];
   sections: FooterSection[];
-  /** MenuItemAdmin de gelebilir */
   initial?: Partial<FooterFormValues> | MenuItemAdmin;
   onClose: () => void;
   onSubmit: (payload: Omit<MenuItemAdmin, "id" | "display_order">) => Promise<void>;
@@ -53,37 +55,65 @@ export default function FooterMenuForm({
   selectedItem,
   defaultOrder,
 }: FooterMenuFormProps) {
-  const title = (isMenuItemAdmin(initial) ? initial.title : (initial as Partial<FooterFormValues>)?.title) ?? "";
-  const type = (isMenuItemAdmin(initial) ? initial.type : (initial as Partial<FooterFormValues>)?.type) ?? "custom";
-  const url = (isMenuItemAdmin(initial) ? initial.url : (initial as Partial<FooterFormValues>)?.url) ?? "";
-  const page_id = (isMenuItemAdmin(initial) ? (initial.page_id ?? "") : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
+  const titleInitial =
+    (isMenuItemAdmin(initial) ? initial.title : (initial as Partial<FooterFormValues>)?.title) ?? "";
+  const typeInitial: "page" | "custom" =
+    (isMenuItemAdmin(initial) ? initial.type : (initial as Partial<FooterFormValues>)?.type) ?? "custom";
+  const urlInitial = (isMenuItemAdmin(initial) ? initial.url : (initial as Partial<FooterFormValues>)?.url) ?? "";
+  const pageIdInitial =
+    (isMenuItemAdmin(initial) ? (initial.page_id ?? "") : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
   const iconRaw = isMenuItemAdmin(initial) ? initial.icon : (initial as Partial<FooterFormValues>)?.icon;
-  const icon: "" | IconName = isIconName(iconRaw) ? iconRaw : "";
-  const section_id = (isMenuItemAdmin(initial) ? (initial.section_id ?? "") : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
-  const [isActive, setIsActive] = useState<boolean>((isMenuItemAdmin(initial) ? initial.is_active : (initial as Partial<FooterFormValues>)?.is_active) ?? true);
+  const iconInitial: "" | IconName = isIconName(iconRaw) ? iconRaw : "";
+  const sectionIdInitial =
+    (isMenuItemAdmin(initial) ? (initial.section_id ?? "") : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
+  const isActiveInitial =
+    (isMenuItemAdmin(initial) ? initial.is_active : (initial as Partial<FooterFormValues>)?.is_active) ?? true;
+
+  const [type, setType] = useState<"page" | "custom">(typeInitial);
+  const [pageId, setPageId] = useState<string>(pageIdInitial);
+  const [sectionId, setSectionId] = useState<string>(sectionIdInitial || "none");
+  const [iconSel, setIconSel] = useState<string>(iconInitial || "none");
+  const [isActive, setIsActive] = useState<boolean>(isActiveInitial);
+
+  useEffect(() => {
+    const t: "page" | "custom" =
+      (isMenuItemAdmin(initial) ? initial.type : (initial as Partial<FooterFormValues>)?.type) ?? "custom";
+    const p =
+      (isMenuItemAdmin(initial) ? (initial.page_id ?? "") : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
+    const sec =
+      (isMenuItemAdmin(initial) ? (initial.section_id ?? "") : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
+    const icRaw2 = isMenuItemAdmin(initial) ? initial.icon : (initial as Partial<FooterFormValues>)?.icon;
+    const ic = isIconName(icRaw2) ? icRaw2 : "";
+    const act =
+      (isMenuItemAdmin(initial) ? initial.is_active : (initial as Partial<FooterFormValues>)?.is_active) ?? true;
+
+    setType(t);
+    setPageId(p);
+    setSectionId(sec || "none");
+    setIconSel(ic || "none");
+    setIsActive(act);
+  }, [initial, open]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const t = String(fd.get("type")) as "page" | "custom";
-    const pid = String(fd.get("page_id") ?? "");
-    const page = pages.find(p => p.id === pid);
 
-    const sec = String(fd.get("section_id") ?? "");
-    const iconSel = String(fd.get("icon") ?? "");
+    const selectedPage = pages.find(p => p.id === pageId);
+    const sec = sectionId === "none" || sectionId === "" ? null : sectionId;
     const iconName = iconSel === "none" || iconSel === "" ? null : (iconSel as IconName);
 
     const payload: Omit<MenuItemAdmin, "id" | "display_order"> = {
-      title: String(fd.get("title") ?? (page?.title ?? "")),
-      type: t,
-      url: t === "page" && page ? `/${page.slug}` : String(fd.get("url") ?? ""),
-      page_id: t === "page" ? pid : null,
+      title: String(fd.get("title") ?? (selectedPage?.title ?? "")),
+      type,
+      url: type === "page" && selectedPage ? `/${selectedPage.slug}` : String(fd.get("url") ?? ""),
+      page_id: type === "page" ? pageId : null,
       parent_id: null,
       location: "footer",
       icon: iconName,
-      section_id: sec || null,
+      section_id: sec,
       is_active: isActive,
     };
+
     await onSubmit(payload);
     onClose();
   }
@@ -98,52 +128,71 @@ export default function FooterMenuForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Tip</Label>
-            <Select name="type" defaultValue={type}>
+            <Select
+              name="type"
+              value={type}
+              onValueChange={(v) => setType(v as "page" | "custom")}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="page">Sayfa</SelectItem>
                 <SelectItem value="custom">Özel Link</SelectItem>
               </SelectContent>
             </Select>
+            <input type="hidden" name="type" value={type} />
           </div>
 
           {type === "page" ? (
             <div className="space-y-2">
               <Label>Sayfa Seç</Label>
-              <Select name="page_id" defaultValue={page_id}>
+              <Select
+                name="page_id"
+                value={pageId}
+                onValueChange={(v) => setPageId(v)}
+              >
                 <SelectTrigger><SelectValue placeholder="Sayfa seçin" /></SelectTrigger>
                 <SelectContent>
                   {pages.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <input type="hidden" name="page_id" value={pageId} />
             </div>
           ) : (
             <>
               <div className="space-y-2">
                 <Label>Başlık</Label>
-                <Input name="title" defaultValue={title} placeholder="Menü başlığı" required />
+                <Input name="title" defaultValue={titleInitial} placeholder="Menü başlığı" required />
               </div>
               <div className="space-y-2">
                 <Label>URL</Label>
-                <Input name="url" defaultValue={url} placeholder="/link veya https://example.com" required />
+                <Input name="url" defaultValue={urlInitial} placeholder="/link veya https://example.com" required />
               </div>
             </>
           )}
 
           <div className="space-y-2">
             <Label>Bölüm</Label>
-            <Select name="section_id" defaultValue={section_id || "none"}>
+            <Select
+              name="section_id"
+              value={sectionId}
+              onValueChange={(v) => setSectionId(v)}
+            >
               <SelectTrigger><SelectValue placeholder="Bölüm seçin (opsiyonel)" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Bölümsüz</SelectItem>
                 {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
               </SelectContent>
             </Select>
+            <input type="hidden" name="section_id" value={sectionId} />
           </div>
 
           <div className="space-y-2">
             <Label>Icon (Opsiyonel)</Label>
-            <Select name="icon" defaultValue={icon || "none"}>
+            <Select
+              name="icon"
+              value={iconSel}
+              onValueChange={(v) => setIconSel(v)}
+            >
               <SelectTrigger><SelectValue placeholder="İcon seçin (opsiyonel)" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">İcon Yok</SelectItem>
@@ -154,9 +203,9 @@ export default function FooterMenuForm({
                 ))}
               </SelectContent>
             </Select>
+            <input type="hidden" name="icon" value={iconSel} />
           </div>
 
-          {/* is_active */}
           <input type="hidden" name="is_active" value={isActive ? "on" : ""} />
           <div className="flex items-center gap-2">
             <Switch checked={isActive} onCheckedChange={setIsActive} />

@@ -1,29 +1,30 @@
 import type { RouteHandler } from "fastify";
 import { and, asc, desc, eq, like } from "drizzle-orm";
 import { db } from "@/db/client";
-import { coupons } from "./schema";
+import { coupons, type CouponRow } from "./schema";
 import { couponListQuerySchema, type CouponListQuery } from "./validation";
 
-function toNum(x: unknown): number {
+const toNum = (x: unknown): number => {
   if (typeof x === "number") return Number.isFinite(x) ? x : 0;
   const n = Number(x as unknown);
   return Number.isFinite(n) ? n : 0;
-}
-function toBool01(x: unknown): boolean | undefined {
+};
+const toBool01 = (x: unknown): boolean | undefined => {
   if (x === 1 || x === "1" || x === true || x === "true") return true;
   if (x === 0 || x === "0" || x === false || x === "false") return false;
   return undefined;
-}
-function iso(d?: Date | string | null): string | undefined {
-  if (!d) return undefined;
-  const dt = typeof d === "string" ? new Date(d) : d;
-  return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
-}
-function mapRow(r: typeof coupons.$inferSelect) {
+};
+const iso = (d?: Date | string | null): string | null => {
+  if (!d) return null;
+  const dt = d instanceof Date ? d : new Date(String(d));
+  return Number.isFinite(dt.valueOf()) ? dt.toISOString() : null;
+};
+
+function mapRow(r: CouponRow) {
   return {
     id: r.id,
     code: r.code,
-    title: null, // şemanızda title yoksa FE null bekleyebilir
+    title: null, // şemada yok → FE optional/null
     discount_type: r.discount_type === "percentage" ? "percentage" : "fixed",
     discount_value: toNum(r.discount_value),
     min_purchase: r.min_purchase == null ? 0 : toNum(r.min_purchase),
@@ -31,13 +32,13 @@ function mapRow(r: typeof coupons.$inferSelect) {
     is_active: !!r.is_active,
     max_uses: r.usage_limit == null ? null : toNum(r.usage_limit),
     used_count: r.used_count == null ? null : toNum(r.used_count),
-    valid_from: iso(r.valid_from as unknown as string),
-    valid_until: iso(r.valid_until as unknown as string),
-    applicable_to: "all" as const,   // kapsam alanı yoksa FE default "all"
+    valid_from: iso(r.valid_from),
+    valid_until: iso(r.valid_until),
+    applicable_to: "all" as const,
     category_ids: null,
     product_ids: null,
-    created_at: iso(r.created_at as unknown as string),
-    updated_at: iso(r.updated_at as unknown as string),
+    created_at: iso(r.created_at),
+    updated_at: iso(r.updated_at),
   };
 }
 
@@ -48,14 +49,10 @@ export const listCoupons: RouteHandler = async (req, reply) => {
   let qb = db.select().from(coupons).$dynamic();
   const where: unknown[] = [];
 
-  if (q.is_active !== undefined) {
-    const b = toBool01(q.is_active);
-    if (b !== undefined) where.push(eq(coupons.is_active, b));
-  }
+  const active = toBool01(q.is_active as unknown);
+  if (active !== undefined) where.push(eq(coupons.is_active, active));
 
-  if (q.q && q.q.trim()) {
-    where.push(like(coupons.code, `%${q.q.trim()}%`));
-  }
+  if (q.q && q.q.trim()) where.push(like(coupons.code, `%${q.q.trim()}%`));
 
   if (where.length === 1) qb = qb.where(where[0] as any);
   else if (where.length > 1) qb = qb.where(and(...(where as any)));

@@ -16,7 +16,7 @@ export type Popup = {
   title?: string | null;
   type: PopupType;
   content_html?: string | null;
-  options?: Record<string, unknown> | null; // JSON-string possible
+  options?: Record<string, unknown> | null;
   is_active?: BoolLike4;
   start_at?: string | null;
   end_at?: string | null;
@@ -24,7 +24,7 @@ export type Popup = {
   created_at?: string;
   updated_at?: string;
 
-  // Yeni: görsel alanları (public API bunları da dönebiliyor)
+  // Görsel alanları
   image_url?: string | null;
   image_asset_id?: string | null;
   image_alt?: string | null;
@@ -36,7 +36,7 @@ export type PopupAdminView = {
   title: string;
   content: string;
 
-  // Görsel alanları (legacy + storage)
+  // Görsel alanları
   image_url: string | null;
   image_asset_id?: string | null;
   image_alt?: string | null;
@@ -51,7 +51,7 @@ export type PopupAdminView = {
   start_date: string | null; // ISO
   end_date: string | null;   // ISO
 
-  // UI'de görünen ama DB'de olmayan alanlar:
+  // DB’de olan/olmayan ama UI’de kullanılan alanlar
   product_id: string | null;
   coupon_code: string | null;
   display_pages: string; // "all" default

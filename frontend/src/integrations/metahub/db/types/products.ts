@@ -7,6 +7,15 @@ export type CategoryBrief = { id: string; name: string; slug: string };
 export type QuantityOption = { quantity: number; price: number };
 export type Badge = { text: string; icon?: string | null; active: boolean };
 
+/** Admin ve FE’de kullandığımız CustomField tipi */
+export type CustomField = {
+  id?: string; // local/BE id opsiyonel
+  label: string;
+  type: "text" | "email" | "phone" | "url" | "textarea";
+  placeholder?: string | null;
+  required: boolean;
+};
+
 /** Kategori satırı (Admin listelerinde minimal) */
 export type CategoryRow = {
   id: string;
@@ -16,14 +25,14 @@ export type CategoryRow = {
   is_featured?: boolean | 0 | 1 | null;
 };
 
-/** İlişkili entity satır tipleri */
+/** İlişkili entity satır tipleri (BE ham satırlar) */
 export type ProductReviewRow = {
   id: string;
   product_id: string;
   customer_name: string;
   rating: number;
   comment: string;
-  review_date: string;
+  review_date: string; // YYYY-MM-DD
   is_active: boolean | 0 | 1;
   created_at?: string;
   updated_at?: string;
@@ -38,6 +47,24 @@ export type ProductFaqRow = {
   is_active: boolean | 0 | 1;
   created_at?: string;
   updated_at?: string;
+};
+
+/** Form/FE için hafifletilmiş input tipleri */
+export type ReviewInput = {
+  id?: string; // yeni eklenende yok
+  customer_name: string;
+  rating: number; // 1..5
+  comment: string;
+  review_date: string; // YYYY-MM-DD
+  is_active: boolean | 0 | 1;
+};
+
+export type FAQInput = {
+  id?: string; // yeni eklenende yok
+  question: string;
+  answer: string;
+  display_order: number;
+  is_active: boolean | 0 | 1;
 };
 
 export type ProductStockRow = {
@@ -123,6 +150,17 @@ export type ProductRow = {
 
   file_url?: string | null;
 
+  // ----- NEW: genişletmeler -----
+  brand_id?: string | null;
+  vendor?: string | null;
+  barcode?: string | null;
+  gtin?: string | null;
+  mpn?: string | null;
+  weight_grams?: number | null;
+  size_length_mm?: number | null;
+  size_width_mm?: number | null;
+  size_height_mm?: number | null;
+
   created_at: string;
   updated_at?: string;
 
@@ -130,7 +168,7 @@ export type ProductRow = {
   categories?: { id: string; name: string; slug: string };
 };
 
-/** FE’de normalize edilmiş ürün tipi */
+/** FE normalize edilmiş ürün — public taraf */
 export type Product = {
   id: string;
   name: string;
@@ -143,9 +181,8 @@ export type Product = {
   original_price: number | null;
   cost: number | null;
 
-  // Görseller (normalize)
-  image_url: string | null;                  // legacy
-  featured_image: string | null;             // fallback ile doldurulabilir
+  image_url: string | null;
+  featured_image: string | null;
   featured_image_asset_id: string | null;
   featured_image_alt: string | null;
   gallery_urls: string[] | null;
@@ -191,6 +228,17 @@ export type Product = {
   is_featured: boolean | 0 | 1;
   requires_shipping: boolean | 0 | 1;
 
+  // ----- NEW: genişletmeler -----
+  brand_id?: string | null;
+  vendor?: string | null;
+  barcode?: string | null;
+  gtin?: string | null;
+  mpn?: string | null;
+  weight_grams?: number | null;
+  size_length_mm?: number | null;
+  size_width_mm?: number | null;
+  size_height_mm?: number | null;
+
   created_at: string;
   updated_at: string;
 
@@ -216,30 +264,23 @@ export type ApiProduct = Omit<
   | "featured_image_asset_id"
   | "featured_image_alt"
 > & {
-  // sayısallar string gelebilir
   price: number | string;
   original_price?: number | string | null;
-  /** Legacy isim */
   compare_at_price?: number | string | null;
-
   cost?: number | string | null;
 
-  /** Dizi alanlar string/CSV/JSON gelebilir */
   gallery_urls?: string[] | string | null;
   images?: string[] | string | null;
   gallery_asset_ids?: string[] | string | null;
   features?: string[] | string | null;
 
-  /** Storage alanları */
   featured_image?: string | null;
   featured_image_asset_id?: string | null;
   featured_image_alt?: string | null;
 
-  /** Sayısal metrikler string gelebilir */
   rating?: number | string | null;
   review_count?: number | string | null;
 
-  /** Boolean alanlar 0/1/string gelebilir */
   is_active?: boolean | 0 | 1 | "0" | "1";
   is_featured?: boolean | 0 | 1 | "0" | "1";
   show_on_homepage?: boolean | 0 | 1 | "0" | "1";
@@ -250,7 +291,6 @@ export type ApiProduct = Omit<
   auto_delivery_enabled?: boolean | 0 | 1 | "0" | "1";
   pre_order_enabled?: boolean | 0 | 1 | "0" | "1";
 
-  /** E-PIN / barem & sipariş sınırlamaları (string gelebilir) */
   epin_game_id?: string | null;
   epin_product_id?: string | null;
 
@@ -260,19 +300,27 @@ export type ApiProduct = Omit<
   max_barem?: number | string | null;
   barem_step?: number | string | null;
 
-  /** Vergi tipi (string gelebilir) */
   tax_type?: number | string | null;
 
-  /** Dosya teslimatı */
   file_url?: string | null;
 
-  // tarih alanları BE’de opsiyonel olabilir
+  // ----- NEW: genişletmeler (string gelebilir) -----
+  brand_id?: string | null;
+  vendor?: string | null;
+  barcode?: string | null;
+  gtin?: string | null;
+  mpn?: string | null;
+  weight_grams?: number | string | null;
+  size_length_mm?: number | string | null;
+  size_width_mm?: number | string | null;
+  size_height_mm?: number | string | null;
+
   created_at?: string;
   updated_at?: string;
 };
 
-
 export type ProductAdmin = ProductRow;
+
 export type Review = ProductReviewRow;
 export type FAQ = ProductFaqRow;
 
@@ -291,7 +339,7 @@ export type ProductOption = {
   id: string;
   product_id: string;
   option_name: string;
-  option_values: string[]; // BE string/JSON gelebilir, FE normalize eder
+  option_values: string[];
   created_at: string;
   updated_at: string;
 };
@@ -300,8 +348,8 @@ export type ProductOption = {
 export type Stock = {
   id: string;
   product_id: string;
-  code?: string;              // FE adı
-  stock_content?: string;     // BE adı
+  code?: string;          // FE adı
+  stock_content?: string; // BE adı
   is_used: boolean | 0 | 1;
   used_at?: string | null;
   created_at: string;
@@ -323,10 +371,7 @@ export type ProductsAdminListParams = {
 };
 
 /** Upsert/Patch tipleri (rating BE’de hesaplanır) */
-export type UpsertProductBody = Omit<
-  ProductRow,
-  "id" | "created_at" | "updated_at" | "categories" | "rating"
->;
+export type UpsertProductBody = Omit<ProductRow, "id" | "created_at" | "updated_at" | "categories" | "rating">;
 export type PatchProductBody = Partial<UpsertProductBody>;
 
 /** API provider minimal tipi */

@@ -11,28 +11,36 @@ import type {
   Stock,
 } from "@/integrations/metahub/db/types/products";
 
-// ---------- helpers (typed) ----------
+/* ---------------- type guards & helpers ---------------- */
 type NumericLike = number | string | null | undefined;
 type BoolLike = boolean | 0 | 1 | "0" | "1" | null | undefined;
 type QueryParams = Record<string, string | number | boolean | undefined>;
 
-const asNumber = (v: NumericLike, fallback = 0): number => {
-  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
-    return Number(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+const pluckArray = (res: unknown, keys: string[]): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isRecord(res)) {
+    for (const k of keys) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
   }
-  return fallback;
+  return [];
 };
 
+const asNumber = (v: NumericLike, fallback = 0): number => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return fallback;
+};
 const toNumOptional = (v: NumericLike): number | null => {
   if (v === null || v === undefined) return null;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
-    return Number(v);
-  }
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
   return null;
 };
-
 const parseArr = (v: unknown): string[] | null => {
   if (Array.isArray(v)) return v.map(String).filter(Boolean);
   if (typeof v === "string") {
@@ -42,35 +50,31 @@ const parseArr = (v: unknown): string[] | null => {
       const parsed = JSON.parse(s);
       if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
     } catch {
-      /* fall through to CSV split */
+      /* csv fallback */
     }
     return s.split(",").map((x) => x.trim()).filter(Boolean);
   }
   return null;
 };
-
-const asBool = (v: BoolLike, fallback = false): boolean | 0 | 1 => {
+const asBool01 = (v: BoolLike, fallback = false): 0 | 1 => {
   if (v === true || v === 1 || v === "1") return 1;
   if (v === false || v === 0 || v === "0") return 0;
-  if (typeof v === "boolean") return v ? 1 : 0;
   return fallback ? 1 : 0;
 };
 
-// ---------- normalize ----------
+/* ---------------- normalize (Product) ---------------- */
 const normalizeProduct = (p: ApiProduct): Product => {
   const price = asNumber(p.price, 0);
 
-  // original_price: yeni isim öncelikli, yoksa legacy 'compare_at_price'
   const originalPrice =
-    p.original_price !== undefined && p.original_price !== null
+    p.original_price != null
       ? asNumber(p.original_price, 0)
-      : p.compare_at_price !== undefined && p.compare_at_price !== null
+      : p.compare_at_price != null
       ? asNumber(p.compare_at_price, 0)
       : null;
 
   const cost = toNumOptional(p.cost);
 
-  // gallery: yeni → legacy → image_url fallback
   const gallery =
     parseArr(p.gallery_urls) ??
     parseArr(p.images) ??
@@ -79,24 +83,22 @@ const normalizeProduct = (p: ApiProduct): Product => {
   const galleryAssetIds = parseArr(p.gallery_asset_ids);
   const features = parseArr(p.features);
 
-  // booleans
-  const isActive = asBool(p.is_active, true);
-  const isFeatured = asBool(p.is_featured ?? 0, false);
-  const requiresShipping = asBool(p.requires_shipping ?? 1, true);
-  const articleEnabled = asBool(p.article_enabled ?? 0, false);
-  const demoEmbedEnabled = asBool(p.demo_embed_enabled ?? 0, false);
+  const isActive = asBool01(p.is_active, true);
+  const isFeatured = asBool01(p.is_featured ?? 0, false);
+  const requiresShipping = asBool01(p.requires_shipping ?? 1, true);
+  const articleEnabled = asBool01(p.article_enabled ?? 0, false);
+  const demoEmbedEnabled = asBool01(p.demo_embed_enabled ?? 0, false);
 
-  // rating / review_count
-  const rating = p.rating === undefined || p.rating === null ? 5 : asNumber(p.rating, 5);
+  const rating = p.rating == null ? 5 : asNumber(p.rating, 5);
   const reviewCount =
-    p.review_count === undefined || p.review_count === null
-      ? 0
-      : Math.max(0, Math.floor(asNumber(p.review_count, 0)));
+    p.review_count == null ? 0 : Math.max(0, Math.floor(asNumber(p.review_count, 0)));
 
   const featuredImage =
     (typeof p.featured_image === "string" && p.featured_image.trim() && p.featured_image) ||
     (typeof p.image_url === "string" && p.image_url.trim() && p.image_url) ||
     (Array.isArray(gallery) && gallery.length > 0 ? gallery[0] : null);
+
+  const stockQ = (p as unknown as { stock_quantity?: NumericLike }).stock_quantity;
 
   const product: Product = {
     id: p.id,
@@ -145,7 +147,7 @@ const normalizeProduct = (p: ApiProduct): Product => {
     badges: p.badges ?? null,
 
     sku: p.sku ?? null,
-    stock_quantity: (p as unknown as { stock_quantity?: number }).stock_quantity ?? 0,
+    stock_quantity: asNumber(stockQ, 0),
 
     is_active: isActive,
     is_featured: isFeatured,
@@ -159,18 +161,113 @@ const normalizeProduct = (p: ApiProduct): Product => {
       : undefined,
   };
 
-  // gallery boşsa image_url'ü fallback olarak ekle
   if ((!product.gallery_urls || product.gallery_urls.length === 0) && product.image_url) {
     product.gallery_urls = [product.image_url];
   }
-
   return product;
 };
 
-// ---------- RTK endpoints ----------
+/* ---------------- mapping helpers (no-any) ---------------- */
+const toFAQ = (x: unknown): FAQ => {
+  if (!isRecord(x)) {
+    return {
+      id: "",
+      product_id: "",
+      question: "",
+      answer: "",
+      display_order: 0,
+      is_active: 1,
+      created_at: "",
+      updated_at: "",
+    };
+  }
+  return {
+    id: String(x.id ?? ""),
+    product_id: String(x.product_id ?? ""),
+    question: String(x.question ?? ""),
+    answer: String(x.answer ?? ""),
+    display_order: asNumber(x.display_order as NumericLike, 0),
+    is_active: asBool01(x.is_active as BoolLike),
+    created_at: String(x.created_at ?? ""),
+    updated_at: String(x.updated_at ?? ""),
+  };
+};
+
+const toReview = (x: unknown): Review => {
+  if (!isRecord(x)) {
+    return {
+      id: "",
+      product_id: "",
+      customer_name: "",
+      rating: 5,
+      comment: "",
+      review_date: "",
+      is_active: 1,
+      created_at: "",
+      updated_at: "",
+    };
+  }
+  const rd = String(x.review_date ?? x.created_at ?? "");
+  return {
+    id: String(x.id ?? ""),
+    product_id: String(x.product_id ?? ""),
+    customer_name: String(x.customer_name ?? ""),
+    rating: asNumber(x.rating as NumericLike, 5),
+    comment: String(x.comment ?? ""),
+    review_date: rd,
+    is_active: asBool01(x.is_active as BoolLike),
+    created_at: String(x.created_at ?? ""),
+    updated_at: String(x.updated_at ?? ""),
+  };
+};
+
+const toOption = (x: unknown): ProductOption => {
+  if (!isRecord(x)) {
+    return { id: "", product_id: "", option_name: "", option_values: [], created_at: "", updated_at: "" };
+  }
+  const raw = x.option_values as unknown;
+  const values = Array.isArray(raw) ? raw.map((v) => String(v)) : parseArr(raw) ?? [];
+  return {
+    id: String(x.id ?? ""),
+    product_id: String(x.product_id ?? ""),
+    option_name: String(x.option_name ?? ""),
+    option_values: values,
+    created_at: String(x.created_at ?? ""),
+    updated_at: String(x.updated_at ?? ""),
+  };
+};
+
+const toStock = (x: unknown): Stock => {
+  if (!isRecord(x)) {
+    return {
+      id: "",
+      product_id: "",
+      code: "",
+      stock_content: "",
+      is_used: 0,
+      used_at: null,
+      created_at: "",
+      order_item_id: null,
+    };
+  }
+  const rawCode = (x.code as unknown) ?? (x.stock_content as unknown) ?? "";
+  const code = typeof rawCode === "string" ? rawCode : String(rawCode ?? "");
+  return {
+    id: String(x.id ?? ""),
+    product_id: String(x.product_id ?? ""),
+    code,
+    stock_content: String(x.stock_content ?? code),
+    is_used: asBool01(x.is_used as BoolLike),
+    used_at: (x.used_at as string | null | undefined) ?? null,
+    created_at: String(x.created_at ?? ""),
+    order_item_id: (x.order_item_id as string | null | undefined) ?? null,
+  };
+};
+
+/* ---------------- RTK endpoints ---------------- */
 export const productsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // GET /products (liste)
+    // GET /products
     listProducts: builder.query<
       Product[],
       | {
@@ -191,18 +288,15 @@ export const productsApi = baseApi.injectEndpoints({
           q.params = {
             ...params,
             is_active:
-              params.is_active === undefined ? undefined : params.is_active ? 1 : 0,
+              params.is_active === undefined ? undefined : (params.is_active ? 1 : 0),
           };
         }
         return q;
       },
       transformResponse: (res: unknown): Product[] => {
-        if (Array.isArray(res)) {
-          return (res as ApiProduct[]).map(normalizeProduct);
-        }
-        if (res && typeof res === "object") {
-          return [normalizeProduct(res as ApiProduct)];
-        }
+        const arr = pluckArray(res, ["data", "items", "rows", "result", "products"]);
+        if (arr.length) return (arr as unknown[]).map((x) => normalizeProduct(x as ApiProduct));
+        if (Array.isArray(res)) return (res as unknown[]).map((x) => normalizeProduct(x as ApiProduct));
         return [];
       },
       providesTags: (result) =>
@@ -212,88 +306,75 @@ export const productsApi = baseApi.injectEndpoints({
               { type: "Products" as const, id: "LIST" },
             ]
           : [{ type: "Products" as const, id: "LIST" }],
+      keepUnusedDataFor: 60,
     }),
 
-    // ✅ Birleşik detay: GET /products/:idOrSlug
+    // GET /products/:idOrSlug
     getProduct: builder.query<Product, string>({
       query: (idOrSlug) => ({ url: `/products/${encodeURIComponent(idOrSlug)}` }),
       transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
       providesTags: (r) =>
         r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
+      keepUnusedDataFor: 300,
     }),
 
-    // (Backward compat) GET /products/by-slug/:slug
+    // Backward compat
     getProductBySlug: builder.query<Product, string>({
       query: (slug) => ({ url: `/products/by-slug/${encodeURIComponent(slug)}` }),
       transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
       providesTags: (r) =>
         r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
+      keepUnusedDataFor: 300,
     }),
 
-    // (Backward compat) GET /products/:id
     getProductById: builder.query<Product, string>({
       query: (id) => ({ url: `/products/${encodeURIComponent(id)}` }),
       transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
       providesTags: (_r, _e, id) => [{ type: "Product", id }],
+      keepUnusedDataFor: 300,
     }),
 
-    // GET /product_faqs?product_id=&only_active=
-    listProductFaqs: builder.query<
-      FAQ[],
-      { product_id: string; only_active?: boolean | 0 | 1 }
-    >({
-      query: ({ product_id, only_active = true }) => ({
+    // GET /product_faqs
+    listProductFaqs: builder.query<FAQ[], { product_id: string; only_active?: boolean | 0 | 1 }>({
+      query: ({ product_id, only_active = 1 }) => ({
         url: "/product_faqs",
-        params: { product_id, only_active: only_active ? 1 : 0 },
+        params: { product_id, only_active: only_active ? 1 : 0, is_active: only_active ? 1 : 0 },
       }),
       transformResponse: (res: unknown): FAQ[] => {
-        if (Array.isArray(res)) return res as FAQ[];
-        const maybe = res as { data?: unknown[] };
-        return Array.isArray(maybe?.data) ? (maybe.data as FAQ[]) : [];
+        const arr = pluckArray(res, ["data", "items", "rows", "faqs"]);
+        return (arr as unknown[]).map(toFAQ);
       },
       providesTags: (_r, _e, arg) => [{ type: "Faqs" as const, id: arg.product_id }],
+      keepUnusedDataFor: 60,
     }),
 
-    // GET /product_reviews?product_id=&only_active=
-    listProductReviews: builder.query<
-      Review[],
-      { product_id: string; only_active?: boolean | 0 | 1 }
-    >({
-      query: ({ product_id, only_active = true }) => ({
+    // GET /product_reviews
+    listProductReviews: builder.query<Review[], { product_id: string; only_active?: boolean | 0 | 1 }>({
+      query: ({ product_id, only_active = 1 }) => ({
         url: "/product_reviews",
-        params: { product_id, only_active: only_active ? 1 : 0 },
+        params: { product_id, only_active: only_active ? 1 : 0, is_active: only_active ? 1 : 0 },
       }),
       transformResponse: (res: unknown): Review[] => {
-        if (Array.isArray(res)) return res as Review[];
-        const maybe = res as { data?: unknown[] };
-        return Array.isArray(maybe?.data) ? (maybe.data as Review[]) : [];
+        const arr = pluckArray(res, ["data", "items", "rows", "reviews"]);
+        return (arr as unknown[]).map(toReview);
       },
       providesTags: (_r, _e, arg) => [{ type: "Reviews" as const, id: arg.product_id }],
+      keepUnusedDataFor: 60,
     }),
 
-    // GET /product_options?product_id=
+    // GET /product_options
     listProductOptions: builder.query<ProductOption[], { product_id: string }>({
-      query: ({ product_id }) => ({
-        url: "/product_options",
-        params: { product_id },
-      }),
+      query: ({ product_id }) => ({ url: "/product_options", params: { product_id } }),
       transformResponse: (res: unknown): ProductOption[] => {
-        const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data;
-        if (!Array.isArray(arr)) return [];
-        return (arr as ProductOption[]).map((opt) => {
-          const raw = (opt as unknown as { option_values?: unknown }).option_values;
-          const values = Array.isArray(raw) ? raw as string[] : parseArr(raw) ?? [];
-          return { ...opt, option_values: values };
-        });
+        const arr = pluckArray(res, ["data", "items", "rows", "options"]);
+        return (arr as unknown[]).map(toOption);
       },
       providesTags: (_r, _e, arg) => [{ type: "Options" as const, id: arg.product_id }],
+      keepUnusedDataFor: 60,
     }),
 
-    // GET /product_stock?product_id=&is_used=
-    listProductStock: builder.query<
-      Stock[],
-      { product_id: string; is_used?: boolean | 0 | 1 }
-    >({
+    // GET /product_stock
+    listProductStock: builder.query<Stock[], { product_id: string; is_used?: boolean | 0 | 1 }>({
       query: ({ product_id, is_used }) => ({
         url: "/product_stock",
         params: {
@@ -302,26 +383,21 @@ export const productsApi = baseApi.injectEndpoints({
         } as QueryParams,
       }),
       transformResponse: (res: unknown): Stock[] => {
-        const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data;
-        if (!Array.isArray(arr)) return [];
-        return (arr as Stock[]).map((s) => {
-          if (s.code && !s.stock_content) return s;
-          if (s.stock_content && !s.code) return { ...s, code: s.stock_content };
-          return s;
-        });
+        const arr = pluckArray(res, ["data", "items", "rows", "stock"]);
+        return (arr as unknown[]).map(toStock);
       },
       providesTags: (_r, _e, arg) => [{ type: "Stock" as const, id: arg.product_id }],
+      keepUnusedDataFor: 60,
     }),
   }),
   overrideExisting: true,
 });
 
-// Hooks
 export const {
   useListProductsQuery,
-  useGetProductQuery,       
-  useGetProductByIdQuery,   
-  useGetProductBySlugQuery, 
+  useGetProductQuery,
+  useGetProductByIdQuery,
+  useGetProductBySlugQuery,
   useListProductFaqsQuery,
   useListProductReviewsQuery,
   useListProductOptionsQuery,

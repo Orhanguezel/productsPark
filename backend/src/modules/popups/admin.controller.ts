@@ -26,50 +26,43 @@ const createSchema = z.object({
   title: z.string().min(1),
   content: z.string().min(1),
 
-  // Görsel alanları (legacy + storage)
   image_url: z.string().url().nullable().optional(),
-  image_asset_id: z.string().uuid().nullable().optional(),
+  image_asset_id: z.string().min(1).max(36).nullable().optional(), // uuid/char(36)
   image_alt: z.string().max(255).nullable().optional(),
 
   button_text: z.string().max(100).nullable().optional(),
   button_link: urlOrPath.nullable().optional(),
 
   is_active: boolLike.optional(),
-  display_frequency: freqEnum, // -> show_once
-  delay_seconds: z.number().int().min(0).max(600).nullable().optional(), // -> delay
-  start_date: z.union([z.string(), z.date()]).nullable().optional(), // -> valid_from
-  end_date: z.union([z.string(), z.date()]).nullable().optional(),   // -> valid_until
+  display_frequency: freqEnum,
+  delay_seconds: z.number().int().min(0).max(600).nullable().optional(),
+  start_date: z.union([z.string(), z.date()]).nullable().optional(),
+  end_date: z.union([z.string(), z.date()]).nullable().optional(),
 
-  // BE’de şimdilik saklamadıklarımız
-  product_id: z.string().nullable().optional(),
-  coupon_code: z.string().nullable().optional(),
-  display_pages: z.string().nullable().optional(),
+  // ▼ BE artık saklayacak
+  product_id: z.string().min(1).max(36).nullable().optional(),
+  coupon_code: z.string().max(64).nullable().optional(),
+  display_pages: z.string().max(24).nullable().optional(), // örn: "all|home|products|categories"
   priority: z.number().int().nullable().optional(),
   duration_seconds: z.number().int().nullable().optional(),
 });
-
 const updateSchema = createSchema.partial();
 
-function toBool(v: unknown): boolean {
-  return v === true || v === "true" || v === 1 || v === "1";
-}
-function toDateOrNull(v: unknown): Date | null {
+const toBool = (v: unknown): boolean =>
+  v === true || v === "true" || v === 1 || v === "1";
+
+const toDateOrNull = (v: unknown): Date | null => {
   if (v == null) return null;
-  if (v instanceof Date) return v;
+  if (v instanceof Date) return Number.isFinite(v.valueOf()) ? v : null;
   const d = new Date(String(v));
   return Number.isFinite(d.valueOf()) ? d : null;
-}
-function safeIso(v: unknown): string | null {
-  if (v == null) return null;
-  const d = v instanceof Date ? v : new Date(String(v));
-  return Number.isFinite(d.valueOf()) ? d.toISOString() : null;
-}
-function logError(req: unknown, e: unknown): void {
-  if (typeof req === "object" && req && "log" in req) {
-    const r = req as { log?: { error?: (x: unknown) => void } };
-    if (typeof r.log?.error === "function") r.log.error(e);
-  }
-}
+};
+
+const toIso = (d?: Date | string | null): string | null => {
+  if (!d) return null;
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return Number.isFinite(dt.valueOf()) ? dt.toISOString() : null;
+};
 
 function mapRow(r: PopupRow) {
   return {
@@ -77,7 +70,6 @@ function mapRow(r: PopupRow) {
     title: r.title ?? "",
     content: r.content ?? "",
 
-    // Görsel alanları
     image_url: r.image_url ?? "",
     image_asset_id: r.image_asset_id ?? "",
     image_alt: r.image_alt ?? "",
@@ -89,18 +81,18 @@ function mapRow(r: PopupRow) {
     display_frequency: r.show_once ? "once" : "always",
     delay_seconds: Number(r.delay ?? 0),
 
-    start_date: safeIso(r.valid_from),
-    end_date: safeIso(r.valid_until),
+    start_date: toIso(r.valid_from),
+    end_date: toIso(r.valid_until),
 
-    // UI stabil kalsın
-    product_id: null as string | null,
-    coupon_code: null as string | null,
-    display_pages: "all",
-    priority: null as number | null,
-    duration_seconds: null as number | null,
+    // ✅ DB alanları FE'ye geçir
+    product_id: r.product_id ?? null,
+    coupon_code: r.coupon_code ?? null,
+    display_pages: r.display_pages ?? "all",
+    priority: r.priority ?? null,
+    duration_seconds: r.duration_seconds ?? null,
 
-    created_at: safeIso(r.created_at) ?? undefined,
-    updated_at: safeIso(r.updated_at) ?? undefined,
+    created_at: toIso(r.created_at) ?? undefined,
+    updated_at: toIso(r.updated_at) ?? undefined,
   };
 }
 
@@ -112,6 +104,7 @@ function resolveOrder(order?: string) {
     case "created_at": return { col: popups.created_at, dir };
     case "updated_at": return { col: popups.updated_at, dir };
     case "delay":      return { col: popups.delay, dir };
+    case "priority":   return { col: (popups as any).priority, dir }; // schema'da varsa
     default:           return { col: popups.created_at, dir: "desc" as const };
   }
 }
@@ -143,7 +136,7 @@ export const adminGetPopup: RouteHandler = async (req, reply) => {
 
     return reply.send(mapRow(row));
   } catch (e) {
-    logError(req, e);
+    (req as any)?.log?.error?.(e);
     return reply.code(500).send({ error: { message: "popup_get_failed" } });
   }
 };
@@ -169,8 +162,15 @@ export const adminCreatePopup: RouteHandler = async (req, reply) => {
       is_active: input.is_active === undefined ? false : toBool(input.is_active),
       show_once: input.display_frequency === "once",
       delay: input.delay_seconds ?? 0,
-      valid_from: toDateOrNull(input.start_date) ?? null,
-      valid_until: toDateOrNull(input.end_date) ?? null,
+      valid_from: toDateOrNull(input.start_date),
+      valid_until: toDateOrNull(input.end_date),
+
+      // ▼ yeni alanlar
+      product_id: input.product_id ?? null,
+      coupon_code: input.coupon_code ?? null,
+      display_pages: input.display_pages ?? "all",
+      priority: input.priority ?? null,
+      duration_seconds: input.duration_seconds ?? null,
     } satisfies PopupInsert);
 
     const [row] = await db.select().from(popups).where(eq(popups.id, id)).limit(1);
@@ -179,7 +179,7 @@ export const adminCreatePopup: RouteHandler = async (req, reply) => {
     if (e instanceof z.ZodError) {
       return reply.code(400).send({ error: { message: "validation_error", details: e.issues } });
     }
-    logError(req, e);
+    (req as any)?.log?.error?.(e);
     return reply.code(500).send({ error: { message: "popup_create_failed" } });
   }
 };
@@ -202,7 +202,8 @@ export const adminUpdatePopup: RouteHandler = async (req, reply) => {
 
     if (patch.button_text !== undefined) updates.button_text = patch.button_text ?? null;
     if (patch.button_link !== undefined) {
-      updates.button_url = patch.button_link && patch.button_link.length > 0 ? patch.button_link : null;
+      updates.button_url =
+        patch.button_link && patch.button_link.length > 0 ? patch.button_link : null;
     }
 
     if (patch.is_active !== undefined) updates.is_active = toBool(patch.is_active);
@@ -210,6 +211,13 @@ export const adminUpdatePopup: RouteHandler = async (req, reply) => {
     if (patch.delay_seconds !== undefined) updates.delay = patch.delay_seconds ?? 0;
     if (patch.start_date !== undefined) updates.valid_from = toDateOrNull(patch.start_date);
     if (patch.end_date !== undefined) updates.valid_until = toDateOrNull(patch.end_date);
+
+    // ▼ yeni alanlar
+    if (patch.product_id !== undefined) updates.product_id = patch.product_id ?? null;
+    if (patch.coupon_code !== undefined) updates.coupon_code = patch.coupon_code ?? null;
+    if (patch.display_pages !== undefined) updates.display_pages = patch.display_pages ?? "all";
+    if (patch.priority !== undefined) updates.priority = patch.priority ?? null;
+    if (patch.duration_seconds !== undefined) updates.duration_seconds = patch.duration_seconds ?? null;
 
     await db.update(popups).set(updates).where(eq(popups.id, id));
     const [row] = await db.select().from(popups).where(eq(popups.id, id)).limit(1);
@@ -220,7 +228,7 @@ export const adminUpdatePopup: RouteHandler = async (req, reply) => {
     if (e instanceof z.ZodError) {
       return reply.code(400).send({ error: { message: "validation_error", details: e.issues } });
     }
-    logError(req, e);
+    (req as any)?.log?.error?.(e);
     return reply.code(500).send({ error: { message: "popup_update_failed" } });
   }
 };

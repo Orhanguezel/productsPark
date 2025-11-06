@@ -1,5 +1,4 @@
-// src/modules/support/router.ts
-import { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { SupportController } from "./controller";
 
 export async function registerSupport(app: FastifyInstance) {
@@ -19,11 +18,10 @@ export async function registerSupport(app: FastifyInstance) {
     handler: SupportController.getTicket,
   });
 
-  // CREATE ticket — protected
+  // CREATE ticket — protected (config.public yok → auth plugin devreye girer)
   app.route({
     method: "POST",
     url: "/support_tickets",
-    // config.public yok → authPlugin token arar
     handler: SupportController.createTicket,
   });
 

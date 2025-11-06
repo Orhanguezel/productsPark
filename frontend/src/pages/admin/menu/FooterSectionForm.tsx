@@ -1,5 +1,8 @@
+// =============================================================
+// FILE: FooterSectionForm.tsx
+// =============================================================
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -20,6 +23,10 @@ export default function FooterSectionForm({
   open, loading, initial, defaultOrder, onClose, onSubmit,
 }: Props) {
   const [isActive, setIsActive] = useState<boolean>(initial?.is_active ?? true);
+
+  useEffect(() => {
+    setIsActive(initial?.is_active ?? true);
+  }, [initial, open]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,7 +53,6 @@ export default function FooterSectionForm({
             <Input name="title" defaultValue={initial?.title ?? ""} placeholder="Örn: Hızlı Erişim" required />
           </div>
 
-          {/* is_active */}
           <input type="hidden" name="is_active" value={isActive ? "on" : ""} />
           <div className="flex items-center gap-2">
             <Switch checked={isActive} onCheckedChange={setIsActive} />

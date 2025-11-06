@@ -15,8 +15,6 @@ export const paymentProviders = mysqlTable('payment_providers', {
   displayName: varchar('display_name', { length: 128 }).notNull(),
   isActive: tinyint('is_active').notNull().default(1),
 
-  // MariaDB/Drizzle JSON cast sorunlarına girmemek için TEXT tutuyoruz.
-  // (İçeriği controller’da JSON.parse ile objeye çeviriyoruz.)
   publicConfig: text('public_config'),
   secretConfig: text('secret_config'),
 
