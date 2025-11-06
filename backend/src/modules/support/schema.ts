@@ -1,6 +1,12 @@
-// src/modules/support/schema.ts
 import {
-  mysqlTable, char, varchar, text, mysqlEnum, datetime, tinyint, index,
+  mysqlTable,
+  char,
+  varchar,
+  text,
+  mysqlEnum,
+  datetime,
+  tinyint,
+  index,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 

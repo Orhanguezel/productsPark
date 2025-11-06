@@ -16,7 +16,6 @@ import { blog } from "./client/blog/client";
 
 import { navigation } from "./client/navigation/client";
 import { catalogExtras } from "./client/catalog-extras/client";
-import { walletsPayments } from "./client/wallets-payments/client";
 import { settings2 } from "./client/site-settings/client";
 
 import { variants } from "./client/variants/client";
@@ -107,7 +106,6 @@ export const metahub = {
   blog,
   navigation,
   catalogExtras,
-  walletsPayments,
   settings2,
   payments,
   uploader,

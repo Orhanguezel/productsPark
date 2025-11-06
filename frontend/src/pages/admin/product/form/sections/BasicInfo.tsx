@@ -1,8 +1,11 @@
 // =============================================================
 // FILE: src/components/admin/products/form/sections/BasicInfo.tsx
 // =============================================================
+"use client";
+
 import React, { useRef } from "react";
 import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,7 +19,10 @@ type Props = {
   quantityOptions: { quantity: number; price: number }[];
   onUploadFeatured: (file: File) => Promise<void>;
   uploading?: boolean;
+  /** Quill modülleri (paste/drop img bloklu handler) */
   quillModules: any;
+  /** Quill format whitelist (bold/italic/list/link vs.) */
+  quillFormats?: readonly string[];
 };
 
 export default function BasicInfo({
@@ -26,20 +32,19 @@ export default function BasicInfo({
   onUploadFeatured,
   uploading,
   quillModules,
+  quillFormats,
 }: Props) {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const pickFeatured = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.currentTarget.files?.[0] || null;
-    // aynı dosyayı tekrar seçebilelim
-    e.currentTarget.value = "";
+    e.currentTarget.value = ""; // aynı dosyayı tekrar seçebilmek için
     if (!file) return;
 
-    // Basit validasyon (isteğe göre esnetilebilir)
     if (!file.type.startsWith("image/")) return;
     if (file.size > 5 * 1024 * 1024) return; // 5MB
 
-    await onUploadFeatured(file); // ← SADECE File forward ediyoruz
+    await onUploadFeatured(file);
   };
 
   return (
@@ -185,6 +190,7 @@ export default function BasicInfo({
           onChange={(value) => setField("description", value)}
           className="bg-background"
           modules={quillModules}
+          formats={quillFormats as any}
         />
       </div>
 

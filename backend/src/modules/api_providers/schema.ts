@@ -5,6 +5,9 @@ import { sql } from 'drizzle-orm';
 export type ApiProviderCredentials = {
   api_url?: string;
   api_key?: string;
+  balance?: number;
+  currency?: string;
+  last_balance_check?: string; // ISO
   [k: string]: unknown;
 };
 
@@ -17,7 +20,10 @@ export const apiProviders = mysqlTable(
     credentials: json('credentials').$type<ApiProviderCredentials>().notNull(),
     is_active: tinyint('is_active').notNull().default(1),
     created_at: datetime('created_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
-    updated_at: datetime('updated_at', { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`).$onUpdateFn(() => new Date()),
+    updated_at: datetime('updated_at', { fsp: 3 })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`)
+      .$onUpdateFn(() => sql`CURRENT_TIMESTAMP(3)`), // <-- önemli
   },
   (t) => [
     index('api_providers_active_idx').on(t.is_active),
@@ -39,4 +45,8 @@ export type ApiProviderView = {
   created_at: string;
   updated_at: string;
   credentials?: ApiProviderCredentials;
+  // FE’nin doğrudan okuyabilmesi için üstte de expose edelim:
+  balance?: number | null;
+  currency?: string | null;
+  last_balance_check?: string | null;
 };

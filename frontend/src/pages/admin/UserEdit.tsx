@@ -26,6 +26,7 @@ import {
   useSetUserRolesAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
 import { useStatusQuery } from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
+import { useAdjustUserWalletMutation } from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
 
 type RoleName = "admin" | "moderator" | "user";
 
@@ -56,7 +57,6 @@ const toNum = (v: unknown): number => {
   if (typeof v === "string") { const n = Number(v.replace?.(",", ".") ?? v); return Number.isFinite(n) ? n : 0; }
   const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0;
 };
-const toBool = (v: unknown, fallback = true): boolean => (typeof v === "boolean" ? v : v == null ? fallback : Number(v) === 1);
 
 const ROLE_WEIGHT: Record<RoleName, number> = { admin: 3, moderator: 2, user: 1 };
 const toRoleName = (x: unknown): RoleName | null => {
@@ -64,12 +64,10 @@ const toRoleName = (x: unknown): RoleName | null => {
   return s === "admin" || s === "moderator" || s === "user" ? (s as RoleName) : null;
 };
 function pickPrimaryRole(roles?: unknown): RoleName {
-  // roles: string[] | string | undefined
   let arr: RoleName[] = [];
   if (Array.isArray(roles)) {
     arr = roles.map(toRoleName).filter(Boolean) as RoleName[];
   } else if (typeof roles === "string" && roles.trim()) {
-    // JSON dize olabilir
     try {
       const parsed = JSON.parse(roles);
       if (Array.isArray(parsed)) arr = parsed.map(toRoleName).filter(Boolean) as RoleName[];
@@ -110,6 +108,7 @@ export default function UserEdit() {
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceType, setBalanceType] = useState<"add" | "subtract">("add");
   const [balanceDescription, setBalanceDescription] = useState("");
+  const [adjustWallet, { isLoading: adjusting }] = useAdjustUserWalletMutation();
 
   const [deleteUserAdmin] = useDeleteUserAdminMutation();
   const [setUserRolesAdmin, { isLoading: rolesSaving }] = useSetUserRolesAdminMutation();
@@ -237,7 +236,6 @@ export default function UserEdit() {
   const handleRoleSave = async () => {
     if (!user || !id) return;
 
-    // self-demote guard: kendi rolünü admin dışına düşürmeye izin verme
     if (meId === user.id && selectedRole !== "admin") {
       toast.error("Kendi rolünüzü admin dışına düşüremezsiniz.");
       setSelectedRole(user.role);
@@ -264,29 +262,34 @@ export default function UserEdit() {
       const amount = toNum(balanceAmount);
       const delta = balanceType === "add" ? amount : -amount;
 
-      const { error: balanceError } = await metahub
-        .from("profiles")
-        .update({ wallet_balance: user.wallet_balance + delta })
-        .eq("id", id);
-      if (balanceError) throw balanceError;
+      const res = await adjustWallet({
+        id,
+        amount: delta,
+        description:
+          balanceDescription ||
+          `Admin tarafından ${balanceType === "add" ? "eklendi" : "çıkarıldı"}`,
+      }).unwrap();
 
-      const { error: trxError } = await metahub
-        .from("wallet_transactions")
-        .insert({
-          user_id: id,
-          amount: delta,
-          type: balanceType === "add" ? "deposit" : "withdrawal",
-          description: balanceDescription || `Admin tarafından ${balanceType === "add" ? "eklendi" : "çıkarıldı"}`,
-        });
-      if (trxError) throw trxError;
+      setUser((u) => (u ? { ...u, wallet_balance: res.balance } : u));
 
-      toast.success("Bakiye güncellendi");
+      setTransactions((tx) => [
+        {
+          id: res.transaction.id,
+          amount: res.transaction.amount,
+          type: res.transaction.type,
+          description: res.transaction.description ?? null,
+          created_at: res.transaction.created_at,
+        },
+        ...tx,
+      ]);
+
+      toast.success(`Bakiye güncellendi: ₺${res.balance.toFixed(2)}`);
       setBalanceAmount("");
       setBalanceDescription("");
       await refetchAdmin();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Bakiye güncellenirken hata oluştu");
+      toast.error(err?.data?.message || "Bakiye güncellenirken hata oluştu");
     } finally {
       setSaving(false);
     }
@@ -419,7 +422,7 @@ export default function UserEdit() {
                     <Label htmlFor="roleSelect">Rol Seç</Label>
                     <Select
                       value={selectedRole}
-                      onValueChange={(v: RoleName) => setSelectedRole(v)}
+                      onValueChange={(v) => setSelectedRole(v as RoleName)}
                     >
                       <SelectTrigger id="roleSelect">
                         <SelectValue placeholder="Rol seçin" />
@@ -466,7 +469,7 @@ export default function UserEdit() {
 
                   <div className="space-y-2">
                     <Label htmlFor="balanceType">İşlem Tipi</Label>
-                    <Select value={balanceType} onValueChange={(v: "add" | "subtract") => setBalanceType(v)}>
+                    <Select value={balanceType} onValueChange={(v) => setBalanceType(v as "add" | "subtract")}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="add">Bakiye Ekle</SelectItem>
@@ -486,8 +489,13 @@ export default function UserEdit() {
                   <Input id="balanceDescription" placeholder="İşlem açıklaması" value={balanceDescription} onChange={(e) => setBalanceDescription(e.target.value)} />
                 </div>
 
-                <Button onClick={handleBalanceUpdate} disabled={saving || !balanceAmount} variant={balanceType === "add" ? "default" : "destructive"} className="w-full">
-                  {balanceType === "add" ? "Bakiye Ekle" : "Bakiye Çıkar"}
+                <Button
+                  onClick={handleBalanceUpdate}
+                  disabled={saving || adjusting || !balanceAmount}
+                  variant={balanceType === "add" ? "default" : "destructive"}
+                  className="w-full"
+                >
+                  {adjusting ? "İşleniyor..." : balanceType === "add" ? "Bakiye Ekle" : "Bakiye Çıkar"}
                 </Button>
               </CardContent>
             </Card>

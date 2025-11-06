@@ -15,6 +15,6 @@ export async function registerCouponsAdmin(app: FastifyInstance) {
   app.get(`${base}/:id`,           { preHandler: [requireAuth] }, adminGetCoupon);
   app.post(base,                   { preHandler: [requireAuth] }, adminCreateCoupon);
   app.patch(`${base}/:id`,         { preHandler: [requireAuth] }, adminUpdateCoupon);
-  app.post(`${base}/:id/:action`,  { preHandler: [requireAuth] }, adminToggleCoupon);
+  app.post(`${base}/:id/:action`,  { preHandler: [requireAuth] }, adminToggleCoupon); // enable/disable
   app.delete(`${base}/:id`,        { preHandler: [requireAuth] }, adminDeleteCoupon);
 }

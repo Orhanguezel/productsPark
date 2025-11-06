@@ -26,21 +26,23 @@ import {
   deleteProductStock,
 } from './controller';
 
+const BASE = '/products';
+
 export async function registerProducts(app: FastifyInstance) {
   // Liste
-  app.get('/products', { config: { public: true } }, listProducts);
+  app.get(`${BASE}`, { config: { public: true } }, listProducts);
 
   // ✅ Tek rota: id veya slug
-  app.get('/products/:idOrSlug', { config: { public: true } }, getProductByIdOrSlug);
+  app.get(`${BASE}/:idOrSlug`, { config: { public: true } }, getProductByIdOrSlug);
 
   // (Opsiyonel) Eski rotaları açık tutmak istersen:
-  app.get('/products/by-slug/:slug', { config: { public: true } }, getProductBySlug);
-  app.get('/products/id/:id', { config: { public: true } }, getProductById);
+  app.get(`${BASE}/by-slug/:slug`, { config: { public: true } }, getProductBySlug);
+  app.get(`${BASE}/id/:id`, { config: { public: true } }, getProductById);
 
   // CRUD
-  app.post('/products', { preHandler: [requireAuth] }, createProduct);
-  app.patch('/products/:id', { preHandler: [requireAuth] }, updateProduct);
-  app.delete('/products/:id', { preHandler: [requireAuth] }, deleteProduct);
+  app.post(`${BASE}`, { preHandler: [requireAuth] }, createProduct);
+  app.patch(`${BASE}/:id`, { preHandler: [requireAuth] }, updateProduct);
+  app.delete(`${BASE}/:id`, { preHandler: [requireAuth] }, deleteProduct);
 
   // FAQ
   app.get('/product_faqs', { config: { public: true } }, listProductFaqs);

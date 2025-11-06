@@ -14,6 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Save, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
+// ---- Quill güvenli mod ----
+import { buildSafeQuillModules, QUILL_FORMATS } from "../common/safeQuill";
+
 // ---- RTK (Admin Products) ----
 import {
   useGetProductAdminQuery,
@@ -47,8 +50,11 @@ import type {
   FAQ as TFAQ,
   Review as TReview,
   CategoryRow,
+  UsedStockItem,
+  ProductReviewRow,
+  ProductFaqRow,
 } from "@/integrations/metahub/db/types/products";
-import type { ReviewInput, FAQInput, CustomField, Badge } from "./form/types";
+import type { ReviewInput, FAQInput, CustomField, Badge } from "@/integrations/metahub/db/types/products";
 
 // ---- Sections ----
 import BasicInfo from "./form/sections/BasicInfo";
@@ -80,7 +86,6 @@ const escapeHtml = (s: string) =>
 
 const safeFolder = (s: string) => (s || "").replace(/[^a-z0-9/_-]/g, "") || "products";
 
-/** Quill daraltıcıları */
 type QuillEditor = {
   getSelection: (focus?: boolean) => { index: number } | null;
   clipboard: { dangerouslyPasteHTML: (index: number, html: string) => void };
@@ -111,20 +116,18 @@ type UploadedAssetLike = {
 // ---- API Provider tipini burada sabitle (DeliverySection ile birebir) ----
 export type ApiProvider = { id: string; name: string };
 
-/* ========= Helper: her türlü input’u gerçek File’a çevir ========= */
-type HasFiles = { files?: FileList | null };
-type EventLike = { target?: HasFiles; currentTarget?: HasFiles };
-
-async function normalizeToFile(input: string | Blob): Promise<File> {
-  if (input instanceof File) return input;
-  if (input instanceof Blob) return new File([input], "upload.bin", { type: input.type || "application/octet-stream" });
-  // dataURL / URL
-  const url = input;
-  const res = await fetch(url);
-  const blob = await res.blob();
-  const nameGuess = url.split("/").pop()?.split("?")[0] || "upload.bin";
-  return new File([blob], nameGuess, { type: blob.type || "application/octet-stream" });
-}
+/** Extra alanlar için tip (any kaldırma) */
+type ExtraProductFields = {
+  brand_id?: string | null;
+  vendor?: string | null;
+  barcode?: string | null;
+  gtin?: string | null;
+  mpn?: string | null;
+  weight_grams?: number | null;
+  size_length_mm?: number | null;
+  size_width_mm?: number | null;
+  size_height_mm?: number | null;
+};
 
 export default function ProductForm() {
   const navigate = useNavigate();
@@ -132,8 +135,8 @@ export default function ProductForm() {
   const idParam = params.id;
   const isCreate = !idParam || idParam === "new";
 
-  // ==================== NEW: slug touched + quill/content refs ====================
-  const slugTouchedRef = useRef(false);
+  // Quill için: son tetiklenen editörü hatırla + gizli file input
+  const lastQuillRef = useRef<QuillEditor | null>(null);
   const contentImageInputRef = useRef<HTMLInputElement | null>(null);
 
   // ------------------ Queries ------------------
@@ -278,7 +281,7 @@ export default function ProductForm() {
       ...product,
       is_active: (product.is_active ? 1 : 0) as 0 | 1,
       is_featured: (product.is_featured ? 1 : 0) as 0 | 1,
-      show_on_homepage: "show_on_homepage" in product && product.show_on_homepage ? 1 : 0,
+      show_on_homepage: product.show_on_homepage ? 1 : 0,
       requires_shipping: (product.requires_shipping ? 1 : 0) as 0 | 1,
       article_enabled: (product.article_enabled ? 1 : 0) as 0 | 1,
       demo_embed_enabled: (product.demo_embed_enabled ? 1 : 0) as 0 | 1,
@@ -287,17 +290,17 @@ export default function ProductForm() {
     setCustomFields((product.custom_fields as unknown as CustomField[]) ?? []);
     setQuantityOptions(product.quantity_options ?? []);
     setBadges((product.badges as Badge[]) ?? []);
-    slugTouchedRef.current = true; // mevcut slug'ı ezme
   }, [isCreate, product, categories]);
 
-  // name → slug (CategoryForm pattern)
+  // name → slug
+  const slugTouchedRef = useRef(false);
   useEffect(() => {
     if (!slugTouchedRef.current) {
       setFormData((s) => ({ ...s, slug: slugify(String(s.name || "")) }));
     }
   }, [formData.name]);
 
-  // ----- hydrate stock list -----
+  // hydrate stock list
   useEffect(() => {
     if (isCreate) return;
     if ((product?.delivery_type ?? formData.delivery_type) !== "auto_stock") return;
@@ -305,7 +308,12 @@ export default function ProductForm() {
     const list = (unusedStock ?? []).flatMap((s) => {
       if (s && typeof s === "object") {
         const obj = s as Record<string, unknown>;
-        const code = typeof obj.stock_content === "string" ? obj.stock_content : typeof obj.code === "string" ? obj.code : "";
+        const code =
+          typeof obj.stock_content === "string"
+            ? obj.stock_content
+            : typeof obj.code === "string"
+            ? obj.code
+            : "";
         return code.trim() ? [code.trim()] : [];
       }
       return [];
@@ -314,7 +322,36 @@ export default function ProductForm() {
     if (list.length > 0) setStockList(list.join("\n"));
   }, [isCreate, product?.delivery_type, formData.delivery_type, unusedStock]);
 
-  // ========================= Upload helpers (CategoryForm-like) =========================
+  // reviews/faqs hydrate
+  const mapReviewsToInput = (rows: ProductReviewRow[]): ReviewInput[] =>
+    (rows ?? []).map((r) => ({
+      id: r.id,
+      customer_name: r.customer_name ?? "",
+      rating: Number(r.rating ?? 5) || 5,
+      comment: r.comment ?? "",
+      review_date: (r.review_date || "").slice(0, 10),
+      is_active: (r.is_active ? 1 : 0) as 0 | 1,
+    }));
+  const mapFaqsToInput = (rows: ProductFaqRow[]): FAQInput[] =>
+    (rows ?? []).map((f, i) => ({
+      id: f.id,
+      question: f.question ?? "",
+      answer: f.answer ?? "",
+      display_order: Number.isFinite(f.display_order) ? f.display_order : i,
+      is_active: (f.is_active ? 1 : 0) as 0 | 1,
+    }));
+
+  useEffect(() => {
+    if (isCreate) return;
+    setReviews(mapReviewsToInput(reviewsRead as ProductReviewRow[]));
+  }, [isCreate, reviewsRead]);
+
+  useEffect(() => {
+    if (isCreate) return;
+    setFAQs(mapFaqsToInput(faqsRead as ProductFaqRow[]));
+  }, [isCreate, faqsRead]);
+
+  // ========================= Upload helpers =========================
   const STORAGE_BUCKET = "products";
 
   const handleFeaturedUpload = async (file: File) => {
@@ -358,20 +395,23 @@ export default function ProductForm() {
     }
   };
 
-  // BasicInfo içinde event veya File gelebilir → union wrapper
-  const onUploadFeatured = async (arg: File | EventLike) => {
-    if (arg instanceof File) return handleFeaturedUpload(arg);
-    const files = arg?.target?.files ?? arg?.currentTarget?.files;
-    const file = files && files[0];
-    if (file) return handleFeaturedUpload(file);
-    toast({ title: "Dosya yok", description: "Bir görsel seçiniz.", variant: "destructive" });
+  const onUploadFeatured = async (
+    arg: File | { target?: { files?: FileList | null }; currentTarget?: { files?: FileList | null } }
+  ) => {
+    const file = arg instanceof File ? arg : arg?.target?.files?.[0] ?? arg?.currentTarget?.files?.[0] ?? null;
+    if (!file) {
+      toast({ title: "Dosya yok", description: "Bir görsel seçiniz.", variant: "destructive" });
+      return;
+    }
+    await handleFeaturedUpload(file);
   };
 
-  // --- Quill içerik görseli: gizli input + ref (CategoryForm pattern)
+  // --- Quill içerik görseli: gizli input + gerçek embed akışı
   const onPickContentImage: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0] || null;
     e.target.value = ""; // aynı dosyayı tekrar seçebilmek için
     if (!file) return;
+
     try {
       const folder = `products/${safeFolder(
         (formData.slug as string) || slugify((formData.name as string) || "product")
@@ -387,11 +427,27 @@ export default function ProductForm() {
       const url = (asset as UploadedAssetLike)?.url || "";
       if (!url) throw new Error("Yükleme başarısız (url yok)");
 
-      // Quill'e embed: toolbar handler içinde selection yapılacak
-      // burada sadece URL'i döndürüyoruz; handler index'e yerleştirecek.
-      // Aşağıdaki handler, input tetiklendikten sonra embed eder.
-      pendingContentImageUrl = url;
-      toast({ title: "Görsel yüklendi", description: "Editöre eklendi.", variant: "default" });
+      const q = lastQuillRef.current;
+      if (!q) {
+        toast({ title: "Editör bulunamadı", description: "İçerik editörü hazır değil.", variant: "destructive" });
+        return;
+      }
+
+      const alt = window.prompt("Görsel alt metni (SEO için opsiyonel):") || "";
+      const range = q.getSelection(true);
+      const index = range ? range.index : q.getLength();
+
+      if (alt.trim()) {
+        const safeAlt = escapeHtml(alt.trim());
+        const html = `<img src="${url}" alt="${safeAlt}" />`;
+        q.clipboard.dangerouslyPasteHTML(index, html);
+        q.setSelection(index + 1, 0);
+      } else {
+        q.insertEmbed(index, "image", url, "user");
+        q.setSelection(index + 1, 0);
+      }
+
+      toast({ title: "Görsel eklendi", description: "İçeriğe görsel eklendi." });
     } catch (err: unknown) {
       const dataMsg =
         (err as { data?: { message?: string; error?: { message?: string } } })?.data?.message ||
@@ -400,54 +456,34 @@ export default function ProductForm() {
     }
   };
 
-  // Handler ile input click'i bağlamak için küçük state
-  let pendingContentImageUrl: string | null = null;
-
-  const makeQuillModules = useMemo(() => {
-    return {
-      toolbar: {
-        container: [
-          [{ header: [1, 2, 3, 4, 5, 6, false] }],
-          ["bold", "italic", "underline", "strike"],
-          [{ list: "ordered" }, { list: "bullet" }],
-          [{ color: [] }, { background: [] }],
-          ["link", "image"],
-          ["clean"],
-        ],
-        handlers: {
-          image: function (this: unknown) {
-            // CategoryForm’daki gibi gizli input’u tetikle
-            contentImageInputRef.current?.click();
-            // upload tamamlanınca URL pendingContentImageUrl'a gelir, şimdi embed et
-            const q = getQuillFromThis(this);
-            if (!q) return;
-            // Embed’i küçük bir microtask gecikmesiyle yap
-            queueMicrotask(() => {
-              if (!pendingContentImageUrl) return;
-              const url = pendingContentImageUrl;
-              pendingContentImageUrl = null;
-
-              const alt = window.prompt("Görsel alt metni (SEO için opsiyonel):") || "";
-              const range = q.getSelection(true);
-              const index = range ? range.index : q.getLength();
-
-              if (alt.trim()) {
-                const safeAlt = escapeHtml(alt.trim());
-                const html = `<img src="${url}" alt="${safeAlt}" />`;
-                q.clipboard.dangerouslyPasteHTML(index, html);
-                q.setSelection(index + 1, 0);
-              } else {
-                q.insertEmbed(index, "image", url, "user");
-                q.setSelection(index + 1, 0);
+  // >>>>>> GÜVENLİ QUILL MODÜLLERİ (paste/drop img blok) <<<<<<
+  const quillModules = useMemo(
+    () =>
+      buildSafeQuillModules(
+        () => contentImageInputRef.current?.click(),
+        (q) => {
+          // toolbar'dan image handler tetiklenince editörü hatırla
+          lastQuillRef.current = q as QuillEditor;
+          // ekstra olarak drop event'lerini de kapat (ihtiyat)
+          try {
+            (q as any)?.root?.addEventListener?.("drop", (ev: DragEvent) => {
+              const hasImg =
+                !!ev.dataTransfer?.files?.length ||
+                Array.from(ev.dataTransfer?.items ?? []).some(
+                  (it) => it.kind === "file" || (it.type || "").toLowerCase().startsWith("image/")
+                );
+              if (hasImg) {
+                ev.preventDefault();
+                ev.stopPropagation();
               }
             });
-          },
-        },
-      },
-    } as const;
-  }, []);
+          } catch {/* no-op */}
+        }
+      ),
+    []
+  );
 
-  // ========================= Actions =========================
+  // ========================= Actions / Submit =========================
   const setField = <K extends keyof ProductAdmin>(key: K, val: ProductAdmin[K] | unknown) => {
     setFormData((f) => ({ ...f, [key]: val as ProductAdmin[K] }));
   };
@@ -464,13 +500,12 @@ export default function ProductForm() {
     toast({ title: "Kopyalama Modu", description: "İstediğiniz değişiklikleri yapıp kaydedebilirsiniz." });
   };
 
-  // ------------------ Submit ------------------
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const finalCategoryId =
-      (formData.category_id as string) || (selectedParentId ? selectedParentId : null);
+    const finalCategoryId = (formData.category_id as string) || (selectedParentId ? selectedParentId : null);
+    const extra = formData as Partial<ExtraProductFields>;
 
     const basePayload: UpsertProductBody & PatchProductBody = {
       name: String(formData.name ?? "").trim(),
@@ -493,7 +528,7 @@ export default function ProductForm() {
       gallery_asset_ids: (formData.gallery_asset_ids ?? null) as string[] | null,
 
       is_active: !!formData.is_active,
-      show_on_homepage: !!("show_on_homepage" in (formData as object) && (formData as Record<string, unknown>).show_on_homepage),
+      show_on_homepage: !!formData.show_on_homepage,
       is_featured: !!formData.is_featured,
       requires_shipping: !!formData.requires_shipping,
 
@@ -528,6 +563,17 @@ export default function ProductForm() {
       pre_order_enabled: !!formData.pre_order_enabled,
 
       review_count: Number(formData.review_count ?? 0),
+
+      // ---- Extra fields
+      brand_id: extra.brand_id ?? null,
+      vendor: extra.vendor ?? null,
+      barcode: extra.barcode ?? null,
+      gtin: extra.gtin ?? null,
+      mpn: extra.mpn ?? null,
+      weight_grams: extra.weight_grams ?? null,
+      size_length_mm: extra.size_length_mm ?? null,
+      size_width_mm: extra.size_width_mm ?? null,
+      size_height_mm: extra.size_height_mm ?? null,
     };
 
     try {
@@ -579,7 +625,7 @@ export default function ProductForm() {
 
       toast({
         title: "Başarılı",
-        description: isCreate || isCopyMode ? "Ürün oluşturuldu." : "Ürün güncellendi.",
+        description: (isCreate || isCopyMode) ? "Ürün oluşturuldu." : "Ürün güncellendi.",
       });
       navigate("/admin/products");
     } catch (err: unknown) {
@@ -593,7 +639,7 @@ export default function ProductForm() {
   // ========================== Render ==========================
   return (
     <AdminLayout title={isCopyMode ? "Ürünü Kopyala" : isCreate ? "Yeni Ürün Ekle" : "Ürünü Düzenle"}>
-      {/* gizli input: Quill içerik görseli (CategoryForm gibi) */}
+      {/* gizli input: Quill içerik görseli (embed fix) */}
       <input
         ref={contentImageInputRef}
         type="file"
@@ -635,9 +681,10 @@ export default function ProductForm() {
                 formData={formData}
                 setField={setField}
                 quantityOptions={quantityOptions}
-                onUploadFeatured={onUploadFeatured}   // ← Event veya File gelebilir; içeride File’a indirgenir
+                onUploadFeatured={onUploadFeatured}
                 uploading={uploading}
-                quillModules={makeQuillModules}       // ← toolbar “image” gizli inputu tetikler
+                quillModules={quillModules}
+                quillFormats={QUILL_FORMATS}   // <<< EKLENDİ
               />
 
               <CategorySelect
@@ -668,7 +715,7 @@ export default function ProductForm() {
                   <CustomizationSection
                     quantityOptions={quantityOptions}
                     setQuantityOptions={setQuantityOptions}
-                    customFields={setCustomFields ? customFields : []}
+                    customFields={customFields}
                     setCustomFields={setCustomFields}
                     badges={badges}
                     setBadges={setBadges}
@@ -694,15 +741,15 @@ export default function ProductForm() {
                     stockList={stockList}
                     setStockList={setStockList}
                     idParam={idParam}
-                    usedStock={(usedStock ?? []) as unknown[]}
+                    usedStock={(usedStock ?? []) as UsedStockItem[]}
                     apiProviders={apiProviders}
                     onUploadFile={async (arg) => {
-                      // DeliverySection dosya yükleme: sadece File kabul et
-                      const ev = arg as EventLike;
-                      const files = ev?.target?.files ?? ev?.currentTarget?.files;
-                      const f = (files && files[0]) || (arg as File);
+                      const ev = arg as {
+                        target?: { files?: FileList | null };
+                        currentTarget?: { files?: FileList | null };
+                      };
+                      const f = ev?.target?.files?.[0] ?? ev?.currentTarget?.files?.[0] ?? (arg as File);
                       if (!f) return;
-                      // products/files klasörüne at
                       try {
                         if (f.size > 50 * 1024 * 1024) {
                           toast({ title: "Büyük Dosya", description: "Maksimum 50MB.", variant: "destructive" });
@@ -739,7 +786,12 @@ export default function ProductForm() {
                 </TabsContent>
 
                 <TabsContent value="article" className="space-y-6 mt-6">
-                  <ArticleSection formData={formData} setField={setField} quillModules={makeQuillModules} />
+                  <ArticleSection
+                    formData={formData}
+                    setField={setField}
+                    quillModules={quillModules}
+                    quillFormats={QUILL_FORMATS}   // <<< EKLENDİ
+                  />
                 </TabsContent>
               </Tabs>
             </CardContent>

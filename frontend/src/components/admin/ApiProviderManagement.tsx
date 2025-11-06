@@ -1,133 +1,77 @@
-import { useEffect, useState } from "react";
+// src/components/admin/ApiProviderManagement.tsx
 import { useNavigate } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, RefreshCw } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-
-interface ApiProvider {
-  id: string;
-  name: string;
-  api_url: string;
-  api_key: string;
-  provider_type: string;
-  is_active: boolean;
-  created_at: string;
-  balance?: number;
-  currency?: string;
-  last_balance_check?: string;
-}
+import {
+  useListApiProvidersQuery,
+  useDeleteApiProviderMutation,
+  useUpdateApiProviderMutation,
+  useCheckApiProviderBalanceMutation,
+} from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
 
 export const ApiProviderManagement = () => {
   const navigate = useNavigate();
-  const [providers, setProviders] = useState<ApiProvider[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshingBalance, setRefreshingBalance] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchProviders();
-  }, []);
-
-  const fetchProviders = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("api_providers")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setProviders(data || []);
-    } catch (error) {
-      console.error("Error fetching providers:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: providers, isLoading, refetch } = useListApiProvidersQuery(
+    { orderBy: { field: "created_at", asc: false } }
+  );
+  const [deleteProvider] = useDeleteApiProviderMutation();
+  const [updateProvider] = useUpdateApiProviderMutation();
+  const [checkBalance, { isLoading: checking }] = useCheckApiProviderBalanceMutation();
 
   const handleDelete = async (id: string) => {
     if (!confirm("API sağlayıcıyı silmek istediğinizden emin misiniz?")) return;
-
     try {
-      const { error } = await metahub
-        .from("api_providers")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await deleteProvider(id).unwrap();
       toast({ title: "Başarılı", description: "API sağlayıcı silindi" });
-      fetchProviders();
-    } catch (error) {
-      console.error("Error deleting provider:", error);
-      toast({
-        title: "Hata",
-        description: "Silme işlemi sırasında bir hata oluştu",
-        variant: "destructive",
-      });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Hata", description: "Silme işlemi başarısız", variant: "destructive" });
     }
   };
 
-  const toggleActive = async (id: string, currentStatus: boolean) => {
+  const toggleActive = async (id: string, current: boolean) => {
     try {
-      const { error } = await metahub
-        .from("api_providers")
-        .update({ is_active: !currentStatus })
-        .eq("id", id);
-
-      if (error) throw error;
-      fetchProviders();
-    } catch (error) {
-      console.error("Error toggling status:", error);
+      await updateProvider({ id, patch: { is_active: !current } }).unwrap();
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Hata", description: "Durum güncellenemedi", variant: "destructive" });
     }
   };
 
-  const refreshBalance = async (providerId: string, provider_type: string) => {
-    setRefreshingBalance(providerId);
-    try {
-      const functionName = provider_type === 'smm' ? 'smm-api-balance' : 'turkpin-balance';
-      const { data, error } = await metahub.functions.invoke(functionName, {
-        body: { providerId },
-      });
+  // inside refreshBalance
+const refreshBalance = async (providerId: string) => {
+  try {
+    const r = await checkBalance({ id: providerId }).unwrap();
+    toast({
+      title: "Bakiye Güncellendi",
+      description: `Yeni bakiye: ${r.balance ?? 0} ${r.currency ?? ""}`,
+    });
+    refetch();
+  } catch (e: any) {
+    // RTK error shape: { status, data }
+    const msg = e?.data?.message ?? "Bilinmeyen hata";
+    const raw = e?.data?.raw ? ` • Sağlayıcı: ${String(e.data.raw).slice(0,120)}` : "";
+    const err = e?.data?.error ? ` • Hata: ${String(e.data.error).slice(0,120)}` : "";
+    console.error("Error refreshing balance:", e);
+    toast({
+      title: "Hata",
+      description: `${msg}${raw}${err}`,
+      variant: "destructive",
+    });
+  }
+};
 
-      if (error) throw error;
 
-      if (data.success) {
-        toast({
-          title: "Bakiye Güncellendi",
-          description: `Yeni bakiye: ${data.balance} ${data.currency}`,
-        });
-        fetchProviders();
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (error) {
-      console.error("Error refreshing balance:", error);
-      toast({
-        title: "Hata",
-        description: "Bakiye güncellenirken bir hata oluştu",
-        variant: "destructive",
-      });
-    } finally {
-      setRefreshingBalance(null);
-    }
-  };
-
-  if (loading) return <div>Yükleniyor...</div>;
+  if (isLoading) return <div>Yükleniyor...</div>;
 
   return (
     <div className="space-y-4">
@@ -139,11 +83,9 @@ export const ApiProviderManagement = () => {
         </Button>
       </div>
 
-      {providers.length === 0 ? (
+      {!providers?.length ? (
         <div className="text-center py-12 border rounded-lg">
-          <p className="text-muted-foreground mb-4">
-            Henüz SMM API sağlayıcı eklenmemiş
-          </p>
+          <p className="text-muted-foreground mb-4">Henüz SMM API sağlayıcı eklenmemiş</p>
           <Button onClick={() => navigate("/admin/api-providers/new")}>
             <Plus className="w-4 h-4 mr-2" />
             İlk Sağlayıcıyı Ekle
@@ -161,52 +103,42 @@ export const ApiProviderManagement = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {providers.map((provider) => (
-              <TableRow key={provider.id}>
-                <TableCell className="font-medium">{provider.name}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {provider.api_url}
-                </TableCell>
+            {providers.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{p.api_url}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">
-                      {provider.balance?.toFixed(2) || '0.00'} {provider.currency || 'USD'}
+                      {(p.balance ?? 0).toFixed(2)} {p.currency ?? "USD"}
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => refreshBalance(provider.id, provider.provider_type)}
-                      disabled={refreshingBalance === provider.id}
+                      onClick={() => refreshBalance(p.id)}
+                      disabled={checking}
                     >
-                      <RefreshCw className={`w-4 h-4 ${refreshingBalance === provider.id ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
-                  {provider.last_balance_check && (
+                  {p.last_balance_check && (
                     <div className="text-xs text-muted-foreground">
-                      Son güncelleme: {new Date(provider.last_balance_check).toLocaleString('tr-TR')}
+                      Son güncelleme: {new Date(p.last_balance_check).toLocaleString('tr-TR')}
                     </div>
                   )}
                 </TableCell>
                 <TableCell>
                   <Switch
-                    checked={provider.is_active}
-                    onCheckedChange={() => toggleActive(provider.id, provider.is_active)}
+                    checked={p.is_active}
+                    onCheckedChange={() => toggleActive(p.id, p.is_active)}
                   />
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigate(`/admin/api-providers/edit/${provider.id}`)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/api-providers/edit/${p.id}`)}>
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(provider.id)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(p.id)}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>

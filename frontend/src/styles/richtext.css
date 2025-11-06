@@ -1,0 +1,59 @@
+/* =============================================================
+   GLOBAL RICH-TEXT STYLES (Quill + Preview)
+   ============================================================= */
+
+/* Uzun kelime/URL'leri her yerde kır */
+.prose,
+.ql-editor,
+.richtext {
+  overflow-wrap: anywhere;     /* modern */
+  word-break: break-word;      /* ek güvenlik */
+}
+
+/* Kod blokları taşmasın, satır sarımı + yatay scroll */
+.prose pre,
+.ql-editor pre {
+  white-space: pre-wrap;       /* sarım */
+  overflow-x: auto;            /* uzun satır yatay scroll */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Inline code taşmasını engelle */
+.prose code,
+.ql-editor code {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Görseller responsive */
+.prose img,
+.ql-editor img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Tablolar taşarsa yatay scroll */
+.prose table,
+.ql-editor table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.prose table th,
+.prose table td,
+.ql-editor table th,
+.ql-editor table td {
+  word-break: break-word;
+}
+
+/* Blockquote ve liste içlerinde de wrap */
+.prose blockquote,
+.prose li,
+.ql-editor blockquote,
+.ql-editor li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

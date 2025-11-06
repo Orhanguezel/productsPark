@@ -60,13 +60,14 @@ function mapRow(r: typeof popups.$inferSelect) {
     button_text: r.button_text ?? null,
     button_link: r.button_url ?? null,
 
-    display_pages: "all" as const,
+    // ▼ tablo alanlarından besle
+    display_pages: r.display_pages ?? "all",
     display_frequency: r.show_once ? "once" : "always",
     delay_seconds: Number(r.delay ?? 0),
-    duration_seconds: null as number | null,
-    priority: null as number | null,
-    coupon_code: null as string | null,
-    product_id: null as string | null,
+    duration_seconds: r.duration_seconds ?? null,
+    priority: r.priority ?? null,
+    coupon_code: r.coupon_code ?? null,
+    product_id: r.product_id ?? null,
   };
 }
 
@@ -79,7 +80,7 @@ function resolveOrder(order?: string) {
     case "created_at": return { col: popups.created_at, dir };
     case "updated_at": return { col: popups.updated_at, dir };
     case "delay":      return { col: popups.delay, dir };
-    case "priority":   return { col: popups.created_at, dir }; // DB’de yok
+    case "priority":   return { col: (popups as any).priority, dir }; // schema'da varsa
     default:           return { col: popups.created_at, dir: "desc" as const };
   }
 }
@@ -88,7 +89,9 @@ function resolveOrder(order?: string) {
 export const listPopups: RouteHandler = async (req, reply) => {
   const q = popupListQuerySchema.parse(req.query ?? {}) as PopupListQuery;
 
-  const conds = [] as Array<ReturnType<typeof and> | ReturnType<typeof eq> | ReturnType<typeof or>>;
+  const conds = [] as Array<
+    ReturnType<typeof and> | ReturnType<typeof eq> | ReturnType<typeof or>
+  >;
 
   // is_active filtresi (opsiyonel)
   if (q.is_active !== undefined) {

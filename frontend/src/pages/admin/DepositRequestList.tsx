@@ -1,26 +1,12 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+import { useEffect, useMemo, useState } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+  Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious,
 } from "@/components/ui/pagination";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -29,231 +15,147 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Eye } from "lucide-react";
 import { toast } from "sonner";
 
-interface DepositRequest {
-  id: string;
-  user_id: string;
-  amount: number;
-  payment_method: string;
-  status: string;
-  proof_image_url: string | null;
-  admin_note: string | null;
-  created_at: string;
-  user_full_name?: string;
-}
+import {
+  useListWalletDepositRequestsQuery,
+  useUpdateWalletDepositRequestMutation,
+} from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
+import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
+
+import type {
+  WalletDepositRequest,
+  WalletDepositStatus,
+} from "@/integrations/metahub/db/types/wallet";
+
+/* ---------------- helpers ---------------- */
+const money = (v: number) => `${v.toLocaleString("tr-TR")} ₺`;
+const isUuid = (s: unknown) => typeof s === "string" && s.length >= 8;
+
+type UserMini = { id: string; full_name: string | null; email: string };
+type Row = WalletDepositRequest & { user_full_name: string };
+
+/* status filtresi için tür */
+type StatusFilter = "all" | WalletDepositStatus;
 
 export default function DepositRequestList() {
-  const [requests, setRequests] = useState<DepositRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedRequest, setSelectedRequest] = useState<DepositRequest | null>(null);
-  const [adminNote, setAdminNote] = useState("");
+  /* ---- UI state ---- */
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const perPage = 10;
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
+  /* ---- RTK: İstekleri çek ---- */
+  const { data: requests = [], isFetching, refetch } = useListWalletDepositRequestsQuery(
+    statusFilter === "all" ? { order: "desc" } : { order: "desc", status: statusFilter }
+  );
+  const [updateReq, { isLoading: isUpdating }] = useUpdateWalletDepositRequestMutation();
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await metahub
-        .from("wallet_deposit_requests")
-        .select("*")
-        .order("created_at", { ascending: false });
+  /* ---- Kullanıcı id'lerini çıkar ---- */
+  const userIds = useMemo(
+    () => Array.from(new Set(requests.map((r) => r.user_id).filter((x) => isUuid(x)))),
+    [requests]
+  );
 
-      if (error) throw error;
+  /* ---- BE admin/users mini ile isimleri çek ---- */
+  const { data: usersMini = [], isFetching: isUsersLoading } =
+    useListUsersAdminMiniQuery(userIds, { skip: userIds.length === 0 });
 
-      // Fetch user details for each request
-      const requestsWithUsers = await Promise.all(
-        (data || []).map(async (request) => {
-          const { data: profile } = await metahub
-            .from("profiles")
-            .select("full_name")
-            .eq("id", request.user_id)
-            .single();
+  const userMap = useMemo(() => {
+    const m = new Map<string, UserMini>();
+    usersMini.forEach((u) => m.set(u.id, u));
+    return m;
+  }, [usersMini]);
 
-          return {
-            ...request,
-            user_full_name: profile?.full_name || "Bilinmeyen",
-          };
-        })
-      );
-
-      setRequests(requestsWithUsers);
-    } catch (error: any) {
-      console.error("Error fetching deposit requests:", error);
-      toast.error("İstekler yüklenirken hata oluştu");
-    } finally {
-      setLoading(false);
-    }
+  const displayUser = (id: string) => {
+    const u = userMap.get(id);
+    if (u?.full_name && u.full_name.trim()) return u.full_name;
+    if (u?.email) return u.email;
+    return isUuid(id) ? `${id.slice(0, 6)}…${id.slice(-4)}` : "Bilinmeyen";
   };
 
-  const handleUpdateStatus = async (requestId: string, status: string) => {
-    try {
-      const request = requests.find((r) => r.id === requestId);
-      if (!request) return;
+  const rows: Row[] = useMemo(
+    () => requests.map((r) => ({ ...r, user_full_name: displayUser(r.user_id) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requests, userMap]
+  );
 
-      // Update request status
-      const { error: updateError } = await metahub
-        .from("wallet_deposit_requests")
-        .update({ status, admin_note: adminNote })
-        .eq("id", requestId);
+  /* ---- sayfalama ---- */
+  useEffect(() => { setCurrentPage(1); }, [statusFilter]);
+  const totalPages = Math.max(1, Math.ceil(rows.length / perPage));
+  const pageItems = rows.slice((currentPage - 1) * perPage, currentPage * perPage);
 
-      if (updateError) throw updateError;
-
-      // If approved, update user's wallet balance
-      if (status === "approved") {
-        const { data: profile, error: profileError } = await metahub
-          .from("profiles")
-          .select("wallet_balance, full_name")
-          .eq("id", request.user_id)
-          .single();
-
-        if (profileError) throw profileError;
-
-        const newBalance = (profile.wallet_balance || 0) + request.amount;
-
-        const { error: balanceError } = await metahub
-          .from("profiles")
-          .update({ wallet_balance: newBalance })
-          .eq("id", request.user_id);
-
-        if (balanceError) throw balanceError;
-
-        // Create wallet transaction
-        await metahub.from("wallet_transactions").insert([
-          {
-            user_id: request.user_id,
-            amount: request.amount,
-            type: "deposit",
-            description: `Bakiye yükleme onaylandı - ${request.payment_method}`,
-          },
-        ]);
-
-        // Send telegram notification
-        try {
-          console.log('Checking telegram notification settings for deposit_approved');
-
-          const { data: telegramSettings } = await metahub
-            .from("site_settings")
-            .select("value")
-            .eq("key", "deposit_approved_telegram")
-            .single();
-
-          console.log('Deposit telegram setting:', telegramSettings?.value);
-
-          // Handle both boolean and string values
-          const isEnabled = telegramSettings?.value === true || telegramSettings?.value === 'true';
-
-          if (isEnabled) {
-            console.log('Sending telegram notification for deposit approval');
-
-            const telegramResult = await metahub.functions.invoke('send-telegram-notification', {
-              body: {
-                type: 'deposit_approved',
-                depositId: requestId,
-                amount: request.amount,
-                userName: profile?.full_name || 'Kullanıcı'
-              }
-            });
-
-            console.log('Telegram notification result:', telegramResult);
-
-            if (telegramResult.error) {
-              console.error('Telegram notification error:', telegramResult.error);
-            }
-          } else {
-            console.log('Telegram notifications disabled for deposit_approved');
-          }
-        } catch (telegramError) {
-          console.error('Telegram notification exception:', telegramError);
-        }
-
-        // Send deposit success email
-        const { data: userAuth } = await metahub.auth.admin.getUserById(request.user_id);
-        if (userAuth?.user?.email) {
-          try {
-            console.log('Sending deposit success email to:', userAuth.user.email);
-
-            const { data: siteSetting } = await metahub
-              .from("site_settings")
-              .select("value")
-              .eq("key", "site_title")
-              .single();
-
-            const emailResult = await metahub.functions.invoke('send-email', {
-              body: {
-                to: userAuth.user.email,
-                template_key: 'deposit_success',
-                variables: {
-                  user_name: profile?.full_name || 'Kullanıcı',
-                  amount: request.amount.toString(),
-                  new_balance: newBalance.toString(),
-                  site_name: siteSetting?.value || 'Dijital Market'
-                }
-              }
-            });
-
-            console.log('Deposit success email result:', emailResult);
-
-            if (emailResult.error) {
-              console.error('Deposit success email error:', emailResult.error);
-            }
-          } catch (emailError) {
-            console.error('Deposit success email exception:', emailError);
-          }
-        }
-      }
-
-      toast.success(
-        status === "approved" ? "İstek onaylandı ve bakiye eklendi" : "İstek reddedildi"
-      );
-      setSelectedRequest(null);
-      setAdminNote("");
-      fetchRequests();
-    } catch (error: any) {
-      console.error("Error updating request:", error);
-      toast.error("İstek güncellenirken hata oluştu");
-    }
-  };
+  /* ---- mount'ta tazele ---- */
+  useEffect(() => { refetch(); }, [refetch]);
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="secondary">Beklemede</Badge>;
-      case "approved":
-        return <Badge variant="default">Onaylandı</Badge>;
-      case "rejected":
-        return <Badge variant="destructive">Reddedildi</Badge>;
-      default:
-        return <Badge>{status}</Badge>;
+    switch ((status || "").toLowerCase()) {
+      case "pending": return <Badge variant="secondary">Beklemede</Badge>;
+      case "approved": return <Badge variant="default">Onaylandı</Badge>;
+      case "rejected": return <Badge variant="destructive">Reddedildi</Badge>;
+      default: return <Badge>{status}</Badge>;
     }
   };
 
-  if (loading) {
-    return (
-      <AdminLayout title="Bakiye Yükleme İstekleri">
-        <div className="flex items-center justify-center py-8">
-          <p>Yükleniyor...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
+  /* ---- onay/red: sadece BE PATCH ---- */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [adminNote, setAdminNote] = useState("");
 
-  const totalPages = Math.ceil(requests.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedRequests = requests.slice(startIndex, startIndex + itemsPerPage);
+  const handleUpdateStatus = async (requestId: string, status: "approved" | "rejected") => {
+    try {
+      await updateReq({ id: requestId, patch: { status, admin_notes: adminNote || null } }).unwrap();
+      toast.success(status === "approved" ? "İstek onaylandı" : "İstek reddedildi");
+      setSelectedId(null);
+      setAdminNote("");
+      refetch();
+    } catch (e: any) {
+      console.error("update error:", e);
+      const statusCode = e?.status ?? 0;
+      if (statusCode === 401 || statusCode === 403) {
+        toast.error("Yetkisiz. Lütfen admin oturumun açık olduğundan emin ol.");
+      } else {
+        toast.error("İstek güncellenirken hata oluştu (500). Sunucu logunu kontrol et.");
+      }
+    }
+  };
 
   return (
     <AdminLayout title="Bakiye Yükleme İstekleri">
+      <div className="mb-4 flex items-center gap-2">
+        <Button
+          variant={statusFilter === "all" ? "default" : "outline"}
+          onClick={() => setStatusFilter("all")}
+          size="sm"
+        >
+          Tümü
+        </Button>
+        <Button
+          variant={statusFilter === "pending" ? "default" : "outline"}
+          onClick={() => setStatusFilter("pending")}
+          size="sm"
+        >
+          Beklemede
+        </Button>
+        <Button
+          variant={statusFilter === "approved" ? "default" : "outline"}
+          onClick={() => setStatusFilter("approved")}
+          size="sm"
+        >
+          Onaylandı
+        </Button>
+        <Button
+          variant={statusFilter === "rejected" ? "default" : "outline"}
+          onClick={() => setStatusFilter("rejected")}
+          size="sm"
+        >
+          Reddedildi
+        </Button>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle>Yükleme İstekleri</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Yükleme İstekleri</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -266,101 +168,92 @@ export default function DepositRequestList() {
                 <TableHead className="text-right">İşlemler</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {paginatedRequests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center">
-                    Henüz istek yok
-                  </TableCell>
-                </TableRow>
+              {isFetching || isUsersLoading ? (
+                <TableRow><TableCell colSpan={6} className="text-center">Yükleniyor…</TableCell></TableRow>
+              ) : pageItems.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center">Henüz istek yok</TableCell></TableRow>
               ) : (
-                paginatedRequests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell>{request.user_full_name}</TableCell>
-                    <TableCell>{request.amount} ₺</TableCell>
-                    <TableCell>{request.payment_method}</TableCell>
-                    <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell>
-                      {new Date(request.created_at).toLocaleString("tr-TR")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Dialog
-                        open={selectedRequest?.id === request.id}
-                        onOpenChange={(open) => {
-                          if (open) {
-                            setSelectedRequest(request);
-                            setAdminNote(request.admin_note || "");
-                          } else {
-                            setSelectedRequest(null);
-                            setAdminNote("");
-                          }
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>İstek Detayları</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label>Kullanıcı</Label>
-                              <p className="text-sm">{request.user_full_name}</p>
-                            </div>
-                            <div>
-                              <Label>Tutar</Label>
-                              <p className="text-sm">{request.amount} ₺</p>
-                            </div>
-                            <div>
-                              <Label>Ödeme Yöntemi</Label>
-                              <p className="text-sm">{request.payment_method}</p>
-                            </div>
-                            {request.proof_image_url && (
+                pageItems.map((r) => {
+                  const st = (r.status || "").toLowerCase();
+                  const showActions = st !== "approved" && st !== "rejected";
+                  return (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.user_full_name}</TableCell>
+                      <TableCell>{money(r.amount)}</TableCell>
+                      <TableCell>{r.payment_method}</TableCell>
+                      <TableCell>{getStatusBadge(r.status)}</TableCell>
+                      <TableCell>{new Date(r.created_at).toLocaleString("tr-TR")}</TableCell>
+                      <TableCell className="text-right">
+                        <Dialog
+                          open={selectedId === r.id}
+                          onOpenChange={(open) => {
+                            if (open) { setSelectedId(r.id); setAdminNote(r.admin_notes ?? ""); }
+                            else { setSelectedId(null); setAdminNote(""); }
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+                          </DialogTrigger>
+
+                          {/* A11y: Description eklendi */}
+                          <DialogContent aria-describedby="wdr-dialog-desc">
+                            <DialogHeader>
+                              <DialogTitle>İstek Detayları</DialogTitle>
+                              <DialogDescription id="wdr-dialog-desc" className="sr-only">
+                                Bakiye yükleme isteği detayları
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-4">
+                              <div><Label>Kullanıcı</Label><p className="text-sm">{r.user_full_name}</p></div>
+                              <div><Label>Tutar</Label><p className="text-sm">{money(r.amount)}</p></div>
+                              <div><Label>Ödeme Yöntemi</Label><p className="text-sm">{r.payment_method}</p></div>
+
+                              {r.payment_proof && (
+                                <div>
+                                  <Label>Dekont</Label>
+                                  <img src={r.payment_proof} alt="Dekont" className="mt-2 max-w-full rounded border" />
+                                </div>
+                              )}
+
                               <div>
-                                <Label>Dekont</Label>
-                                <img
-                                  src={request.proof_image_url}
-                                  alt="Dekont"
-                                  className="mt-2 max-w-full rounded border"
+                                <Label htmlFor="admin_note">Admin Notu</Label>
+                                <Textarea
+                                  id="admin_note"
+                                  value={adminNote}
+                                  onChange={(e) => setAdminNote(e.target.value)}
+                                  rows={3}
                                 />
                               </div>
-                            )}
-                            <div>
-                              <Label htmlFor="admin_note">Admin Notu</Label>
-                              <Textarea
-                                id="admin_note"
-                                value={adminNote}
-                                onChange={(e) => setAdminNote(e.target.value)}
-                                rows={3}
-                              />
+
+                              {showActions && (
+                                <div className="flex gap-2">
+                                  <Button
+                                    className="flex-1"
+                                    onClick={() => handleUpdateStatus(r.id, "approved")}
+                                    disabled={isUpdating}
+                                  >
+                                    Onayla
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    className="flex-1"
+                                    onClick={() => handleUpdateStatus(r.id, "rejected")}
+                                    disabled={isUpdating}
+                                  >
+                                    Reddet
+                                  </Button>
+                                </div>
+                              )}
                             </div>
-                            {request.status === "pending" && (
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="default"
-                                  onClick={() => handleUpdateStatus(request.id, "approved")}
-                                  className="flex-1"
-                                >
-                                  Onayla
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  onClick={() => handleUpdateStatus(request.id, "rejected")}
-                                  className="flex-1"
-                                >
-                                  Reddet
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          </DialogContent>
+                        </Dialog>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -373,33 +266,24 @@ export default function DepositRequestList() {
             <PaginationItem>
               <PaginationPrevious
                 href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (currentPage > 1) setCurrentPage(currentPage - 1);
-                }}
+                onClick={(e) => { e.preventDefault(); setCurrentPage((p) => Math.max(1, p - 1)); }}
               />
             </PaginationItem>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <PaginationItem key={page}>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <PaginationItem key={p}>
                 <PaginationLink
                   href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setCurrentPage(page);
-                  }}
-                  isActive={currentPage === page}
+                  isActive={currentPage === p}
+                  onClick={(e) => { e.preventDefault(); setCurrentPage(p); }}
                 >
-                  {page}
+                  {p}
                 </PaginationLink>
               </PaginationItem>
             ))}
             <PaginationItem>
               <PaginationNext
                 href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                }}
+                onClick={(e) => { e.preventDefault(); setCurrentPage((p) => Math.min(totalPages, p + 1)); }}
               />
             </PaginationItem>
           </PaginationContent>

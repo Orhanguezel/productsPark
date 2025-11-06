@@ -112,7 +112,7 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
       valid_from: z.union([z.string(), z.date()]).nullable().optional(),
       valid_until: z.union([z.string(), z.date()]).nullable().optional(),
       is_active: boolLike.optional(),
-      // ignore extras from FE:
+      // FE’den gelebilecek ama DB’de olmayanlar:
       applicable_to: z.any().optional(),
       category_ids: z.any().optional(),
       product_ids: z.any().optional(),
@@ -132,7 +132,6 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
       valid_from: toDateOrNull(input.valid_from),
       valid_until: toDateOrNull(input.valid_until),
       is_active: input.is_active === undefined ? true : toBool(input.is_active),
-      // created_at/updated_at DB default
     } satisfies CouponInsert);
 
     const [row] = await db.select().from(coupons).where(eq(coupons.id, id)).limit(1);

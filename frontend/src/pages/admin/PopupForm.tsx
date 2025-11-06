@@ -9,13 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Upload, X, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Upload, X, Save, Trash2, ChevronsUpDown, Check } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,9 +26,14 @@ import {
   useDeletePopupAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/popups_admin.endpoints";
 
-import {
-  useUploadStorageAssetAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import { useUploadStorageAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import { useListProductsAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
+
+// ✅ Admin kupon listesi
+import { useListCouponsAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+// ✅ Public tekil kupon (kodla) — alias veriyoruz
+import { useGetCouponByCodeQuery as useGetPublicCouponByCodeQuery } from "@/integrations/metahub/rtk/endpoints/coupons.endpoints";
+import type { Coupon } from "@/integrations/metahub/db/types/coupon";
 
 type Frequency = "always" | "once" | "daily" | "weekly";
 type DisplayPages = "all" | "home" | "products" | "categories";
@@ -38,7 +42,6 @@ type FormState = {
   title: string;
   content: string;
 
-  // Görsel alanları
   image_url: string;
   image_asset_id: string;
   image_alt: string;
@@ -115,8 +118,45 @@ export default function PopupForm() {
   const [formData, setFormData] = useState<FormState>(defaults);
   const saving = isCreating || isUpdating;
 
-  // File input referansı (aynı id ile çakışmasın)
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+
+  // --- Ürün / Kupon arama (combobox) ---
+  const [productOpen, setProductOpen] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const { data: productRows = [], isFetching: loadingProducts } = useListProductsAdminQuery(
+    { q: productQuery, limit: 50, offset: 0 },
+    { refetchOnMountOrArgChange: true }
+  );
+
+  const productMap = useMemo(
+    () => Object.fromEntries(productRows.map((p) => [p.id, p.name])),
+    [productRows]
+  );
+  const selectedProductName = formData.product_id ? (productMap[formData.product_id] || `#${formData.product_id}`) : "";
+
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [couponQuery, setCouponQuery] = useState("");
+
+  // Admin listeden (aktif/pasif ayrımı olmadan) kuponları çek
+  const { data: couponRows = [], isFetching: loadingCoupons } = useListCouponsAdminQuery(
+    { q: couponQuery || undefined, /* is_active: 1, */ limit: 200, offset: 0 },
+    { refetchOnMountOrArgChange: true }
+  );
+
+  // Seçili kuponu public uçtan kodla getir (pasif olsa da)
+  const { data: selectedCoupon } = useGetPublicCouponByCodeQuery(
+    formData.coupon_code,
+    { skip: !formData.coupon_code }
+  );
+
+  // Admin listesini + seçili kuponu birleştir
+  const couponsFinal: Coupon[] = useMemo(() => {
+    const base = (couponRows ?? []) as Coupon[];
+    if (selectedCoupon && !base.some(c => c.code === selectedCoupon.code)) {
+      return [selectedCoupon, ...base];
+    }
+    return base;
+  }, [couponRows, selectedCoupon]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -133,8 +173,8 @@ export default function PopupForm() {
         image_asset_id: (data as { image_asset_id?: string | null }).image_asset_id ?? "",
         image_alt: (data as { image_alt?: string | null }).image_alt ?? "",
 
-        product_id: data.product_id || "",
-        coupon_code: data.coupon_code || "",
+        product_id: (data as { product_id?: string | null }).product_id || "",
+        coupon_code: (data as { coupon_code?: string | null }).coupon_code || "",
         button_text: data.button_text || "",
         button_link: data.button_link || "",
         is_active: !!data.is_active,
@@ -164,7 +204,6 @@ export default function PopupForm() {
       title: formData.title,
       content: formData.content,
 
-      // Görsel alanları
       image_url: formData.image_url || null,
       image_asset_id: formData.image_asset_id || null,
       image_alt: formData.image_alt || null,
@@ -177,7 +216,6 @@ export default function PopupForm() {
       start_date: formData.start_date ? formData.start_date.toISOString() : null,
       end_date: formData.end_date ? formData.end_date.toISOString() : null,
 
-      // BE ignore (ileride şema eklenirse hazır)
       product_id: formData.product_id || null,
       coupon_code: formData.coupon_code || null,
       display_pages: formData.display_pages,
@@ -213,11 +251,10 @@ export default function PopupForm() {
     }
   };
 
-  // Görsel yükleme (storage → asset id + url)
+  // Görsel yükleme
   const [uploading, setUploading] = useState(false);
   const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    // aynı dosyayı tekrar seçebilmek için temizle
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -241,7 +278,6 @@ export default function PopupForm() {
         metadata: { module: "popups", type: "cover" },
       }).unwrap();
 
-      // asset: { id, url, ... } bekliyoruz (RTK storage endpoint’inle uyumlu)
       const url = (asset as { url?: string }).url ?? "";
       const id = (asset as { id?: string }).id ?? "";
 
@@ -267,6 +303,14 @@ export default function PopupForm() {
       image_asset_id: "",
       image_alt: "",
     }));
+  };
+
+  // Kupon etiket metni
+  const couponLabel = (c: any) => {
+    const type = String(c.discount_type || "").toLowerCase();
+    const val = Number(c.discount_value || 0);
+    const main = type === "percentage" ? `%${val}` : `${val}₺`;
+    return c.title ? `${c.code} — ${c.title} (${main})` : `${c.code} (${main})`;
   };
 
   return (
@@ -312,6 +356,133 @@ export default function PopupForm() {
                 />
               </div>
 
+              {/* Ürün seçimi */}
+              <div className="space-y-2">
+                <Label>Ürün (Opsiyonel)</Label>
+                <Popover open={productOpen} onOpenChange={setProductOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                      {formData.product_id ? selectedProductName : "Ürün seçin"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[420px] p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Ürün ara..."
+                        value={productQuery}
+                        onValueChange={setProductQuery}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {loadingProducts ? "Yükleniyor..." : "Sonuç yok"}
+                        </CommandEmpty>
+                        <CommandGroup heading="Ürünler">
+                          <CommandItem
+                            key="none"
+                            onSelect={() => {
+                              setFormData((s) => ({ ...s, product_id: "" }));
+                              setProductOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", !formData.product_id ? "opacity-100" : "opacity-0")} />
+                            Ürün Seçilmedi
+                          </CommandItem>
+                          {productRows.map((p) => (
+                            <CommandItem
+                              key={p.id}
+                              onSelect={() => {
+                                setFormData((s) => ({ ...s, product_id: p.id }));
+                                setProductOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", formData.product_id === p.id ? "opacity-100" : "opacity-0")} />
+                              {p.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">Seçilirse buton linkini ürün sayfasına yönlendirebilirsin.</p>
+              </div>
+
+              {/* Kupon seçimi */}
+              <div className="space-y-2">
+                <Label>Kupon</Label>
+                <Popover open={couponOpen} onOpenChange={setCouponOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                      {formData.coupon_code
+                        ? (couponsFinal.find((c) => c.code === formData.coupon_code)?.code || formData.coupon_code)
+                        : "Kupon seçin veya arayın"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[420px] p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Kodla veya adla ara..."
+                        value={couponQuery}
+                        onValueChange={setCouponQuery}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {loadingCoupons ? "Yükleniyor..." : "Sonuç yok"}
+                        </CommandEmpty>
+                        <CommandGroup heading="Kuponlar">
+                          <CommandItem
+                            key="none"
+                            onSelect={() => {
+                              setFormData((s) => ({ ...s, coupon_code: "" }));
+                              setCouponOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", !formData.coupon_code ? "opacity-100" : "opacity-0")} />
+                            Kupon Seçilmedi
+                          </CommandItem>
+                          {couponsFinal.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              onSelect={() => {
+                                setFormData((s) => ({ ...s, coupon_code: c.code }));
+                                setCouponOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", formData.coupon_code === c.code ? "opacity-100" : "opacity-0")} />
+                              {couponLabel(c)}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">Kupon seçilirse popup içinde kupon etiketi gösterilir.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="button_text">Buton Metni</Label>
+                  <Input
+                    id="button_text"
+                    value={formData.button_text}
+                    onChange={(e) => setFormData({ ...formData, button_text: e.target.value })}
+                    placeholder="Hemen Al"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="button_link">Buton Linki</Label>
+                  <Input
+                    id="button_link"
+                    value={formData.button_link}
+                    onChange={(e) => setFormData({ ...formData, button_link: e.target.value })}
+                    placeholder="/urunler"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Popup Görseli</Label>
 
@@ -344,8 +515,7 @@ export default function PopupForm() {
                         alt={formData.image_alt || "Önizleme"}
                         className="w-full h-48 object-cover"
                         onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src =
-                            "https://placehold.co/600x400?text=Image";
+                          (e.currentTarget as HTMLImageElement).src = "https://placehold.co/600x400?text=Image";
                         }}
                       />
                       <Button
@@ -369,9 +539,7 @@ export default function PopupForm() {
                           placeholder='Örn: "Popup kampanya görseli"'
                         />
                         {formData.image_asset_id && (
-                          <p className="text-xs text-muted-foreground">
-                            Asset ID: {formData.image_asset_id}
-                          </p>
+                          <p className="text-xs text-muted-foreground">Asset ID: {formData.image_asset_id}</p>
                         )}
                       </div>
                       <div className="self-end">
@@ -389,56 +557,6 @@ export default function PopupForm() {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-
-            <div className="bg-card border rounded-lg p-6 space-y-6">
-              <h2 className="text-lg font-semibold">Ürün ve Kampanya</h2>
-
-              {/* Ürün seçimi (opsiyonel, BE ignore) */}
-              <div className="space-y-2">
-                <Label htmlFor="product_id">Ürün (Opsiyonel)</Label>
-                <Select
-                  value={formData.product_id || "none"}
-                  onValueChange={(value) => setFormData({ ...formData, product_id: value === "none" ? "" : value })}
-                >
-                  <SelectTrigger><SelectValue placeholder="Ürün seçin" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Ürün Seçilmedi</SelectItem>
-                    {/* Ürün listesi gerekiyorsa burada map'lersin */}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="coupon_code">Kupon Kodu</Label>
-                <Input
-                  id="coupon_code"
-                  value={formData.coupon_code}
-                  onChange={(e) => setFormData({ ...formData, coupon_code: e.target.value })}
-                  placeholder="INDIRIM25"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="button_text">Buton Metni</Label>
-                  <Input
-                    id="button_text"
-                    value={formData.button_text}
-                    onChange={(e) => setFormData({ ...formData, button_text: e.target.value })}
-                    placeholder="Hemen Al"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="button_link">Buton Linki</Label>
-                  <Input
-                    id="button_link"
-                    value={formData.button_link}
-                    onChange={(e) => setFormData({ ...formData, button_link: e.target.value })}
-                    placeholder="/urunler"
-                  />
-                </div>
               </div>
             </div>
           </div>

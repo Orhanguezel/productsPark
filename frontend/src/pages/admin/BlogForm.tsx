@@ -20,6 +20,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+import "@/styles/richtext.css"; // ⬅️ EKLENDİ: wrap/responsive stiller
 
 /* ---------------- utils ---------------- */
 const slugify = (v: string) =>
@@ -185,17 +186,14 @@ export default function BlogForm() {
     const q = quillRef.current?.getEditor();
     if (!q) return;
 
-    // Alt metin girilmişse <img alt="..."> olarak yapıştır
     if (alt && alt.trim()) {
       const safeAlt = escapeHtml(alt.trim());
       const html = `<img src="${url}" alt="${safeAlt}" />`;
       const range = q.getSelection(true);
       const index = range ? range.index : q.getLength();
-      // clipboard ile html yapıştır
       q.clipboard.dangerouslyPasteHTML(index, html);
       q.setSelection(index + 1, 0);
     } else {
-      // standart quill image embed
       const range = q.getSelection(true);
       const index = range ? range.index : q.getLength();
       q.insertEmbed(index, "image", url, "user");
@@ -245,11 +243,11 @@ export default function BlogForm() {
           ["bold", "italic", "underline", "strike"],
           [{ list: "ordered" }, { list: "bullet" }],
           [{ color: [] }, { background: [] }],
-          ["link", "image"], // ← image butonu aktif
+          ["link", "image"],
           ["clean"],
         ],
         handlers: {
-          image: handleQuillImageButton, // ← özel upload handler
+          image: handleQuillImageButton,
         },
       },
     }),
@@ -356,15 +354,20 @@ export default function BlogForm() {
                 {/* İçerik (inline image destekli) */}
                 <div className="space-y-2">
                   <Label>İçerik (HTML) *</Label>
-                  <ReactQuill
-                    ref={quillRef as any}
-                    theme="snow"
-                    value={formData.content_html}
-                    onChange={(value) => setFormData({ ...formData, content_html: value })}
-                    className="bg-background"
-                    modules={quillModules}
-                    formats={quillFormats}
-                  />
+
+                  {/* Quill container: yatay taşmayı gizle, editor içinde wrap */}
+                  <div className="overflow-hidden rounded border">
+                    <ReactQuill
+                      ref={quillRef as any}
+                      theme="snow"
+                      value={formData.content_html}
+                      onChange={(value) => setFormData({ ...formData, content_html: value })}
+                      className="bg-background richtext"   // ⬅️ wrap için class
+                      modules={quillModules}
+                      formats={quillFormats}
+                    />
+                  </div>
+
                   <p className="text-xs text-muted-foreground">
                     Metin, başlık, liste, bağlantı ve <strong>görsel</strong> ekleyebilirsiniz.
                   </p>
@@ -470,10 +473,10 @@ export default function BlogForm() {
                 <div className="text-xs text-muted-foreground">
                   {(typeof window !== "undefined" ? window.location.origin : "site.com")}{previewUrl}
                 </div>
-                <div className="mt-1 text-base font-semibold leading-snug">
+                <div className="mt-1 text-base font-semibold leading-snug break-words [overflow-wrap:anywhere]">
                   {seoTitle || "Blog başlığı (örnek)"}
                 </div>
-                <div className="mt-1 text-sm text-muted-foreground">
+                <div className="mt-1 text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
                   {seoDesc || "Meta açıklama veya içerik özeti burada görünecek."}
                 </div>
               </div>
@@ -481,8 +484,7 @@ export default function BlogForm() {
               {/* İçerik canlı önizleme */}
               <div className="rounded-lg border">
                 <div className="border-b p-3 text-sm font-medium">İçerik</div>
-                <div className="prose max-w-none p-4">
-                  {/* Admin panel: güvenli alan varsayımı; istersen DOMPurify ekleyebilirsin */}
+                <div className="prose max-w-none p-4 break-words [overflow-wrap:anywhere]">
                   <article
                     dangerouslySetInnerHTML={{
                       __html: formData.content_html || "<p>Önizleme yok.</p>",

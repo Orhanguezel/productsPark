@@ -1,9 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import {
-  listCoupons,
-  getCouponById,
-  getCouponByCode,
-} from "./controller";
+import { listCoupons, getCouponById, getCouponByCode } from "./controller";
 
 export async function registerCoupons(app: FastifyInstance) {
   app.get("/coupons", listCoupons);
