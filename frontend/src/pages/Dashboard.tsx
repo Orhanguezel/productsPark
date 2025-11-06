@@ -33,8 +33,10 @@ import {
 } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
 import {
   useListWalletTransactionsQuery,
-  type WalletTransaction as WalletTxn,
 } from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
+import type {
+WalletTransaction as WalletTxn,
+} from "@/integrations/metahub/db/types/wallet";
 import {
   useGetMyProfileQuery,
   useUpsertMyProfileMutation,
