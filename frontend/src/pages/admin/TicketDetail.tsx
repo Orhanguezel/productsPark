@@ -1,18 +1,11 @@
-// src/pages/admin/tickets/TicketDetail.tsx
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Send } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +17,8 @@ import {
   useListTicketRepliesAdminQuery,
   useCreateTicketReplyAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/ticket_replies_admin.endpoints";
+import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
+
 import type { SupportTicketStatus, SupportTicketPriority } from "@/integrations/metahub/db/types/support";
 
 const statusText: Record<SupportTicketStatus, string> = {
@@ -32,7 +27,6 @@ const statusText: Record<SupportTicketStatus, string> = {
   waiting_response: "Yanıt bekliyor",
   closed: "Kapalı",
 };
-
 const statusBadge = (s: SupportTicketStatus) => {
   switch (s) {
     case "open": return "bg-blue-100 text-blue-800";
@@ -41,7 +35,6 @@ const statusBadge = (s: SupportTicketStatus) => {
     case "closed": return "bg-gray-100 text-gray-800";
   }
 };
-
 const priorityText: Record<SupportTicketPriority, string> = {
   low: "Düşük",
   medium: "Orta",
@@ -70,6 +63,17 @@ export default function TicketDetail() {
   const [updateTicket, { isLoading: isUpdating }] = useUpdateSupportTicketAdminMutation();
   const [createReply, { isLoading: isSending }] = useCreateTicketReplyAdminMutation();
 
+  // === Ticket sahibinin ismi/emaili ===
+  const ownerId = ticket?.user_id ?? null;
+  const { data: ownerMini = [] } = useListUsersAdminMiniQuery(ownerId ? [ownerId] : [], {
+    skip: !ownerId,
+  });
+  const owner = ownerMini[0];
+  const ownerLabel = useMemo(() => {
+    if (!owner) return ownerId ?? "-";
+    return owner.full_name ? `${owner.full_name} (${owner.email})` : owner.email;
+  }, [owner, ownerId]);
+
   const [replyMessage, setReplyMessage] = useState("");
 
   const handleStatusChange = async (newStatus: SupportTicketStatus) => {
@@ -78,7 +82,7 @@ export default function TicketDetail() {
       await updateTicket({ id, patch: { status: newStatus } }).unwrap();
       toast.success("Durum güncellendi");
       refetchTicket();
-    } catch (e) {
+    } catch {
       toast.error("Durum güncellenemedi");
     }
   };
@@ -87,11 +91,10 @@ export default function TicketDetail() {
     if (!id || !replyMessage.trim()) return;
     try {
       await createReply({ ticket_id: id, message: replyMessage.trim() }).unwrap();
-      // BE admin.reply → waiting_response'a çekiyor; ticket'ı da yenileyelim:
       await Promise.all([refetchReplies(), refetchTicket()]);
       setReplyMessage("");
       toast.success("Cevap gönderildi");
-    } catch (e) {
+    } catch {
       toast.error("Cevap gönderilemedi");
     }
   };
@@ -114,22 +117,25 @@ export default function TicketDetail() {
 
   return (
     <AdminLayout title="Ticket Detayı">
-      <div className="space-y-6">
+      {/* Sayfa genelinde yatay taşmayı kapat */}
+      <div className="space-y-6 max-w-full overflow-x-hidden">
         <Button variant="outline" onClick={() => navigate("/admin/tickets")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Geri Dön
         </Button>
 
-        <Card>
+        <Card className="max-w-full">
           <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-2">
-                <CardTitle>{ticket.subject}</CardTitle>
-                <div className="flex items-center gap-2">
+            {/* Başlık + durum seçici satırı */}
+            <div className="flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
+              <div className="space-y-2 min-w-0">
+                <CardTitle className="break-words [overflow-wrap:anywhere]">
+                  {ticket.subject}
+                </CardTitle>
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge className={statusBadge(ticket.status)}>{statusText[ticket.status]}</Badge>
                   <Badge className={priorityBadge(ticket.priority)}>{priorityText[ticket.priority]}</Badge>
                   <span className="text-sm text-muted-foreground">
-                    {/* category şemada opsiyonel; null olabilir */}
                     {ticket.category ?? "Genel"}
                   </span>
                 </div>
@@ -140,7 +146,7 @@ export default function TicketDetail() {
                 onValueChange={(v) => handleStatusChange(v as SupportTicketStatus)}
                 disabled={isUpdating}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-[200px] shrink-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -154,23 +160,26 @@ export default function TicketDetail() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            <div>
+            <div className="max-w-full">
               <p className="text-sm font-medium">Kullanıcı:</p>
-              <p className="text-sm text-muted-foreground">
-                {ticket.user_id /* elimizde sadece user_id var; isim/email join FE’den kaldırıldı */}
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                {ownerLabel}
               </p>
               <p className="text-sm text-muted-foreground">
                 Tarih: {new Date(ticket.created_at).toLocaleString("tr-TR")}
               </p>
             </div>
-            <div>
+
+            <div className="max-w-full">
               <p className="text-sm font-medium mb-2">Mesaj:</p>
-              <p className="text-sm whitespace-pre-wrap">{ticket.message}</p>
+              <p className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                {ticket.message}
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="max-w-full">
           <CardHeader>
             <CardTitle>Cevaplar</CardTitle>
           </CardHeader>
@@ -183,15 +192,19 @@ export default function TicketDetail() {
               replies.map((reply) => (
                 <div
                   key={reply.id}
-                  className={`p-4 rounded-lg ${reply.is_admin ? "bg-primary/10" : "bg-muted"}`}
+                  className={`p-4 rounded-lg w-full max-w-full overflow-hidden ${reply.is_admin ? "bg-primary/10" : "bg-muted"}`}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">{reply.is_admin ? "Admin" : reply.user_id ?? "Kullanıcı"}</p>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between mb-2 gap-4">
+                    <p className="text-sm font-medium break-words [overflow-wrap:anywhere]">
+                      {reply.is_admin ? "Admin" : (reply.user_id ?? "Kullanıcı")}
+                    </p>
+                    <p className="text-xs text-muted-foreground shrink-0">
                       {new Date(reply.created_at).toLocaleString("tr-TR")}
                     </p>
                   </div>
-                  <p className="text-sm whitespace-pre-wrap">{reply.message}</p>
+                  <p className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    {reply.message}
+                  </p>
                 </div>
               ))
             )}
@@ -203,8 +216,9 @@ export default function TicketDetail() {
                   value={replyMessage}
                   onChange={(e) => setReplyMessage(e.target.value)}
                   rows={4}
+                  className="w-full"
                 />
-                <Button onClick={handleSendReply} disabled={isSending || !replyMessage.trim()}>
+                <Button onClick={handleSendReply} disabled={isSending || !replyMessage.trim()} className="w-full sm:w-auto">
                   <Send className="mr-2 h-4 w-4" />
                   {isSending ? "Gönderiliyor..." : "Cevap Gönder"}
                 </Button>
