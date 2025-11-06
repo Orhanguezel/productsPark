@@ -1,3 +1,4 @@
+// FILE: src/pages/admin/categories/CategoryList.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -13,26 +14,68 @@ import {
   useToggleActiveCategoryAdminMutation,
   useToggleFeaturedCategoryAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
+import {
+  useGetStorageAssetAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 import type { Category } from "@/integrations/metahub/db/types/categories";
 import { Switch } from "@/components/ui/switch";
 
 type FilterTab = "all" | "main" | "sub";
 
+/* basit slugify */
+const slugify = (v: string): string =>
+  (v || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+/** Küçük thumb bileşeni: url yoksa asset_id → storage’tan url getirir */
+type AssetThumbProps = {
+  imageUrl: string | null;
+  imageAssetId?: string | null;
+  alt: string;
+  className?: string;
+};
+function AssetThumb({ imageUrl, imageAssetId, alt, className }: AssetThumbProps) {
+  // url varsa sorgu atma; yoksa asset id ile tek kayıt getir
+  const skip = Boolean(imageUrl === null || imageUrl === undefined ? !imageAssetId : true);
+  const { data: asset } = useGetStorageAssetAdminQuery(imageAssetId as string, {
+    skip, // imageUrl varsa ya da assetId yoksa sorgu atma
+  });
+
+  const src = imageUrl ?? asset?.url ?? null;
+
+  if (!src) return <div className="h-8 w-8 rounded border bg-muted" />;
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={(e) => {
+        const el = e.currentTarget;
+        el.onerror = null; // sonsuz döngüyü engelle
+        el.src = "https://placehold.co/64x64?text=IMG";
+      }}
+    />
+  );
+}
+
 export default function CategoryList() {
   const navigate = useNavigate();
 
-  const {
-    data: categories = [],
-    isLoading,
-    isFetching,
-    refetch,
-  } = useListCategoriesAdminQuery(undefined, {
+  const { data = [], isLoading, isFetching, refetch } = useListCategoriesAdminQuery(undefined, {
+    refetchOnMountOrArgChange: true,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
 
   useEffect(() => {
+    // mount’ta network’ten çek
     refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [delCat] = useDeleteCategoryAdminMutation();
@@ -43,17 +86,30 @@ export default function CategoryList() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // UI güvenli kopya: slug & booleans & img fallback
+  const rows: Category[] = useMemo(
+    () =>
+      data.map((c) => ({
+        ...c,
+        slug: c.slug && c.slug.trim() ? c.slug : slugify(c.name),
+        is_active: c.is_active ?? true,
+        is_featured: c.is_featured ?? false,
+        image_url: c.image_url ?? null,
+      })),
+    [data],
+  );
+
   const parentName = useMemo(() => {
     const map = new Map<string, string>();
-    categories.forEach((c) => map.set(c.id, c.name));
+    rows.forEach((c) => map.set(c.id, c.name));
     return map;
-  }, [categories]);
+  }, [rows]);
 
   const filtered: Category[] = useMemo(() => {
-    if (filter === "main") return categories.filter((c) => c.parent_id === null);
-    if (filter === "sub") return categories.filter((c) => c.parent_id !== null);
-    return categories;
-  }, [categories, filter]);
+    if (filter === "main") return rows.filter((c) => c.parent_id === null);
+    if (filter === "sub") return rows.filter((c) => c.parent_id !== null);
+    return rows;
+  }, [rows, filter]);
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
   const pageItems = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -99,9 +155,9 @@ export default function CategoryList() {
 
         <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterTab)}>
           <TabsList>
-            <TabsTrigger value="all">Tümü ({categories.length})</TabsTrigger>
-            <TabsTrigger value="main">Ana Kategoriler ({categories.filter(c => c.parent_id === null).length})</TabsTrigger>
-            <TabsTrigger value="sub">Alt Kategoriler ({categories.filter(c => c.parent_id !== null).length})</TabsTrigger>
+            <TabsTrigger value="all">Tümü ({rows.length})</TabsTrigger>
+            <TabsTrigger value="main">Ana Kategoriler ({rows.filter(c => c.parent_id === null).length})</TabsTrigger>
+            <TabsTrigger value="sub">Alt Kategoriler ({rows.filter(c => c.parent_id !== null).length})</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -125,19 +181,16 @@ export default function CategoryList() {
                 {pageItems.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>
-                      {c.image_url ? (
-                        <img
-                          src={c.image_url}
-                          alt={c.image_alt || c.name}
-                          className="h-8 w-8 rounded object-cover border"
-                        />
-                      ) : (
-                        <div className="h-8 w-8 rounded border bg-muted" />
-                      )}
+                      <AssetThumb
+                        imageUrl={c.image_url}
+                        imageAssetId={c.image_asset_id}
+                        alt={c.image_alt || c.name}
+                        className="h-8 w-8 rounded object-cover border"
+                      />
                     </TableCell>
                     <TableCell className="font-medium">{c.name}</TableCell>
                     <TableCell>{c.parent_id ? parentName.get(c.parent_id) || "—" : "—"}</TableCell>
-                    <TableCell>{(c.slug && c.slug.trim()) ? c.slug : "—"}</TableCell>
+                    <TableCell>{c.slug && c.slug.trim() ? c.slug : "—"}</TableCell>
                     <TableCell>
                       <Switch checked={!!c.is_active} onCheckedChange={() => onToggleActive(c)} />
                     </TableCell>

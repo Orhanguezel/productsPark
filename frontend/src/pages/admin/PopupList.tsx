@@ -18,6 +18,14 @@ import {
   useDeletePopupAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/popups_admin.endpoints";
 
+import {
+  useListProductsAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
+
+import {
+  useListCouponsAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+
 function getFrequencyLabel(frequency: string) {
   const m: Record<string, string> = {
     always: "Her Zaman",
@@ -51,6 +59,13 @@ export default function PopupList() {
   const navigate = useNavigate();
   const { data: popups, isLoading, refetch } = useListPopupsAdminQuery();
   const [deletePopup] = useDeletePopupAdminMutation();
+
+  // Ürün/kupon map (listeyi isimle göstermek için)
+  const { data: products = [] } = useListProductsAdminQuery({ limit: 500, offset: 0 });
+  const productMap = Object.fromEntries(products.map(p => [p.id, p.name]));
+
+  const { data: coupons = [] } = useListCouponsAdminQuery({ limit: 500, offset: 0 });
+  const couponMap = Object.fromEntries(coupons.map(c => [c.code, c] as const));
 
   return (
     <AdminLayout title="Popup Yönetimi">
@@ -102,8 +117,14 @@ export default function PopupList() {
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{p.title}</TableCell>
-                      <TableCell>-</TableCell>
-                      <TableCell>{p.coupon_code ? <Badge>{p.coupon_code}</Badge> : "-"}</TableCell>
+                      <TableCell>
+                        {p.product_id ? (productMap[p.product_id] || `#${p.product_id}`) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {p.coupon_code
+                          ? <Badge>{couponMap[p.coupon_code]?.code || p.coupon_code}</Badge>
+                          : "-"}
+                      </TableCell>
                       <TableCell>{getFrequencyLabel(p.display_frequency)}</TableCell>
                       <TableCell>{getPageLabel(p.display_pages)}</TableCell>
                       <TableCell className="text-sm">

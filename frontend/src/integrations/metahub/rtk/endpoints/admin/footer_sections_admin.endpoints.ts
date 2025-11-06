@@ -53,7 +53,7 @@ const normalize = (p: ApiFooterSection): FooterSection => {
 /** FE -> BE body map (links dizi -> JSON string) */
 const toApiBody = (b: UpsertFooterSectionBody) => ({
   title: b.title,
-  is_active: b.is_active ?? true,
+  is_active: (b.is_active === false ? 0 : 1) as unknown as boolean,
   links: JSON.stringify(b.links ?? []),
   display_order: b.display_order ?? 0,
 });

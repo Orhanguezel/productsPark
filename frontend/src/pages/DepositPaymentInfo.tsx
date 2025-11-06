@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+// =============================================================
+// FILE: src/pages/account/DepositPaymentInfo.tsx  (public)
+// =============================================================
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { metahub } from "@/integrations/metahub/client";
 import Navbar from "@/components/layout/Navbar";
@@ -10,139 +13,153 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Copy, CheckCircle } from "lucide-react";
 
-const DepositPaymentInfo = () => {
+/* ---------------- helpers (no-any) ---------------- */
+type SiteSettingRow = { key: string; value: unknown };
+
+const asNumber = (v: unknown, d = 0): number => {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+const asString = (v: unknown, d = ""): string => (v == null ? d : String(v));
+const asBoolLoose = (v: unknown, d = false): boolean => {
+  if (typeof v === "boolean") return v;
+  const s = String(v ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on", "enabled"].includes(s)) return true;
+  if (["0", "false", "no", "n", "off", "disabled"].includes(s)) return false;
+  return d;
+};
+const findSetting = (rows: SiteSettingRow[] | null | undefined, key: string) =>
+  (rows ?? []).find((r) => r.key === key)?.value;
+
+/* ---------------- component ---------------- */
+export default function DepositPaymentInfo() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const amount = searchParams.get("amount");
-  const [bankInfo, setBankInfo] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+
+  const amountParam = searchParams.get("amount") ?? "";
+  const amount = useMemo<number>(() => {
+    const n = Number(amountParam.replace(",", "."));
+    return Number.isFinite(n) ? n : NaN;
+  }, [amountParam]);
+
+  const [bankInfo, setBankInfo] = useState<string | null>(null);
+  const [minLimit, setMinLimit] = useState<number>(10);
+  const [tgEnabled, setTgEnabled] = useState<boolean>(false);
+
+  const [loading, setLoading] = useState<boolean>(true);
+  const [submitting, setSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!amount) {
-      toast.error("Geçersiz işlem");
+    // amount yok/bozuksa güvenli çık
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Geçersiz tutar");
       navigate("/hesabim");
       return;
     }
 
-    checkMinimumLimit();
-  }, [amount]);
+    const run = async () => {
+      try {
+        // 1 sorguda tüm ayarları çek
+        const { data, error } = await metahub
+          .from("site_settings")
+          .select("key,value")
+          .in("key", ["min_balance_limit", "bank_account_info", "new_deposit_request_telegram"]);
 
-  const checkMinimumLimit = async () => {
-    try {
-      const { data: settingsData } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "min_balance_limit")
-        .single();
+        if (error) throw error;
+        const rows = (data ?? []) as SiteSettingRow[];
 
-      const minLimit = typeof settingsData?.value === 'number' ? settingsData.value : 10;
-      const depositAmount = parseFloat(amount!);
+        const min = asNumber(findSetting(rows, "min_balance_limit"), 10);
+        const bank = asString(findSetting(rows, "bank_account_info"), "");
+        const tg = asBoolLoose(findSetting(rows, "new_deposit_request_telegram"), false);
 
-      if (depositAmount < minLimit) {
-        toast.error(`Minimum yükleme tutarı ${minLimit} ₺'dir`);
-        navigate("/hesabim");
-        return;
+        setMinLimit(min);
+        setBankInfo(bank || null);
+        setTgEnabled(tg);
+
+        if (amount < min) {
+          toast.error(`Minimum yükleme tutarı ${min} ₺'dir`);
+          navigate("/hesabim");
+          return;
+        }
+      } catch (e) {
+        console.error("Settings load error:", e);
+        // Ayarlar gelmese de sayfayı göstermeye devam edelim (default min=10)
+        if (amount < 10) {
+          toast.error(`Minimum yükleme tutarı 10 ₺'dir`);
+          navigate("/hesabim");
+          return;
+        }
+      } finally {
+        setLoading(false);
       }
+    };
 
-      fetchBankInfo();
-    } catch (error) {
-      console.error("Error checking minimum limit:", error);
-      fetchBankInfo();
-    }
-  };
+    run();
+  }, [amount, navigate]);
 
-  const fetchBankInfo = async () => {
+  const copyToClipboard = async (text: string) => {
     try {
-      const { data: bankData } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "bank_account_info")
-        .single();
-
-      if (bankData?.value) {
-        setBankInfo(bankData.value);
-      }
-    } catch (error) {
-      console.error("Error fetching bank info:", error);
-      toast.error("Bilgiler yüklenemedi");
-    } finally {
-      setLoading(false);
+      await navigator.clipboard.writeText(text);
+      toast.success("Panoya kopyalandı");
+    } catch {
+      // Eski tarayıcı fallback
+      const ok = document.execCommand?.("copy");
+      if (ok) toast.success("Panoya kopyalandı");
+      else toast.error("Kopyalama başarısız");
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Panoya kopyalandı");
   };
 
   const handlePaymentConfirm = async () => {
     setSubmitting(true);
     try {
-      const { data: { user } } = await metahub.auth.getUser();
+      const { data: auth } = await metahub.auth.getUser();
+      const user = auth?.user;
       if (!user) {
         toast.error("Oturum bulunamadı");
         return;
       }
 
-      // Create deposit request
-      const { data: depositData, error: depositError } = await metahub
+      // 1) İstek oluştur
+      const { data: created, error: insErr } = await metahub
         .from("wallet_deposit_requests")
         .insert({
           user_id: user.id,
-          amount: parseFloat(amount!),
+          amount, // number
           payment_method: "havale",
           status: "pending",
         })
         .select()
         .single();
 
-      if (depositError) throw depositError;
+      if (insErr) throw insErr;
 
-      // Send telegram notification
-      try {
-        console.log('Checking deposit telegram notification settings...');
+      // 2) (Opsiyonel) Telegram bildirimi
+      if (tgEnabled && created) {
+        try {
+          const { data: profile } = await metahub
+            .from("profiles")
+            .select("full_name")
+            .eq("id", user.id)
+            .single();
 
-        // Get user profile
-        const { data: profile } = await metahub
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .single();
-
-        const { data: telegramSettings } = await metahub
-          .from("site_settings")
-          .select("value")
-          .eq("key", "new_deposit_request_telegram")
-          .single();
-
-        console.log('Deposit telegram settings:', telegramSettings);
-
-        // Handle both boolean and string values
-        const isEnabled = telegramSettings?.value === true || telegramSettings?.value === 'true';
-
-        if (isEnabled && depositData) {
-          console.log('Invoking deposit telegram notification...');
-          const result = await metahub.functions.invoke("send-telegram-notification", {
+          await metahub.functions.invoke("send-telegram-notification", {
             body: {
               type: "new_deposit_request",
-              depositId: depositData.id,
-              amount: depositData.amount,
-              userName: profile?.full_name || 'Kullanıcı',
+              depositId: created.id,
+              amount: created.amount,
+              userName: profile?.full_name || "Kullanıcı",
             },
           });
-          console.log('Deposit telegram notification result:', result);
-        } else {
-          console.log('Deposit telegram notification not sent - Enabled:', isEnabled);
+        } catch (e) {
+          console.error("Telegram notify error:", e);
         }
-      } catch (telegramError) {
-        console.error("Deposit telegram notification error:", telegramError);
       }
 
       toast.success("Ödeme bildirimi gönderildi");
       navigate("/hesabim");
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (e) {
+      console.error("Deposit create error:", e);
       toast.error("Bir hata oluştu");
     } finally {
       setSubmitting(false);
@@ -172,6 +189,7 @@ const DepositPaymentInfo = () => {
               Havale/EFT Bilgileri - Bakiye Yükleme
             </CardTitle>
           </CardHeader>
+
           <CardContent className="space-y-6">
             <div>
               <p className="text-muted-foreground mb-4">
@@ -185,15 +203,21 @@ const DepositPaymentInfo = () => {
               <div>
                 <Label className="text-base font-semibold">Yüklenecek Tutar</Label>
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-2xl font-bold text-primary">{amount} ₺</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {amount.toLocaleString("tr-TR")} ₺
+                  </p>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => copyToClipboard(amount!)}
+                    onClick={() => copyToClipboard(String(amount))}
+                    aria-label="Tutarı kopyala"
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Minimum tutar: {minLimit.toLocaleString("tr-TR")} ₺
+                </p>
               </div>
 
               <Separator />
@@ -202,6 +226,16 @@ const DepositPaymentInfo = () => {
                 <div className="bg-muted p-4 rounded-lg space-y-2">
                   <Label className="text-base font-semibold">Banka Hesap Bilgileri</Label>
                   <div className="whitespace-pre-wrap text-sm">{bankInfo}</div>
+                  <div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(bankInfo)}
+                      aria-label="Banka bilgilerini kopyala"
+                    >
+                      Tamamını Kopyala
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -230,6 +264,4 @@ const DepositPaymentInfo = () => {
       <Footer />
     </>
   );
-};
-
-export default DepositPaymentInfo;
+}

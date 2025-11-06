@@ -1,3 +1,6 @@
+// =============================================================
+// FILE: MenuManagementPage.tsx
+// =============================================================
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -37,19 +40,31 @@ import type { FooterSection, UpsertFooterSectionBody } from "@/integrations/meta
 type Page = { id: string; title: string; slug: string };
 
 export default function MenuManagementPage() {
-  // DATA
-  const { data: allMenuItems = [], isLoading: menuLoading } = useListMenuItemsAdminQuery();
+  // MENU ITEMS
+  const {
+    data: allMenuItems = [],
+    isLoading: menuLoading,
+    refetch: refetchMenu,
+  } = useListMenuItemsAdminQuery();
+
   const [createMenuItem] = useCreateMenuItemAdminMutation();
   const [updateMenuItem] = useUpdateMenuItemAdminMutation();
   const [deleteMenuItem] = useDeleteMenuItemAdminMutation();
   const [reorderMenuItems] = useReorderMenuItemsAdminMutation();
 
-  const { data: allSections = [], isLoading: sectionsLoading } = useListFooterSectionsAdminQuery();
+  // FOOTER SECTIONS
+  const {
+    data: allSections = [],
+    isLoading: sectionsLoading,
+    refetch: refetchSections,
+  } = useListFooterSectionsAdminQuery();
+
   const [createSection] = useCreateFooterSectionAdminMutation();
   const [updateSection] = useUpdateFooterSectionAdminMutation();
   const [deleteSection] = useDeleteFooterSectionAdminMutation();
   const [reorderSections] = useReorderFooterSectionsAdminMutation();
 
+  // PAGES (published)
   const [pages, setPages] = useState<Page[]>([]);
   useEffect(() => {
     (async () => {
@@ -58,24 +73,26 @@ export default function MenuManagementPage() {
     })();
   }, []);
 
-  // NORMALIZE
+  // ===== Normalize (location'a asla dokunma) =====
   const normalizedMenu = useMemo(() => {
     return allMenuItems.map((i) => {
-      const loc: "header" | "footer" | undefined = i.location ?? (i.section_id ? "footer" : undefined);
       const display_order = i.display_order ?? i.position ?? i.order_num ?? 0;
-      return { ...i, location: loc, display_order };
+      return { ...i, display_order };
     });
   }, [allMenuItems]);
 
   const headerItems = useMemo(
-    () => normalizedMenu.filter((i) => i.location === "header").sort((a, b) => a.display_order - b.display_order),
+    () =>
+      normalizedMenu
+        .filter((i) => i.location === "header")
+        .sort((a, b) => a.display_order - b.display_order),
     [normalizedMenu]
   );
 
   const footerItems = useMemo(
     () =>
       normalizedMenu
-        .filter((i) => i.location === "footer" || i.section_id != null || i.location === undefined)
+        .filter((i) => i.location === "footer" || i.section_id != null)
         .sort((a, b) => a.display_order - b.display_order),
     [normalizedMenu]
   );
@@ -85,7 +102,7 @@ export default function MenuManagementPage() {
     [allSections]
   );
 
-  // DIALOG STATE
+  // ===== Dialog States =====
   const [openHeaderForm, setOpenHeaderForm] = useState(false);
   const [openFooterForm, setOpenFooterForm] = useState(false);
   const [openSectionForm, setOpenSectionForm] = useState(false);
@@ -95,7 +112,7 @@ export default function MenuManagementPage() {
 
   const loading = menuLoading || sectionsLoading;
 
-  // ACTIONS
+  // ===== Actions: MENU ITEMS =====
   async function handleUpsertHeaderItem(body: Omit<MenuItemAdmin, "id" | "display_order">) {
     try {
       if (editingItem) {
@@ -106,6 +123,7 @@ export default function MenuManagementPage() {
         toast.success("Menü öğesi eklendi");
       }
       setEditingItem(null);
+      refetchMenu();
     } catch {
       toast.error("Kayıt sırasında hata oluştu");
     }
@@ -121,6 +139,7 @@ export default function MenuManagementPage() {
         toast.success("Menü öğesi eklendi");
       }
       setEditingItem(null);
+      refetchMenu();
     } catch {
       toast.error("Kayıt sırasında hata oluştu");
     }
@@ -131,6 +150,7 @@ export default function MenuManagementPage() {
     try {
       await deleteMenuItem(id).unwrap();
       toast.success("Menü öğesi silindi");
+      refetchMenu();
     } catch {
       toast.error("Silme işlemi başarısız");
     }
@@ -140,11 +160,13 @@ export default function MenuManagementPage() {
     try {
       await reorderMenuItems(items).unwrap();
       toast.success("Sıralama güncellendi");
+      refetchMenu();
     } catch {
       toast.error("Sıralama güncellenirken hata oluştu");
     }
   }
 
+  // ===== Actions: FOOTER SECTIONS =====
   async function handleUpsertSection(b: UpsertFooterSectionBody) {
     try {
       if (editingSection) {
@@ -155,6 +177,7 @@ export default function MenuManagementPage() {
         toast.success("Bölüm eklendi");
       }
       setEditingSection(null);
+      refetchSections();
     } catch {
       toast.error("Kayıt sırasında hata oluştu");
     }
@@ -165,6 +188,8 @@ export default function MenuManagementPage() {
     try {
       await deleteSection(id).unwrap();
       toast.success("Bölüm silindi");
+      refetchSections();
+      refetchMenu(); // bölüme bağlı öğelerin yeri değişebilir
     } catch {
       toast.error("Silme işlemi başarısız");
     }
@@ -174,6 +199,7 @@ export default function MenuManagementPage() {
     try {
       await reorderSections(items).unwrap();
       toast.success("Bölüm sıralaması güncellendi");
+      refetchSections();
     } catch {
       toast.error("Sıralama güncellenirken hata oluştu");
     }
@@ -187,6 +213,7 @@ export default function MenuManagementPage() {
           <TabsTrigger value="footer">Footer Menü</TabsTrigger>
         </TabsList>
 
+        {/* ===== HEADER ===== */}
         <TabsContent value="header" className="mt-6 space-y-4">
           <div className="flex justify-end">
             <Button onClick={() => { setEditingItem(null); setOpenHeaderForm(true); }}>
@@ -213,6 +240,7 @@ export default function MenuManagementPage() {
           />
         </TabsContent>
 
+        {/* ===== FOOTER ===== */}
         <TabsContent value="footer" className="mt-6 space-y-4">
           <FooterSectionList
             sections={footerSections}

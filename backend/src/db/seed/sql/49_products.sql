@@ -1,6 +1,5 @@
 -- ============================================
--- SEED: PRODUCTS (schema uyumlu)
--- Not: Yeni kolonlar NULL default ile çalışır.
+-- SEED: PRODUCTS  (DDL ile birebir uyumlu)
 -- ============================================
 INSERT IGNORE INTO products
 (

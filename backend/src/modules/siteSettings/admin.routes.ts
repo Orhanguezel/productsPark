@@ -10,18 +10,20 @@ import {
   adminDeleteSiteSetting,
 } from './admin.controller';
 
+const BASE = '/admin/site_settings';
+
 export async function registerSiteSettingsAdmin(app: FastifyInstance) {
   // Tüm admin uçları auth korumalı
-  app.get('/admin/site_settings', { preHandler: [requireAuth] }, adminListSiteSettings);
-  app.get('/admin/site_settings/:key', { preHandler: [requireAuth] }, adminGetSiteSettingByKey);
+  app.get(`${BASE}`, { preHandler: [requireAuth] }, adminListSiteSettings);
+  app.get(`${BASE}/:key`, { preHandler: [requireAuth] }, adminGetSiteSettingByKey);
 
-  app.post('/admin/site_settings', { preHandler: [requireAuth] }, adminCreateSiteSetting);
-  app.put('/admin/site_settings/:key', { preHandler: [requireAuth] }, adminUpdateSiteSetting);
+  app.post(`${BASE}`, { preHandler: [requireAuth] }, adminCreateSiteSetting);
+  app.put(`${BASE}/:key`, { preHandler: [requireAuth] }, adminUpdateSiteSetting);
 
-  app.post('/admin/site_settings/bulk-upsert', { preHandler: [requireAuth] }, adminBulkUpsertSiteSettings);
+  app.post(`${BASE}/bulk-upsert`, { preHandler: [requireAuth] }, adminBulkUpsertSiteSettings);
 
   // toplu silme (query filtreli) - FE geçiş süreci için gerekli
-  app.delete('/admin/site_settings', { preHandler: [requireAuth] }, adminDeleteManySiteSettings);
+  app.delete(`${BASE}`, { preHandler: [requireAuth] }, adminDeleteManySiteSettings);
   // tek kayıt silme
-  app.delete('/admin/site_settings/:key', { preHandler: [requireAuth] }, adminDeleteSiteSetting);
+  app.delete(`${BASE}/:key`, { preHandler: [requireAuth] }, adminDeleteSiteSetting);
 }

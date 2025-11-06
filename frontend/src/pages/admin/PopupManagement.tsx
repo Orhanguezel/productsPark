@@ -21,6 +21,14 @@ import {
   useDeletePopupAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/popups_admin.endpoints";
 
+import {
+  useListProductsAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
+
+import {
+  useListCouponsAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+
 const getFrequencyLabel = (frequency: string) => {
   const labels: Record<string, string> = {
     always: "Her Zaman",
@@ -55,6 +63,13 @@ const PopupManagement = () => {
 
   const { data: popups, isLoading, refetch } = useListPopupsAdminQuery();
   const [deletePopup, { isLoading: isDeleting }] = useDeletePopupAdminMutation();
+
+  // Ürün/kupon map
+  const { data: products = [] } = useListProductsAdminQuery({ limit: 500, offset: 0 });
+  const productMap = Object.fromEntries(products.map(p => [p.id, p.name]));
+
+  const { data: coupons = [] } = useListCouponsAdminQuery({ limit: 500, offset: 0 });
+  const couponMap = Object.fromEntries(coupons.map(c => [c.code, c] as const));
 
   return (
     <Card>
@@ -107,9 +122,11 @@ const PopupManagement = () => {
                       </TableCell>
 
                       <TableCell className="font-medium">{popup.title}</TableCell>
-                      <TableCell>-</TableCell>
                       <TableCell>
-                        {popup.coupon_code ? <Badge>{popup.coupon_code}</Badge> : "-"}
+                        {popup.product_id ? (productMap[popup.product_id] || `#${popup.product_id}`) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {popup.coupon_code ? <Badge>{couponMap[popup.coupon_code]?.code || popup.coupon_code}</Badge> : "-"}
                       </TableCell>
 
                       <TableCell>{getFrequencyLabel(popup.display_frequency)}</TableCell>

@@ -92,8 +92,9 @@ export const createPage: RouteHandler<{ Body: CreateBody }> = async (req, reply)
     featured_image_asset_id: b.featured_image_asset_id ?? null,
     featured_image_alt: b.featured_image_alt ?? null,
 
-    meta_title: b.meta_title ?? null,
-    meta_description: b.meta_description ?? null,
+    meta_title: typeof b.meta_title !== "undefined" ? b.meta_title : undefined,
+    meta_description: typeof b.meta_description !== "undefined" ? b.meta_description : undefined,
+
     is_published: b.is_published ? 1 : 0,
     created_at: new Date(),
     updated_at: new Date(),

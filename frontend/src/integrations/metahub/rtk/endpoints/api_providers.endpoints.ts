@@ -1,5 +1,4 @@
 // src/integrations/metahub/rtk/endpoints/api_providers.endpoints.ts
-
 import { baseApi } from "../baseApi";
 import type { ApiProvider } from "../../db/types/apiProviders";
 
@@ -9,14 +8,11 @@ type ListParams = {
 };
 
 const toStr = (v: unknown) => (typeof v === "string" ? v : String(v ?? ""));
-const toBool = (v: unknown) =>
-  v === true || v === 1 || v === "1" || v === "true";
+const toBool = (v: unknown) => v === true || v === 1 || v === "1" || v === "true";
 const toOptNum = (v: unknown) => (v == null ? null : Number(v));
 const toOptStr = (v: unknown) => (v == null ? null : toStr(v));
-const toOptRec = (v: unknown) =>
-  typeof v === "object" && v !== null ? (v as Record<string, unknown>) : undefined;
+const toOptRec = (v: unknown) => (typeof v === "object" && v !== null ? (v as Record<string, unknown>) : undefined);
 
-// Backend view satırının gevşek tipi (any yok)
 type ApiProviderRaw = Partial<{
   id: unknown;
   name: unknown;
@@ -33,9 +29,13 @@ type ApiProviderRaw = Partial<{
   last_balance_check: unknown;
 }>;
 
-/** Backend view yanıtını güvenli şekilde normalize et (any YOK) */
 function normalize(row: unknown): ApiProvider {
   const r = (row ?? {}) as ApiProviderRaw;
+  const creds = toOptRec(r.credentials);
+  const credBalance  = creds && typeof creds.balance === "number" ? (creds.balance as number) : undefined;
+  const credCurrency = creds && typeof creds.currency === "string" ? (creds.currency as string) : undefined;
+  const credLastChk  = creds && typeof creds.last_balance_check === "string" ? (creds.last_balance_check as string) : undefined;
+
   return {
     id: toStr(r.id),
     name: toStr(r.name),
@@ -45,17 +45,16 @@ function normalize(row: unknown): ApiProvider {
     is_active: toBool(r.is_active),
     created_at: toStr(r.created_at),
     updated_at: toStr(r.updated_at),
-    credentials: toOptRec(r.credentials),
-    balance: toOptNum(r.balance),
-    currency: toOptStr(r.currency),
-    last_balance_check: toOptStr(r.last_balance_check),
+    credentials: creds,
+    balance: toOptNum(r.balance) ?? (credBalance ?? null),
+    currency: toOptStr(r.currency) ?? (credCurrency ?? null),
+    last_balance_check: toOptStr(r.last_balance_check) ?? (credLastChk ?? null),
   };
 }
 
 export const apiProvidersApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
 
-    // params artık optional; union 'void' kalktı → TS2339 biter
     listApiProviders: b.query<ApiProvider[], ListParams | undefined>({
       query: (params) => {
         const p: ListParams = params ?? {};
@@ -91,7 +90,7 @@ export const apiProvidersApi = baseApi.injectEndpoints({
       ApiProvider,
       {
         name: string;
-        provider_type?: string; // "smm" | "epin" vs (default: smm)
+        provider_type?: string;
         api_url: string;
         api_key: string;
         is_active?: boolean;
@@ -134,6 +133,21 @@ export const apiProvidersApi = baseApi.injectEndpoints({
       transformResponse: () => ({ ok: true }),
       invalidatesTags: [{ type: "ApiProviders", id: "LIST" }],
     }),
+
+    // NEW: balance check
+    checkApiProviderBalance: b.mutation<
+      { success: true; balance: number | null; currency: string | null; last_balance_check: string },
+      { id: string }
+    >({
+      query: ({ id }) => ({
+        url: `/admin/api-providers/${id}/check-balance`,
+        method: "POST",
+      }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: "ApiProviders", id },
+        { type: "ApiProviders", id: "LIST" },
+      ],
+    }),
   }),
   overrideExisting: true,
 });
@@ -144,4 +158,5 @@ export const {
   useCreateApiProviderMutation,
   useUpdateApiProviderMutation,
   useDeleteApiProviderMutation,
+  useCheckApiProviderBalanceMutation, // <-- NEW
 } = apiProvidersApi;

@@ -42,8 +42,22 @@ export const siteSettingsAdminApi = baseApi.injectEndpoints({
     listSiteSettingsAdmin: b.query<SiteSetting[], ListParams | void>({
       query: (params) => {
         if (!params) return { url: PUBLIC_BASE };
-        const { keys, ...rest } = params;
-        return { url: PUBLIC_BASE, params: { ...rest, keys: keys?.length ? keys.join(",") : undefined } };
+        const { keys, sort, order, ...rest } = params;
+
+        // public GET /site_settings beklediği paramlara çevir:
+        // - keys[] -> key_in
+        // - sort+order -> order="col.dir"
+        const key_in = keys && keys.length ? keys.join(",") : undefined;
+        const combinedOrder =
+          sort && order ? `${sort}.${order}` :
+          sort ? `${sort}.asc` :
+          order ? `key.${order}` :
+          undefined;
+
+        return {
+          url: PUBLIC_BASE,
+          params: { ...rest, key_in, order: combinedOrder },
+        };
       },
       transformResponse: (res: unknown): SiteSetting[] =>
         Array.isArray(res) ? (res as SiteSettingRow[]).map(norm) : [],

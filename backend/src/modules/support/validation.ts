@@ -1,9 +1,21 @@
-// src/modules/support/validation.ts
 import { z } from "zod";
 
-export const SupportTicketStatus = z.enum(["open", "in_progress", "waiting_response", "closed"]);
-export const SupportTicketPriority = z.enum(["low", "medium", "high", "urgent"]);
+/* --------- ortak enum'lar --------- */
+export const SupportTicketStatus = z.enum([
+  "open",
+  "in_progress",
+  "waiting_response",
+  "closed",
+]);
 
+export const SupportTicketPriority = z.enum([
+  "low",
+  "medium",
+  "high",
+  "urgent",
+]);
+
+/* --------- public şemalar --------- */
 export const listTicketsQuerySchema = z.object({
   user_id: z.string().uuid().optional(),
   status: SupportTicketStatus.optional(),
@@ -24,13 +36,15 @@ export const createTicketBodySchema = z.object({
   category: z.string().trim().max(40).optional().nullable(),
 });
 
-export const updateTicketBodySchema = z.object({
-  subject: z.string().trim().min(1).max(255).optional(),
-  message: z.string().trim().min(1).max(2000).optional(),
-  status: SupportTicketStatus.optional(),
-  priority: SupportTicketPriority.optional(),
-  category: z.string().trim().max(40).optional().nullable(), // yok sayılacak
-}).refine((v) => Object.keys(v).length > 0, { message: "Boş patch gönderilemez." });
+export const updateTicketBodySchema = z
+  .object({
+    subject: z.string().trim().min(1).max(255).optional(),
+    message: z.string().trim().min(1).max(2000).optional(),
+    status: SupportTicketStatus.optional(),
+    priority: SupportTicketPriority.optional(),
+    category: z.string().trim().max(40).optional().nullable(), // yok sayılacak
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "Boş patch gönderilemez." });
 
 export const createReplyBodySchema = z.object({
   ticket_id: z.string().uuid(),
@@ -38,3 +52,15 @@ export const createReplyBodySchema = z.object({
   message: z.string().trim().min(1).max(2000),
   is_admin: z.boolean().optional(), // non-admin için zorla false
 });
+
+/* --------- admin şemaları (ayrı export) --------- */
+// Admin tarafı public ile birebir aynı kuralları kullanıyor.
+// İstersen farklılaştırmak için ayrı şemalar tanımlayabilirsin.
+export const adminListQuerySchema = listTicketsQuerySchema;
+export const adminUpdateTicketBodySchema = updateTicketBodySchema;
+export const adminCreateReplyBodySchema = z.object({
+  ticket_id: z.string().uuid(),
+  user_id: z.string().uuid().optional().nullable(),
+  message: z.string().trim().min(1).max(2000),
+});
+export const adminActionSchema = z.enum(["close", "reopen"]);
