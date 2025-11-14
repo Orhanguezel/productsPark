@@ -7,14 +7,42 @@ import {
   adminUpdateCoupon,
   adminDeleteCoupon,
   adminToggleCoupon,
+  AdminListCouponsRoute, // 🆕 bunu da import et
 } from "./admin.controller";
 
 export async function registerCouponsAdmin(app: FastifyInstance) {
   const base = "/admin/coupons";
-  app.get(base,                   { preHandler: [requireAuth] }, adminListCoupons);
-  app.get(`${base}/:id`,          { preHandler: [requireAuth] }, adminGetCoupon);
-  app.post(base,                  { preHandler: [requireAuth] }, adminCreateCoupon);
-  app.patch(`${base}/:id`,        { preHandler: [requireAuth] }, adminUpdateCoupon);
-  app.post(`${base}/:id/:action`, { preHandler: [requireAuth] }, adminToggleCoupon);
-  app.delete(`${base}/:id`,       { preHandler: [requireAuth] }, adminDeleteCoupon);
+
+  // 🆕 Burada generic veriyoruz
+  app.get<AdminListCouponsRoute>(
+    base,
+    { preHandler: [requireAuth] },
+    adminListCoupons,
+  );
+
+  app.get(
+    `${base}/:id`,
+    { preHandler: [requireAuth] },
+    adminGetCoupon,
+  );
+  app.post(
+    base,
+    { preHandler: [requireAuth] },
+    adminCreateCoupon,
+  );
+  app.patch(
+    `${base}/:id`,
+    { preHandler: [requireAuth] },
+    adminUpdateCoupon,
+  );
+  app.post(
+    `${base}/:id/:action`,
+    { preHandler: [requireAuth] },
+    adminToggleCoupon,
+  );
+  app.delete(
+    `${base}/:id`,
+    { preHandler: [requireAuth] },
+    adminDeleteCoupon,
+  );
 }

@@ -73,7 +73,12 @@ const listQuery = z.object({
   sort: z.enum(["created_at", "updated_at"]).optional().default("created_at"),
   order: z.enum(["asc", "desc"]).optional().default("desc"),
 });
-type ListQuery = z.infer<typeof listQuery>;
+export type ListQuery = z.infer<typeof listQuery>;
+
+// 🆕 Route generic tipini dışa aç
+export type AdminListCouponsRoute = {
+  Querystring: ListQuery;
+};
 
 function resolveOrder(
   s?: "created_at" | "updated_at",
@@ -85,7 +90,7 @@ function resolveOrder(
 }
 
 /** GET /admin/coupons */
-export const adminListCoupons: RouteHandler<{ Querystring: ListQuery }> =
+export const adminListCoupons: RouteHandler<AdminListCouponsRoute> =
   async (req, reply) => {
     const q = listQuery.parse((req.query ?? {}) as Record<string, unknown>);
     const { col, dir } = resolveOrder(q.sort, q.order);
@@ -93,7 +98,6 @@ export const adminListCoupons: RouteHandler<{ Querystring: ListQuery }> =
     let qb = db.select().from(coupons).$dynamic();
     const where: unknown[] = [];
 
-    // ✅ "1", "0", "true", "false" vs hepsi buradan geçer
     const active = toBoolOptional(q.is_active);
     if (active !== undefined) where.push(eq(coupons.is_active, active));
     if (q.q && q.q.trim()) where.push(like(coupons.code, `%${q.q.trim()}%`));
@@ -108,7 +112,6 @@ export const adminListCoupons: RouteHandler<{ Querystring: ListQuery }> =
     const rows = await qb;
     return reply.send(rows.map(mapRow));
   };
-
 
 /** GET /admin/coupons/:id */
 export const adminGetCoupon: RouteHandler = async (req, reply) => {
