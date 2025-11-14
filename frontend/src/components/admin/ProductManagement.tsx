@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/components/admin/products/ProductManagement.tsx
+// =============================================================
+
+"use client";
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,120 +35,124 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface Product {
-  id: string;
+// ---- RTK Admin endpoints ----
+import {
+  useListProductsAdminQuery,
+  useCreateProductAdminMutation,
+  useUpdateProductAdminMutation,
+  useDeleteProductAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
+import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
+
+// ---- Types ----
+import type {
+  ProductAdmin,
+  CategoryRow,
+  UpsertProductBody,
+  PatchProductBody,
+} from "@/integrations/metahub/db/types/products";
+
+type FormState = {
   name: string;
   slug: string;
   price: number;
-  original_price: number | null;
+  original_price: number;
   stock_quantity: number;
+  category_id: string;
+  image_url: string;
+  short_description: string;
+  description: string;
   is_active: boolean;
-  category_id: string | null;
-  image_url: string | null;
-  short_description: string | null;
-  created_at: string;
-  categories?: {
-    id: string;
-    name: string;
-  };
-}
+  show_on_homepage: boolean;
+  review_count: number;
+};
 
-interface Category {
-  id: string;
-  name: string;
-  is_featured?: boolean;
-}
+const initialFormState: FormState = {
+  name: "",
+  slug: "",
+  price: 0,
+  original_price: 0,
+  stock_quantity: 0,
+  category_id: "",
+  image_url: "",
+  short_description: "",
+  description: "",
+  is_active: true,
+  show_on_homepage: false,
+  review_count: 0,
+};
 
 export const ProductManagement = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Server data (RTK)
+  const {
+    data: products = [],
+    isFetching: loadingProducts,
+    refetch: refetchProducts,
+  } = useListProductsAdminQuery();
+  const {
+    data: categories = [],
+    isFetching: loadingCategories,
+  } = useListCategoriesAdminQuery();
+
+  // Mutations
+  const [createProduct, { isLoading: creating }] =
+    useCreateProductAdminMutation();
+  const [updateProduct, { isLoading: updating }] =
+    useUpdateProductAdminMutation();
+  const [deleteProduct, { isLoading: deleting }] =
+    useDeleteProductAdminMutation();
+
+  // Local UI state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    slug: "",
-    price: 0,
-    original_price: 0,
-    stock_quantity: 0,
-    category_id: "",
-    image_url: "",
-    short_description: "",
-    description: "",
-    is_active: true,
-    show_on_homepage: false,
-    review_count: 0,
-  });
+  const [editingProduct, setEditingProduct] = useState<ProductAdmin | null>(
+    null
+  );
+  const [formData, setFormData] = useState<FormState>(initialFormState);
 
-  useEffect(() => {
-    fetchProducts();
-    fetchCategories();
-  }, []);
-
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("products")
-        .select(`
-          *,
-          categories (
-            id,
-            name
-          )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("categories")
-        .select("id, name, is_featured")
-        .order("name");
-
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    }
+  const resetForm = () => {
+    setEditingProduct(null);
+    setFormData(initialFormState);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      const productData = {
-        ...formData,
-        original_price: formData.original_price || null,
+      const payload: UpsertProductBody & Partial<PatchProductBody> = {
+        name: formData.name.trim(),
+        slug: formData.slug.trim(),
+        price: Number(formData.price ?? 0),
+        original_price:
+          formData.original_price && !Number.isNaN(formData.original_price)
+            ? Number(formData.original_price)
+            : null,
+        stock_quantity: Number(formData.stock_quantity ?? 0),
         category_id: formData.category_id || null,
+        image_url: formData.image_url || null,
+        short_description: formData.short_description || null,
+        description: formData.description || null,
+        is_active: !!formData.is_active,
+        show_on_homepage: !!formData.show_on_homepage,
+        review_count: Number(formData.review_count ?? 0),
       };
 
       if (editingProduct) {
-        const { error } = await metahub
-          .from("products")
-          .update(productData)
-          .eq("id", editingProduct.id);
-
-        if (error) throw error;
+        // UPDATE
+        await updateProduct({
+          id: editingProduct.id,
+          body: payload as PatchProductBody,
+        }).unwrap();
         toast({ title: "Başarılı", description: "Ürün güncellendi." });
       } else {
-        const { error } = await metahub.from("products").insert([productData]);
-
-        if (error) throw error;
+        // CREATE
+        await createProduct(payload as UpsertProductBody).unwrap();
         toast({ title: "Başarılı", description: "Ürün oluşturuldu." });
       }
 
       setDialogOpen(false);
       resetForm();
-      fetchProducts();
+      // RTK tags ile invalidate ediyorsan bu şart değil, ama garanti olsun:
+      refetchProducts();
     } catch (error) {
       console.error("Error saving product:", error);
       toast({
@@ -158,11 +167,9 @@ export const ProductManagement = () => {
     if (!confirm("Bu ürünü silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await metahub.from("products").delete().eq("id", id);
-
-      if (error) throw error;
+      await deleteProduct(id).unwrap();
       toast({ title: "Başarılı", description: "Ürün silindi." });
-      fetchProducts();
+      refetchProducts();
     } catch (error) {
       console.error("Error deleting product:", error);
       toast({
@@ -173,42 +180,26 @@ export const ProductManagement = () => {
     }
   };
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = (product: ProductAdmin) => {
     setEditingProduct(product);
     setFormData({
-      name: product.name,
-      slug: product.slug,
-      price: product.price,
-      original_price: product.original_price || 0,
-      stock_quantity: product.stock_quantity,
-      category_id: product.category_id || "",
-      image_url: product.image_url || "",
-      short_description: product.short_description || "",
-      description: "",
-      is_active: product.is_active,
-      show_on_homepage: (product as any).show_on_homepage || false,
-      review_count: (product as any).review_count || 0,
+      name: product.name ?? "",
+      slug: product.slug ?? "",
+      price: Number(product.price ?? 0),
+      original_price: Number(product.original_price ?? 0),
+      stock_quantity: Number(product.stock_quantity ?? 0),
+      category_id: (product.category_id as string) || "",
+      image_url: (product.image_url as string) || "",
+      short_description: (product.short_description as string) || "",
+      description: (product as any).description || "",
+      is_active: !!product.is_active,
+      show_on_homepage: !!(product as any).show_on_homepage,
+      review_count: Number((product as any).review_count ?? 0),
     });
     setDialogOpen(true);
   };
 
-  const resetForm = () => {
-    setEditingProduct(null);
-    setFormData({
-      name: "",
-      slug: "",
-      price: 0,
-      original_price: 0,
-      stock_quantity: 0,
-      category_id: "",
-      image_url: "",
-      short_description: "",
-      description: "",
-      is_active: true,
-      show_on_homepage: false,
-      review_count: 0,
-    });
-  };
+  const loading = loadingProducts || loadingCategories || creating || updating || deleting;
 
   if (loading) return <div>Yükleniyor...</div>;
 
@@ -218,7 +209,11 @@ export const ProductManagement = () => {
         <h3 className="text-lg font-semibold">Ürün Yönetimi</h3>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm} className="gradient-primary">
+            <Button
+              onClick={resetForm}
+              className="gradient-primary"
+              disabled={creating || updating}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Yeni Ürün Ekle
             </Button>
@@ -261,7 +256,10 @@ export const ProductManagement = () => {
                     step="0.01"
                     value={formData.price}
                     onChange={(e) =>
-                      setFormData({ ...formData, price: parseFloat(e.target.value) })
+                      setFormData({
+                        ...formData,
+                        price: parseFloat(e.target.value || "0"),
+                      })
                     }
                     required
                   />
@@ -276,7 +274,7 @@ export const ProductManagement = () => {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        original_price: parseFloat(e.target.value),
+                        original_price: parseFloat(e.target.value || "0"),
                       })
                     }
                   />
@@ -292,7 +290,7 @@ export const ProductManagement = () => {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        stock_quantity: parseInt(e.target.value),
+                        stock_quantity: parseInt(e.target.value || "0", 10),
                       })
                     }
                     required
@@ -323,12 +321,12 @@ export const ProductManagement = () => {
                   <Input
                     id="review_count"
                     type="number"
-                    min="0"
+                    min={0}
                     value={formData.review_count}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        review_count: parseInt(e.target.value) || 0,
+                        review_count: parseInt(e.target.value || "0", 10),
                       })
                     }
                     placeholder="Örn: 150"
@@ -351,7 +349,10 @@ export const ProductManagement = () => {
                   id="short_description"
                   value={formData.short_description}
                   onChange={(e) =>
-                    setFormData({ ...formData, short_description: e.target.value })
+                    setFormData({
+                      ...formData,
+                      short_description: e.target.value,
+                    })
                   }
                   rows={2}
                 />
@@ -362,7 +363,10 @@ export const ProductManagement = () => {
                   id="description"
                   value={formData.description}
                   onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                    setFormData({
+                      ...formData,
+                      description: e.target.value,
+                    })
                   }
                   rows={5}
                 />
@@ -377,16 +381,24 @@ export const ProductManagement = () => {
                 />
                 <Label htmlFor="is_active">Aktif</Label>
               </div>
-              {categories.find(c => c.id === formData.category_id && (c as any).is_featured) && (
+              {categories.find(
+                (c: CategoryRow) =>
+                  c.id === formData.category_id && !!(c as any).is_featured
+              ) && (
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="show_on_homepage"
                     checked={formData.show_on_homepage}
                     onCheckedChange={(checked) =>
-                      setFormData({ ...formData, show_on_homepage: checked })
+                      setFormData({
+                        ...formData,
+                        show_on_homepage: checked,
+                      })
                     }
                   />
-                  <Label htmlFor="show_on_homepage">Bu Ürünü Anasayfada Göster (Kategori öne çıkan)</Label>
+                  <Label htmlFor="show_on_homepage">
+                    Bu Ürünü Anasayfada Göster (Kategori öne çıkan)
+                  </Label>
                 </div>
               )}
               <div className="flex gap-2 justify-end">
@@ -400,7 +412,11 @@ export const ProductManagement = () => {
                 >
                   İptal
                 </Button>
-                <Button type="submit" className="gradient-primary">
+                <Button
+                  type="submit"
+                  className="gradient-primary"
+                  disabled={creating || updating}
+                >
                   {editingProduct ? "Güncelle" : "Oluştur"}
                 </Button>
               </div>
@@ -425,12 +441,12 @@ export const ProductManagement = () => {
             <TableRow key={product.id}>
               <TableCell className="font-medium">{product.name}</TableCell>
               <TableCell>
-                {product.categories?.name || (
+                {product.categories?.name ?? (
                   <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
-              <TableCell>₺{product.price}</TableCell>
-              <TableCell>{product.stock_quantity}</TableCell>
+              <TableCell>₺{Number(product.price ?? 0)}</TableCell>
+              <TableCell>{product.stock_quantity ?? 0}</TableCell>
               <TableCell>
                 {product.is_active ? (
                   <span className="text-green-600">Aktif</span>

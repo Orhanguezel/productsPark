@@ -4,8 +4,10 @@ import {
   getMenuItemById,
 } from './controller';
 
+const BASE = '/menu_items';
+
 export async function registerMenuItems(app: FastifyInstance) {
   // Varsayılan olarak public; ekstra config vermiyoruz.
-  app.get('/menu_items', listMenuItems);
-  app.get('/menu_items/:id', getMenuItemById);
+  app.get(`${BASE}`, listMenuItems);
+  app.get(`${BASE}/:id`, getMenuItemById);
 }

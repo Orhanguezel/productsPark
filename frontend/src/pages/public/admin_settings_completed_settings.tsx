@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, Plus, Edit, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { TopbarManagement } from "@/components/admin/TopbarManagement";
-import PopupManagement from "./admin/PopupManagement";
+import PopupManagement from "../admin/PopupManagement";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";

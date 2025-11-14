@@ -11,11 +11,15 @@ import type {
 const toBool = (v: unknown): boolean =>
   v === true || v === "true" || v === 1 || v === "1";
 
+// BE (public) → FE normalize
 const normalize = (r: ApiTopbarSetting): TopbarSetting => ({
   id: r.id,
   is_active: toBool(r.is_active),
   message: r.message ?? "",
   coupon_code: r.coupon_code ?? null,
+  coupon_id: r.coupon_id ?? null,
+  coupon_title: r.coupon_title ?? null,
+  coupon_content_html: r.coupon_content_html ?? null,
   link_url: r.link_url ?? null,
   link_text: r.link_text ?? null,
   show_ticker: r.show_ticker == null ? false : toBool(r.show_ticker),
@@ -23,11 +27,17 @@ const normalize = (r: ApiTopbarSetting): TopbarSetting => ({
   updated_at: r.updated_at,
 });
 
+// FE public liste parametreleri → BE querystring
 const toParams = (p?: TopbarPublicListParams | void) => {
   if (!p) return undefined;
   const params: Record<string, string> = {};
-  if (typeof p.is_active === "boolean") params.is_active = String(p.is_active ? 1 : 0);
-  if (p.order) params.order = p.order;
+  if (typeof p.is_active === "boolean") {
+    params.is_active = p.is_active ? "1" : "0";
+  }
+  if (p.order) {
+    // BE tarafında "created_at.desc" gibi string bekliyoruz
+    params.order = `created_at.${p.order}`;
+  }
   if (p.limit != null) params.limit = String(p.limit);
   if (p.offset != null) params.offset = String(p.offset);
   return params;
@@ -61,7 +71,9 @@ export const topbarSettingsApi = baseApi_topbar.injectEndpoints({
         params: { is_active: 1, limit: 1 },
       }),
       transformResponse: (res: unknown): TopbarSetting | null => {
-        const rows = Array.isArray(res) ? (res as ApiTopbarSetting[]) : [];
+        const rows = Array.isArray(res)
+          ? (res as ApiTopbarSetting[])
+          : [];
         return rows.length ? normalize(rows[0]!) : null;
       },
       providesTags: [{ type: "TopbarSettings", id: "ACTIVE" }],

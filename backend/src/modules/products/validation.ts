@@ -163,3 +163,16 @@ export const productStockCreateSchema = z.object({
 export const productStockUpdateSchema = productStockCreateSchema.partial();
 export type ProductStockCreateInput = z.infer<typeof productStockCreateSchema>;
 export type ProductStockUpdateInput = z.infer<typeof productStockUpdateSchema>;
+
+/* ----------------- SPEC ----------------- */
+export const productSpecCreateSchema = z.object({
+  id: z.string().uuid().optional(),
+  product_id: z.string().uuid(),
+  name: z.string().min(1).max(255),
+  value: z.string().min(1),
+  category: z.enum(["physical", "material", "service", "custom"]).default("custom"),
+  order_num: z.coerce.number().int().min(0).optional().default(0),
+});
+export const productSpecUpdateSchema = productSpecCreateSchema.partial();
+export type ProductSpecCreateInput = z.infer<typeof productSpecCreateSchema>;
+export type ProductSpecUpdateInput = z.infer<typeof productSpecUpdateSchema>;

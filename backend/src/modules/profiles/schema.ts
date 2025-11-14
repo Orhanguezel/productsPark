@@ -1,3 +1,5 @@
+// src/modules/profiles/schema.ts
+
 import {
   mysqlTable,
   char,

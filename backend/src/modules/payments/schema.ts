@@ -1,3 +1,5 @@
+// src/modules/payments/schema.ts
+
 import {
   mysqlTable,
   char,

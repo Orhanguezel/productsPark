@@ -23,7 +23,6 @@ export * from "./endpoints/product_stock.endpoints";
 export * from "./endpoints/wallet.endpoints";
 export * from "./endpoints/site_settings.endpoints";
 export * from "./endpoints/payment_providers.endpoints";
-export * from "./endpoints/product_variants.endpoints";
 export * from "./endpoints/menu_items.endpoints";
 export * from "./endpoints/footer_sections.endpoints";
 export * from "./endpoints/custom_pages.endpoints";

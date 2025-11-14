@@ -2,11 +2,11 @@
 // FILE: src/components/layout/Topbar.tsx
 // =============================================================
 "use client";
+
 import { useState } from "react";
-import { Copy, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button"; // (isteğe bağlı, sadece stil için)
 import {
   useGetActiveTopbarQuery,
 } from "@/integrations/metahub/rtk/endpoints/topbar_settings.endpoints";
@@ -20,57 +20,88 @@ export const Topbar = () => {
   // Admin sayfalarında gösterme
   if (location.pathname.startsWith("/admin")) return null;
 
-  // Hata, yükleme veya görünür değilse gösterme
-  if (isError || isFetching || !settings || !settings.is_active || !isVisible) return null;
+  // Hata, yükleme, kayıt yok, pasif, kapatılmış ise gösterme
+  if (
+    isError ||
+    isFetching ||
+    !settings ||
+    !settings.is_active ||
+    !isVisible
+  ) {
+    return null;
+  }
 
-  const handleCopyCoupon = async () => {
-    if (!settings?.coupon_code) return;
-    try {
-      await navigator.clipboard.writeText(settings.coupon_code);
-      toast({
-        title: "Kupon kodu kopyalandı!",
-        description: settings.coupon_code,
-      });
-    } catch (err) {
-      // sessizce yut
-      // console.error("Failed to copy:", err);
-    }
-  };
+  // Kuponu topbarda göstermiyoruz; sadece linke query olarak ekleyebiliriz
+  const hasCoupon = !!settings.coupon_code;
+  const hasLink = !!settings.link_url;
+
+  const linkHref = (() => {
+    if (!hasLink) return undefined;
+    if (!hasCoupon) return settings.link_url!;
+    const base = settings.link_url!;
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}coupon=${encodeURIComponent(
+      settings.coupon_code!,
+    )}`;
+  })();
 
   const handleClose = () => setIsVisible(false);
 
+  const showTicker = !!settings.show_ticker;
+
   return (
-    <div className="relative w-full py-2 px-4 text-center text-sm font-medium bg-primary text-primary-foreground">
-      <div className="container mx-auto flex items-center justify-center gap-4 flex-wrap">
-        <span>{settings.message}</span>
+    <>
+      {/* Çok hafif global CSS: sadece topbar kaydırma animasyonu */}
+      {showTicker && (
+        <style>
+          {`
+            @keyframes topbar-marquee {
+              0% { transform: translateX(100%); }
+              100% { transform: translateX(-100%); }
+            }
+            .topbar-marquee-inner {
+              display: inline-block;
+              white-space: nowrap;
+              padding-left: 100%;
+              animation: topbar-marquee 18s linear infinite;
+            }
+          `}
+        </style>
+      )}
 
-        {settings.coupon_code && (
+      <div className="relative w-full py-2 px-4 text-sm font-medium bg-primary text-primary-foreground">
+        <div className="container mx-auto flex items-center justify-center gap-4 flex-wrap">
+          {/* Mesaj alanı */}
+          <div className={showTicker ? "overflow-hidden flex-1" : "flex-1 text-center"}>
+            {showTicker ? (
+              <div className="topbar-marquee-inner">
+                {settings.message}
+              </div>
+            ) : (
+              <span>{settings.message}</span>
+            )}
+          </div>
+
+          {/* Detay linki (kupon kodu query ile gider, ama bar’da görünmez) */}
+          {linkHref && (
+            <a
+              href={linkHref}
+              className="inline-flex items-center px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 transition-colors underline"
+            >
+              {settings.link_text || "Detaylar"}
+            </a>
+          )}
+
+          {/* Kapat butonu */}
           <button
-            onClick={handleCopyCoupon}
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 transition-colors"
+            onClick={handleClose}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-white/20 rounded transition-colors"
+            aria-label="Kapat"
           >
-            <span className="font-bold">{settings.coupon_code}</span>
-            <Copy className="h-3 w-3" />
+            <X className="h-4 w-4" />
           </button>
-        )}
-
-        {settings.link_url && settings.link_text && (
-          <a
-            href={settings.link_url}
-            className="inline-flex items-center px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 transition-colors underline"
-          >
-            {settings.link_text}
-          </a>
-        )}
-
-        <button
-          onClick={handleClose}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-white/20 rounded transition-colors"
-          aria-label="Kapat"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 };

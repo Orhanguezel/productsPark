@@ -1,41 +1,38 @@
 // =============================================================
 // FILE: src/modules/products/admin.controller.ts
+// CORE PRODUCT + BULK + TOGGLES + STOCK + CATEGORIES
 // =============================================================
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import { db } from "@/db/client";
 import { and, desc, eq, like, sql, asc, inArray, or } from "drizzle-orm";
-import {
-  products,
-  productFaqs,
-  productOptions,
-  productReviews,
-  productStock,
-} from "./schema";
+import { products, productStock } from "./schema";
 import { categories } from "@/modules/categories/schema";
-import {
-  productCreateSchema,
-  productUpdateSchema,
-  productFaqCreateSchema,
-  productReviewCreateSchema,
-} from "./validation";
-
+import { productCreateSchema, productUpdateSchema } from "./validation";
 /* storage */
 import { storageAssets } from "@/modules/storage/schema";
 
-
-
 const now = () => new Date();
+
+// number helper
 const toNumber = (x: any) =>
   x === null || x === undefined ? x : Number.isNaN(Number(x)) ? x : Number(x);
-const toBool = (x: any) => (typeof x === "boolean" ? x : Number(x) === 1);
 
+// bool helper
+const toBool = (x: any) =>
+  typeof x === "boolean" ? x : Number(x) === 1;
+
+// JSON parse helper
 const parseJson = <T,>(val: any): T | null => {
   if (val == null) return null;
   if (typeof val === "string") {
     const s = val.trim();
     if (!s) return null;
-    try { return JSON.parse(s) as T; } catch { return null; }
+    try {
+      return JSON.parse(s) as T;
+    } catch {
+      return null;
+    }
   }
   if (typeof val === "object") return val as T;
   return null;
@@ -72,7 +69,7 @@ function normalizeProduct(row: any) {
   if ("auto_delivery_enabled" in p) p.auto_delivery_enabled = b(p.auto_delivery_enabled);
   if ("pre_order_enabled" in p) p.pre_order_enabled = b(p.pre_order_enabled);
 
-  // show_on_homepage alias
+  // FE alias
   p.show_on_homepage = "show_on_homepage" in p ? b(p.show_on_homepage) : b(p.is_featured);
   return p;
 }
@@ -90,13 +87,13 @@ type MinimalAsset = {
 type AssetRow = {
   id: string;
   provider_public_id: string | null;
-  url: string | null; // DB'de nullable olabilir
+  url: string | null;
 };
 
 async function fetchAssetsByAnyId(ids: string[]): Promise<Map<string, MinimalAsset>> {
   if (!ids?.length) return new Map();
 
-  const keys = Array.from(new Set(ids.filter(Boolean))).slice(0, 500); // güvenli limit
+  const keys = Array.from(new Set(ids.filter(Boolean))).slice(0, 500);
   if (!keys.length) return new Map();
 
   const rows: AssetRow[] = await db
@@ -115,9 +112,12 @@ async function fetchAssetsByAnyId(ids: string[]): Promise<Map<string, MinimalAss
 
   const map = new Map<string, MinimalAsset>();
   for (const r of rows) {
-    if (!r.url) continue; // ✅ type guard: null url'leri atla
-    const a: MinimalAsset = { id: r.id, provider_public_id: r.provider_public_id, url: r.url };
-    // hem asset id, hem provider_public_id ile erişilebilir olsun
+    if (!r.url) continue;
+    const a: MinimalAsset = {
+      id: r.id,
+      provider_public_id: r.provider_public_id,
+      url: r.url,
+    };
     map.set(r.id, a);
     if (r.provider_public_id) map.set(r.provider_public_id, a);
   }
@@ -128,16 +128,10 @@ async function fetchAssetsByAnyId(ids: string[]): Promise<Map<string, MinimalAss
 async function hydrateAssetsFromStorage<T extends Record<string, any>>(obj: T) {
   const patch: Record<string, any> = {};
 
-  // SINGLE: featured_image_asset_id → featured_image url
   const singleId = obj.featured_image_asset_id as string | undefined | null;
-  // ARRAY: gallery_asset_ids → gallery_urls
   const galleryIds = (obj.gallery_asset_ids as string[] | undefined | null) || [];
 
-  const ids = [
-    ...(singleId ? [singleId] : []),
-    ...galleryIds,
-  ];
-
+  const ids = [...(singleId ? [singleId] : []), ...galleryIds];
   if (!ids.length) return patch;
 
   const assetMap = await fetchAssetsByAnyId(ids);
@@ -146,7 +140,6 @@ async function hydrateAssetsFromStorage<T extends Record<string, any>>(obj: T) {
     const a = assetMap.get(singleId);
     if (a?.url) {
       patch.featured_image = a.url;
-      // featured_image_asset_id override etmiyoruz; FE ne gönderdiyse onu saklıyoruz
     }
   }
 
@@ -154,14 +147,14 @@ async function hydrateAssetsFromStorage<T extends Record<string, any>>(obj: T) {
     const urls = galleryIds
       .map((k) => assetMap.get(k)?.url)
       .filter((u): u is string => !!u);
-    patch.gallery_urls = urls.length ? urls : null; // boşsa null set edelim
+    patch.gallery_urls = urls.length ? urls : null;
   }
 
   return patch;
 }
 
 /* ============================================= */
-/* PRODUCTS (ADMIN)                              */
+/* PRODUCTS (ADMIN – CORE CRUD)                  */
 /* ============================================= */
 
 export const adminListProducts: RouteHandler = async (req, reply) => {
@@ -182,11 +175,17 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
   if (q.q) conds.push(like(products.name, `%${q.q}%`));
   if (q.category_id) conds.push(eq(products.category_id, q.category_id));
   if (q.is_active !== undefined) {
-    const v = typeof q.is_active === "boolean" ? q.is_active : q.is_active === "1" || q.is_active === "true";
+    const v =
+      typeof q.is_active === "boolean"
+        ? q.is_active
+        : q.is_active === "1" || q.is_active === "true";
     conds.push(eq(products.is_active, (v ? 1 : 0) as any));
   }
   if (q.show_on_homepage !== undefined) {
-    const v = typeof q.show_on_homepage === "boolean" ? q.show_on_homepage : q.show_on_homepage === "1" || q.show_on_homepage === "true";
+    const v =
+      typeof q.show_on_homepage === "boolean"
+        ? q.show_on_homepage
+        : q.show_on_homepage === "1" || q.show_on_homepage === "true";
     conds.push(eq(products.is_featured, (v ? 1 : 0) as any));
   }
   if (q.min_price) conds.push(sql`${products.price} >= ${q.min_price}`);
@@ -206,7 +205,8 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
   } as const;
   const sortKey = q.sort && colMap[q.sort] ? q.sort : "created_at";
   const dir: "asc" | "desc" = q.order === "asc" ? "asc" : "desc";
-  const orderExpr = dir === "asc" ? asc(colMap[sortKey]) : desc(colMap[sortKey]);
+  const orderExpr =
+    dir === "asc" ? asc(colMap[sortKey]) : desc(colMap[sortKey]);
 
   const baseSel = db.select().from(products);
   const dataQuery = (whereExpr ? baseSel.where(whereExpr) : baseSel)
@@ -220,21 +220,38 @@ export const adminListProducts: RouteHandler = async (req, reply) => {
 
 export const adminGetProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
-  const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
-  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+  const rows = await db
+    .select()
+    .from(products)
+    .where(eq(products.id, id))
+    .limit(1);
+  if (!rows.length)
+    return reply.code(404).send({ error: { message: "not_found" } });
   return reply.send(normalizeProduct(rows[0]));
 };
 
 export const adminCreateProduct: RouteHandler = async (req, reply) => {
   try {
     const input = productCreateSchema.parse(req.body ?? {});
-    // FK guard
+
+    // FK guard (category)
     if (input.category_id) {
-      const [cat] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, input.category_id)).limit(1);
-      if (!cat) return reply.code(409).send({ error: { message: "category_not_found", details: input.category_id } });
+      const [cat] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.id, input.category_id))
+        .limit(1);
+      if (!cat)
+        return reply
+          .code(409)
+          .send({
+            error: {
+              message: "category_not_found",
+              details: input.category_id,
+            },
+          });
     }
 
-    // 🔗 Storage hydrate (featured_image / gallery_urls)
     const hydrated = await hydrateAssetsFromStorage(input);
 
     const id = input.id ?? randomUUID();
@@ -246,18 +263,30 @@ export const adminCreateProduct: RouteHandler = async (req, reply) => {
       updated_at: now(),
     });
 
-    const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id))
+      .limit(1);
     return reply.code(201).send(normalizeProduct(row));
   } catch (e: any) {
     const code = e?.cause?.code || e?.code;
     if (e?.name === "ZodError") {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     if (code === "ER_NO_REFERENCED_ROW_2" || code === 1452) {
-      return reply.code(409).send({ error: { message: "fk_category_not_found" } });
+      return reply
+        .code(409)
+        .send({ error: { message: "fk_category_not_found" } });
     }
     if (code === "ER_DUP_ENTRY" || code === 1062) {
-      return reply.code(409).send({ error: { message: "duplicate_slug" } });
+      return reply
+        .code(409)
+        .send({ error: { message: "duplicate_slug" } });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -270,30 +299,54 @@ export const adminUpdateProduct: RouteHandler = async (req, reply) => {
     const patch = productUpdateSchema.parse(req.body ?? {});
 
     if (patch.category_id) {
-      const [cat] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, patch.category_id)).limit(1);
-      if (!cat) return reply.code(409).send({ error: { message: "category_not_found", details: patch.category_id } });
+      const [cat] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.id, patch.category_id))
+        .limit(1);
+      if (!cat)
+        return reply
+          .code(409)
+          .send({
+            error: {
+              message: "category_not_found",
+              details: patch.category_id,
+            },
+          });
     }
 
-    // 🔗 Storage hydrate (yalnızca ilgili alanlar patch’te varsa dokun)
     const hydrated = await hydrateAssetsFromStorage(patch);
 
     await (db.update(products) as any)
       .set({ ...patch, ...hydrated, updated_at: now() })
       .where(eq(products.id, id));
 
-    const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    const rows = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id))
+      .limit(1);
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(normalizeProduct(rows[0]));
   } catch (e: any) {
     const code = e?.cause?.code || e?.code;
     if (e?.name === "ZodError") {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     if (code === "ER_NO_REFERENCED_ROW_2" || code === 1452) {
-      return reply.code(409).send({ error: { message: "fk_category_not_found" } });
+      return reply
+        .code(409)
+        .send({ error: { message: "fk_category_not_found" } });
     }
     if (code === "ER_DUP_ENTRY" || code === 1062) {
-      return reply.code(409).send({ error: { message: "duplicate_slug" } });
+      return reply
+        .code(409)
+        .send({ error: { message: "duplicate_slug" } });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -305,6 +358,10 @@ export const adminDeleteProduct: RouteHandler = async (req, reply) => {
   await (db.delete(products) as any).where(eq(products.id, id));
   return reply.code(204).send();
 };
+
+/* ============================================= */
+/* BULK + TOGGLES                                */
+/* ============================================= */
 
 export const adminBulkSetActive: RouteHandler = async (req, reply) => {
   const body = (req.body || {}) as { ids?: string[]; is_active?: boolean };
@@ -318,6 +375,7 @@ export const adminBulkSetActive: RouteHandler = async (req, reply) => {
   return reply.send({ ok: true as const });
 };
 
+// Şimdilik stub (istenirse kategori içi reorder ekleriz)
 export const adminReorderProducts: RouteHandler = async (_req, reply) => {
   return reply.send({ ok: true as const });
 };
@@ -328,102 +386,28 @@ export const adminToggleActive: RouteHandler = async (req, reply) => {
   await (db.update(products) as any)
     .set({ is_active: is_active ? 1 : 0, updated_at: now() })
     .where(eq(products.id, id));
-  const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
+  const [row] = await db
+    .select()
+    .from(products)
+    .where(eq(products.id, id))
+    .limit(1);
   return reply.send(normalizeProduct(row));
 };
 
 export const adminToggleHomepage: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
-  const { show_on_homepage } = (req.body || {}) as { show_on_homepage: boolean };
+  const { show_on_homepage } = (req.body || {}) as {
+    show_on_homepage: boolean;
+  };
   await (db.update(products) as any)
     .set({ is_featured: show_on_homepage ? 1 : 0, updated_at: now() })
     .where(eq(products.id, id));
-  const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
+  const [row] = await db
+    .select()
+    .from(products)
+    .where(eq(products.id, id))
+    .limit(1);
   return reply.send(normalizeProduct(row));
-};
-
-/* ============================================= */
-/* REVIEWS / FAQS (replace modeli + rating agg)  */
-/* ============================================= */
-
-async function recomputeRatingAndCount(productId: string) {
-  // is_active = 1 olan yorumlar
-  const [{ avgRating, cnt }] = await db
-    .select({
-      avgRating: sql<number>`COALESCE(AVG(${productReviews.rating}), 0)`,
-      cnt: sql<number>`COUNT(*)`,
-    })
-    .from(productReviews)
-    .where(and(eq(productReviews.product_id, productId), eq(productReviews.is_active, 1 as any)));
-
-  const rating = Number(avgRating || 0);
-  const reviewCount = Number(cnt || 0);
-
-  await (db.update(products) as any)
-    .set({
-      rating: sql`${rating}`,
-      review_count: sql`${reviewCount}`,
-      updated_at: now(),
-    })
-    .where(eq(products.id, productId));
-}
-
-export const adminReplaceReviews: RouteHandler = async (req, reply) => {
-  const { id } = req.params as { id: string };
-  const body = (req.body || {}) as { reviews?: any[] };
-  const items = Array.isArray(body.reviews) ? body.reviews : [];
-
-  const rowsToInsert = items.map((raw) => {
-    const parsed = productReviewCreateSchema.partial().parse(raw);
-    return {
-      id: parsed.id ?? randomUUID(),
-      product_id: id,
-      user_id: parsed.user_id ?? null,
-      rating: toNumber(parsed.rating) ?? 5,
-      comment: parsed.comment ?? null,
-      is_active: toBool(parsed.is_active ?? 1) ? 1 : 0,
-      customer_name: parsed.customer_name ?? null,
-      review_date: parsed.review_date ?? now(), // z.coerce.date çalışır
-      created_at: now(),
-      updated_at: now(),
-    };
-  });
-
-  await (db.delete(productReviews) as any).where(eq(productReviews.product_id, id));
-  if (rowsToInsert.length) {
-    await (db.insert(productReviews) as any).values(rowsToInsert);
-  }
-
-  // 🔢 rating & review_count güncelle
-  await recomputeRatingAndCount(id);
-
-  return reply.send({ ok: true as const });
-};
-
-export const adminReplaceFaqs: RouteHandler = async (req, reply) => {
-  const { id } = req.params as { id: string };
-  const body = (req.body || {}) as { faqs?: any[] };
-  const items = Array.isArray(body.faqs) ? body.faqs : [];
-
-  const rowsToInsert = items.map((raw, i) => {
-    const parsed = productFaqCreateSchema.partial().parse(raw);
-    return {
-      id: parsed.id ?? randomUUID(),
-      product_id: id,
-      question: parsed.question ?? "",
-      answer: parsed.answer ?? "",
-      display_order: toNumber(parsed.display_order ?? i) ?? i,
-      is_active: toBool(parsed.is_active ?? 1) ? 1 : 0,
-      created_at: now(),
-      updated_at: now(),
-    };
-  });
-
-  await (db.delete(productFaqs) as any).where(eq(productFaqs.product_id, id));
-  if (rowsToInsert.length) {
-    await (db.insert(productFaqs) as any).values(rowsToInsert);
-  }
-  return reply.send({ ok: true as const });
 };
 
 /* ============================================= */
@@ -433,7 +417,9 @@ export const adminReplaceFaqs: RouteHandler = async (req, reply) => {
 export const adminSetProductStock: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const { lines } = (req.body || {}) as { lines?: string[] };
-  const items = Array.isArray(lines) ? lines.map((s) => String(s).trim()).filter(Boolean) : [];
+  const items = Array.isArray(lines)
+    ? lines.map((s) => String(s).trim()).filter(Boolean)
+    : [];
 
   // önce kullanılmamış stokları sil
   await (db.delete(productStock) as any).where(
@@ -459,7 +445,9 @@ export const adminSetProductStock: RouteHandler = async (req, reply) => {
   const [{ cnt }] = await db
     .select({ cnt: sql<number>`COUNT(*)` })
     .from(productStock)
-    .where(and(eq(productStock.product_id, id), eq(productStock.is_used, 0 as any)));
+    .where(
+      and(eq(productStock.product_id, id), eq(productStock.is_used, 0 as any))
+    );
 
   await (db.update(products) as any)
     .set({ stock_quantity: Number(cnt || 0) as any, updated_at: now() })
@@ -473,7 +461,9 @@ export const adminListUsedStock: RouteHandler = async (req, reply) => {
   const rows = await db
     .select()
     .from(productStock)
-    .where(and(eq(productStock.product_id, id), eq(productStock.is_used, 1 as any)))
+    .where(
+      and(eq(productStock.product_id, id), eq(productStock.is_used, 1 as any))
+    )
     .orderBy(desc(productStock.used_at));
 
   const out = rows.map((r: any) => ({
@@ -490,7 +480,10 @@ export const adminListUsedStock: RouteHandler = async (req, reply) => {
   return reply.send(out);
 };
 
-/* CATEGORIES */
+/* ============================================= */
+/* CATEGORIES LIST                               */
+/* ============================================= */
+
 export const adminListCategories: RouteHandler = async (_req, reply) => {
   const rows = await db
     .select({

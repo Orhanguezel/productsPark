@@ -8,37 +8,14 @@ import {
   deleteCartItem,
 } from "./controller";
 
+const BASE_PATH = "/cart_items";
+
 export async function registerCartItems(app: FastifyInstance) {
-  // CORS preflight: PATCH/DELETE dahil
-  app.options("/cart_items", async (_req, reply) => {
-    reply
-      .header("Access-Control-Allow-Origin", "*")
-      .header("Access-Control-Allow-Credentials", "true")
-      .header("Access-Control-Allow-Headers", "content-type")
-      .header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-      .code(204)
-      .send();
-  });
-  app.options("/cart_items/:id", async (_req, reply) => {
-    reply
-      .header("Access-Control-Allow-Origin", "*")
-      .header("Access-Control-Allow-Credentials", "true")
-      .header("Access-Control-Allow-Headers", "content-type")
-      .header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-      .code(204)
-      .send();
-  });
+  app.get(`${BASE_PATH}`, listCartItems);          // ?user_id=... ile liste
+  app.get(`${BASE_PATH}/:id`, getCartItemById);    // tekil item
 
-  app.get("/cart_items", listCartItems);
-  app.get("/cart_items/:id", getCartItemById);
+  app.post(`${BASE_PATH}`, createCartItem);        // yeni item
 
-  app.post("/cart_items", createCartItem);
-
-  // PATCH’i hem /:id hem de ?id=... olarak kabul et
-  app.patch("/cart_items", updateCartItem);
-  app.patch("/cart_items/:id", updateCartItem);
-
-  // DELETE de benzer şekilde :id veya ?id=
-  app.delete("/cart_items", deleteCartItem);
-  app.delete("/cart_items/:id", deleteCartItem);
+  app.patch(`${BASE_PATH}/:id`, updateCartItem);   // güncelle
+  app.delete(`${BASE_PATH}/:id`, deleteCartItem);  // sil
 }

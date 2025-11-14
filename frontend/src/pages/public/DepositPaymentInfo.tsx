@@ -3,7 +3,6 @@
 // =============================================================
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,15 +12,27 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Copy, CheckCircle } from "lucide-react";
 
-/* ---------------- helpers (no-any) ---------------- */
-type SiteSettingRow = { key: string; value: unknown };
+import { metahub } from "@/integrations/metahub/client";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  useGetSiteSettingByKeyQuery,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+import {
+  useCreateWalletDepositRequestMutation,
+} from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
+import {
+  useGetMyProfileQuery,
+} from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
 
+/* ---------------- helpers (no-any) ---------------- */
 const asNumber = (v: unknown, d = 0): number => {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 };
+
 const asString = (v: unknown, d = ""): string => (v == null ? d : String(v));
+
 const asBoolLoose = (v: unknown, d = false): boolean => {
   if (typeof v === "boolean") return v;
   const s = String(v ?? "").trim().toLowerCase();
@@ -29,13 +40,12 @@ const asBoolLoose = (v: unknown, d = false): boolean => {
   if (["0", "false", "no", "n", "off", "disabled"].includes(s)) return false;
   return d;
 };
-const findSetting = (rows: SiteSettingRow[] | null | undefined, key: string) =>
-  (rows ?? []).find((r) => r.key === key)?.value;
 
 /* ---------------- component ---------------- */
 export default function DepositPaymentInfo() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
 
   const amountParam = searchParams.get("amount") ?? "";
   const amount = useMemo<number>(() => {
@@ -47,8 +57,32 @@ export default function DepositPaymentInfo() {
   const [minLimit, setMinLimit] = useState<number>(10);
   const [tgEnabled, setTgEnabled] = useState<boolean>(false);
 
-  const [loading, setLoading] = useState<boolean>(true);
-  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [
+    createWalletDepositRequest,
+    { isLoading: creatingDeposit },
+  ] = useCreateWalletDepositRequestMutation();
+
+  // ---- site_settings RTK ----
+  const {
+    data: minSetting,
+    isLoading: minLoading,
+  } = useGetSiteSettingByKeyQuery("min_balance_limit");
+  const {
+    data: bankSetting,
+    isLoading: bankLoading,
+  } = useGetSiteSettingByKeyQuery("bank_account_info");
+  const {
+    data: tgSetting,
+    isLoading: tgLoading,
+  } = useGetSiteSettingByKeyQuery("new_deposit_request_telegram");
+
+  // ---- profile RTK ----
+  const { data: meProfile } = useGetMyProfileQuery(undefined, {
+    skip: !user, // user yokken çağırma
+  });
+
+  const settingsReady = !minLoading && !bankLoading && !tgLoading;
+  const loading = authLoading || !settingsReady;
 
   useEffect(() => {
     // amount yok/bozuksa güvenli çık
@@ -58,45 +92,23 @@ export default function DepositPaymentInfo() {
       return;
     }
 
-    const run = async () => {
-      try {
-        // 1 sorguda tüm ayarları çek
-        const { data, error } = await metahub
-          .from("site_settings")
-          .select("key,value")
-          .in("key", ["min_balance_limit", "bank_account_info", "new_deposit_request_telegram"]);
+    // ayarlar henüz gelmediyse bekle
+    if (!settingsReady) return;
 
-        if (error) throw error;
-        const rows = (data ?? []) as SiteSettingRow[];
+    const min = asNumber(minSetting?.value, 10);
+    const bank = asString(bankSetting?.value, "");
+    const tg = asBoolLoose(tgSetting?.value, false);
 
-        const min = asNumber(findSetting(rows, "min_balance_limit"), 10);
-        const bank = asString(findSetting(rows, "bank_account_info"), "");
-        const tg = asBoolLoose(findSetting(rows, "new_deposit_request_telegram"), false);
+    setMinLimit(min);
+    setBankInfo(bank || null);
+    setTgEnabled(tg);
 
-        setMinLimit(min);
-        setBankInfo(bank || null);
-        setTgEnabled(tg);
-
-        if (amount < min) {
-          toast.error(`Minimum yükleme tutarı ${min} ₺'dir`);
-          navigate("/hesabim");
-          return;
-        }
-      } catch (e) {
-        console.error("Settings load error:", e);
-        // Ayarlar gelmese de sayfayı göstermeye devam edelim (default min=10)
-        if (amount < 10) {
-          toast.error(`Minimum yükleme tutarı 10 ₺'dir`);
-          navigate("/hesabim");
-          return;
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    run();
-  }, [amount, navigate]);
+    if (amount < min) {
+      toast.error(`Minimum yükleme tutarı ${min.toLocaleString("tr-TR")} ₺'dir`);
+      navigate("/hesabim");
+      return;
+    }
+  }, [amount, settingsReady, minSetting, bankSetting, tgSetting, navigate]);
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -104,51 +116,38 @@ export default function DepositPaymentInfo() {
       toast.success("Panoya kopyalandı");
     } catch {
       // Eski tarayıcı fallback
-      const ok = document.execCommand?.("copy");
+      const ok = (document.execCommand as any)?.("copy");
       if (ok) toast.success("Panoya kopyalandı");
       else toast.error("Kopyalama başarısız");
     }
   };
 
   const handlePaymentConfirm = async () => {
-    setSubmitting(true);
+    if (!user) {
+      toast.error("Oturum bulunamadı");
+      navigate("/giris");
+      return;
+    }
+
     try {
-      const { data: auth } = await metahub.auth.getUser();
-      const user = auth?.user;
-      if (!user) {
-        toast.error("Oturum bulunamadı");
-        return;
-      }
-
-      // 1) İstek oluştur
-      const { data: created, error: insErr } = await metahub
-        .from("wallet_deposit_requests")
-        .insert({
-          user_id: user.id,
-          amount, // number
-          payment_method: "havale",
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (insErr) throw insErr;
+      // 1) Cüzdan yükleme isteğini wallet API üzerinden oluştur
+      const created = await createWalletDepositRequest({
+        user_id: user.id, // BE JWT'den de alıyor; burada aynı id'yi gönderiyoruz
+        amount,
+        payment_method: "havale",
+      }).unwrap();
 
       // 2) (Opsiyonel) Telegram bildirimi
       if (tgEnabled && created) {
         try {
-          const { data: profile } = await metahub
-            .from("profiles")
-            .select("full_name")
-            .eq("id", user.id)
-            .single();
+          const userName = meProfile?.full_name || "Kullanıcı";
 
           await metahub.functions.invoke("send-telegram-notification", {
             body: {
               type: "new_deposit_request",
               depositId: created.id,
               amount: created.amount,
-              userName: profile?.full_name || "Kullanıcı",
+              userName,
             },
           });
         } catch (e) {
@@ -161,8 +160,6 @@ export default function DepositPaymentInfo() {
     } catch (e) {
       console.error("Deposit create error:", e);
       toast.error("Bir hata oluştu");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -193,7 +190,8 @@ export default function DepositPaymentInfo() {
           <CardContent className="space-y-6">
             <div>
               <p className="text-muted-foreground mb-4">
-                Lütfen aşağıdaki hesap bilgilerine ödemenizi yapın ve "Ödemeyi Yaptım" butonuna tıklayın.
+                Lütfen aşağıdaki hesap bilgilerine ödemenizi yapın ve{" "}
+                &quot;Ödemeyi Yaptım&quot; butonuna tıklayın.
               </p>
             </div>
 
@@ -253,9 +251,9 @@ export default function DepositPaymentInfo() {
                 className="w-full"
                 size="lg"
                 onClick={handlePaymentConfirm}
-                disabled={submitting}
+                disabled={creatingDeposit}
               >
-                {submitting ? "Gönderiliyor..." : "Ödemeyi Yaptım"}
+                {creatingDeposit ? "Gönderiliyor..." : "Ödemeyi Yaptım"}
               </Button>
             </div>
           </CardContent>

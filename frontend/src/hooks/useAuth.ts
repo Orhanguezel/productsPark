@@ -1,35 +1,63 @@
-// src/hooks/useAuth.ts
-
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/hooks/useAuth.ts
+// =============================================================
 import type { User, Session } from "@/integrations/metahub/core/types";
+import {
+  useGetSessionQuery,
+  useStatusQuery,
+  useLogoutMutation,
+} from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
 
-export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+type UseAuthReturn = {
+  user: User | null;
+  session: Session | null;         // RTK ile gerçek "session" yok, her zaman null
+  loading: boolean;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  signOut: () => Promise<void>;
+};
 
-  useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = metahub.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+export const useAuth = (): UseAuthReturn => {
+  // /auth/v1/user -> { user }
+  const {
+    data: meData,
+    isLoading: meLoading,
+    isError: meError,
+  } = useGetSessionQuery();
 
-    // Check for existing session
-    metahub.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+  // /auth/v1/status -> { authenticated, is_admin, user? }
+  const {
+    data: statusData,
+    isLoading: statusLoading,
+    isError: statusError,
+  } = useStatusQuery();
 
-    return () => subscription.unsubscribe();
-  }, []);
+  const [logoutMutation] = useLogoutMutation();
+
+  const loading = meLoading || statusLoading;
+  const hasError = meError || statusError;
+
+  const user: User | null =
+    !hasError && meData?.user ? (meData.user as User) : null;
+
+  const isAuthenticated = !!statusData?.authenticated && !!user;
+  const isAdmin = !!statusData?.is_admin;
 
   const signOut = async () => {
-    await metahub.auth.signOut();
+    try {
+      await logoutMutation().unwrap();
+    } catch (e) {
+      // Sessizlikle yut – FE tarafında ekstra toast istersen burada tetiklersin
+      console.error("Logout failed", e);
+    }
   };
 
-  return { user, session, loading, signOut };
+  return {
+    user: isAuthenticated ? user : null,
+    session: null, // Supabase session yok; interface kırılmasın diye hep null
+    loading,
+    isAuthenticated,
+    isAdmin,
+    signOut,
+  };
 };

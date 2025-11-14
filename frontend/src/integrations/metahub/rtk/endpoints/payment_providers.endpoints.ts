@@ -16,11 +16,12 @@ const toBool = (v: BoolLike): boolean => {
 
 const parseJsonMaybe = <T extends Record<string, unknown> = Record<string, unknown>>(val: unknown): T => {
   if (val == null) return {} as T;
-  if (typeof val === "object") return val as T;
-  if (typeof val === "string") {
-    try { return (JSON.parse(val) ?? {}) as T; } catch { return {} as T; }
-  }
-  return {} as T;
+if (typeof val === "object") return val as T;
+if (typeof val === "string") {
+  try { return (JSON.parse(val) ?? {}) as T; } catch { return {} as T; }
+}
+return {} as T;
+
 };
 
 /** Public response (secret_config yok) */

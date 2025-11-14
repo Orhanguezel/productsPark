@@ -24,7 +24,10 @@ function mapRow(r: CouponRow) {
   return {
     id: r.id,
     code: r.code,
-    title: null, // şemada yok → FE optional/null
+    // 🆕 Başlık ve içerik
+    title: r.title ?? null,
+    content_html: r.content_html ?? null,
+
     discount_type: r.discount_type === "percentage" ? "percentage" : "fixed",
     discount_value: toNum(r.discount_value),
     min_purchase: r.min_purchase == null ? 0 : toNum(r.min_purchase),
@@ -57,7 +60,9 @@ export const listCoupons: RouteHandler = async (req, reply) => {
   if (where.length === 1) qb = qb.where(where[0] as any);
   else if (where.length > 1) qb = qb.where(and(...(where as any)));
 
-  qb = qb.orderBy(q.order === "asc" ? asc((coupons as any)[q.sort]) : desc((coupons as any)[q.sort]));
+  qb = qb.orderBy(
+    q.order === "asc" ? asc((coupons as any)[q.sort]) : desc((coupons as any)[q.sort]),
+  );
   if (q.limit && q.limit > 0) qb = qb.limit(q.limit);
   if (q.offset && q.offset >= 0) qb = qb.offset(q.offset);
 

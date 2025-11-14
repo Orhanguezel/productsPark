@@ -1,4 +1,3 @@
-// src/modules/coupons/validation.ts
 import { z } from "zod";
 
 export const couponListQuerySchema = z.object({

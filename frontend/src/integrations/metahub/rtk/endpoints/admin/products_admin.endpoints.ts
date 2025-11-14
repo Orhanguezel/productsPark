@@ -1,18 +1,17 @@
 // -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints.ts
+// CORE: Product list + CRUD + bulk + toggles + stock + categories
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
 import type {
   ProductAdmin,
-  Review,
-  FAQ,
-  UsedStockItem,
-  CategoryRow,
   ProductsAdminListParams,
   UpsertProductBody,
   PatchProductBody,
   ApiProduct,
+  UsedStockItem,
+  CategoryRow,
 } from "@/integrations/metahub/db/types/products";
 
 const BASE = "/admin/products";
@@ -72,7 +71,8 @@ const toQueryParams = (params?: ProductsAdminListParams): QueryParams => {
   if (params.q) qp.q = params.q;
   if (params.category_id) qp.category_id = params.category_id;
   if (params.is_active !== undefined) qp.is_active = params.is_active ? 1 : 0;
-  if (params.show_on_homepage !== undefined) qp.show_on_homepage = params.show_on_homepage ? 1 : 0;
+  if (params.show_on_homepage !== undefined)
+    qp.show_on_homepage = params.show_on_homepage ? 1 : 0;
   if (typeof params.min_price === "number") qp.min_price = params.min_price;
   if (typeof params.max_price === "number") qp.max_price = params.max_price;
   if (typeof params.limit === "number") qp.limit = params.limit;
@@ -94,7 +94,9 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
     category_id: (p.category_id ?? null) as string | null,
 
     price: toNumber(p.price),
-    original_price: toNullableNumber((p.original_price ?? p.compare_at_price) as unknown),
+    original_price: toNullableNumber(
+      (p.original_price ?? p.compare_at_price) as unknown
+    ),
     cost: toNullableNumber(p.cost as unknown),
 
     image_url: (p.image_url ?? null) as string | null,
@@ -110,10 +112,11 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
     review_count: toNumber(p.review_count ?? 0),
 
     product_type: (p.product_type ?? null) as string | null,
-    delivery_type: (p.delivery_type as ProductAdmin["delivery_type"]),
+    delivery_type: p.delivery_type as ProductAdmin["delivery_type"],
 
     custom_fields: (p.custom_fields as ProductAdmin["custom_fields"]) ?? null,
-    quantity_options: (p.quantity_options as ProductAdmin["quantity_options"]) ?? null,
+    quantity_options:
+      (p.quantity_options as ProductAdmin["quantity_options"]) ?? null,
 
     api_provider_id: (p.api_provider_id ?? null) as string | null,
     api_product_id: (p.api_product_id ?? null) as string | null,
@@ -173,9 +176,10 @@ const normalizeAdminProduct = (p: ApiProduct): ProductAdmin => {
 
 const toApiBody = (body: UpsertProductBody | PatchProductBody) => body;
 
-/* ---------- API ---------- */
+/* ---------- API (CORE) ---------- */
 export const productsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
+    // GET /admin/products
     listProductsAdmin: b.query<ProductAdmin[], ProductsAdminListParams | void>({
       query: (params): FetchArgs => {
         const qp = params ? toQueryParams(params as ProductsAdminListParams) : {};
@@ -197,6 +201,7 @@ export const productsAdminApi = baseApi.injectEndpoints({
       keepUnusedDataFor: 60,
     }),
 
+    // GET /admin/products/:id
     getProductAdmin: b.query<ProductAdmin, string>({
       query: (id) => ({ url: `${BASE}/${encodeURIComponent(id)}` } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin => {
@@ -207,6 +212,7 @@ export const productsAdminApi = baseApi.injectEndpoints({
       keepUnusedDataFor: 300,
     }),
 
+    // POST /admin/products
     createProductAdmin: b.mutation<ProductAdmin, UpsertProductBody>({
       query: (body) =>
         ({ url: `${BASE}`, method: "POST", body: toApiBody(body) } as FetchArgs),
@@ -215,9 +221,17 @@ export const productsAdminApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
 
-    updateProductAdmin: b.mutation<ProductAdmin, { id: string; body: PatchProductBody }>({
+    // PATCH /admin/products/:id
+    updateProductAdmin: b.mutation<
+      ProductAdmin,
+      { id: string; body: PatchProductBody }
+    >({
       query: ({ id, body }) =>
-        ({ url: `${BASE}/${encodeURIComponent(id)}`, method: "PATCH", body: toApiBody(body) } as FetchArgs),
+        ({
+          url: `${BASE}/${encodeURIComponent(id)}`,
+          method: "PATCH",
+          body: toApiBody(body),
+        } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: (_r, _e, arg) => [
@@ -226,30 +240,58 @@ export const productsAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
+    // DELETE /admin/products/:id
     deleteProductAdmin: b.mutation<{ ok: true }, string>({
       query: (id) =>
         ({ url: `${BASE}/${encodeURIComponent(id)}`, method: "DELETE" } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: [{ type: "Products", id: "LIST" }],
+      invalidatesTags: (_r, _e, id) => [
+        { type: "Product", id },
+        { type: "Products", id: "LIST" },
+      ],
     }),
 
-    bulkSetActiveAdmin: b.mutation<{ ok: true }, { ids: string[]; is_active: boolean }>({
+    // POST /admin/products/bulk/active
+    bulkSetActiveAdmin: b.mutation<
+      { ok: true },
+      { ids: string[]; is_active: boolean }
+    >({
       query: ({ ids, is_active }) =>
-        ({ url: `${BASE}/bulk/active`, method: "POST", body: { ids, is_active } } as FetchArgs),
+        ({
+          url: `${BASE}/bulk/active`,
+          method: "POST",
+          body: { ids, is_active },
+        } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
 
-    reorderProductsAdmin: b.mutation<{ ok: true }, Array<{ id: string; display_order: number }>>({
+    // POST /admin/products/bulk/reorder
+    reorderProductsAdmin: b.mutation<
+      { ok: true },
+      Array<{ id: string; display_order: number }>
+    >({
       query: (items) =>
-        ({ url: `${BASE}/bulk/reorder`, method: "POST", body: { items } } as FetchArgs),
+        ({
+          url: `${BASE}/bulk/reorder`,
+          method: "POST",
+          body: { items },
+        } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
 
-    toggleActiveProductAdmin: b.mutation<ProductAdmin, { id: string; is_active: boolean }>({
+    // PATCH /admin/products/:id/active
+    toggleActiveProductAdmin: b.mutation<
+      ProductAdmin,
+      { id: string; is_active: boolean }
+    >({
       query: ({ id, is_active }) =>
-        ({ url: `${BASE}/${encodeURIComponent(id)}/active`, method: "PATCH", body: { is_active } } as FetchArgs),
+        ({
+          url: `${BASE}/${encodeURIComponent(id)}/active`,
+          method: "PATCH",
+          body: { is_active },
+        } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: (_r, _e, a) => [
@@ -258,9 +300,17 @@ export const productsAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
-    toggleHomepageProductAdmin: b.mutation<ProductAdmin, { id: string; show_on_homepage: boolean }>({
+    // PATCH /admin/products/:id/homepage
+    toggleHomepageProductAdmin: b.mutation<
+      ProductAdmin,
+      { id: string; show_on_homepage: boolean }
+    >({
       query: ({ id, show_on_homepage }) =>
-        ({ url: `${BASE}/${encodeURIComponent(id)}/homepage`, method: "PATCH", body: { show_on_homepage } } as FetchArgs),
+        ({
+          url: `${BASE}/${encodeURIComponent(id)}/homepage`,
+          method: "PATCH",
+          body: { show_on_homepage },
+        } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: (_r, _e, a) => [
@@ -269,29 +319,17 @@ export const productsAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
-    replaceReviewsAdmin: b.mutation<{ ok: true }, { id: string; reviews: Review[] }>({
-      query: ({ id, reviews }) =>
-        ({ url: `${BASE}/${encodeURIComponent(id)}/reviews`, method: "PUT", body: { reviews } } as FetchArgs),
-      transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: (_r, _e, a) => [
-        { type: "Product", id: a.id },
-        { type: "ProductReviews", id: a.id },
-      ],
-    }),
-
-    replaceFaqsAdmin: b.mutation<{ ok: true }, { id: string; faqs: FAQ[] }>({
-      query: ({ id, faqs }) =>
-        ({ url: `${BASE}/${encodeURIComponent(id)}/faqs`, method: "PUT", body: { faqs } } as FetchArgs),
-      transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: (_r, _e, a) => [
-        { type: "Product", id: a.id },
-        { type: "ProductFAQs", id: a.id },
-      ],
-    }),
-
-    setProductStockAdmin: b.mutation<{ updated_stock_quantity: number }, { id: string; lines: string[] }>({
+    // PUT /admin/products/:id/stock
+    setProductStockAdmin: b.mutation<
+      { updated_stock_quantity: number },
+      { id: string; lines: string[] }
+    >({
       query: ({ id, lines }) =>
-        ({ url: `${BASE}/${encodeURIComponent(id)}/stock`, method: "PUT", body: { lines } } as FetchArgs),
+        ({
+          url: `${BASE}/${encodeURIComponent(id)}/stock`,
+          method: "PUT",
+          body: { lines },
+        } as FetchArgs),
       transformResponse: (r: { updated_stock_quantity: number }) => r,
       invalidatesTags: (_r, _e, a) => [
         { type: "Product", id: a.id },
@@ -299,8 +337,10 @@ export const productsAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
+    // GET /admin/products/:id/stock/used
     listUsedStockAdmin: b.query<UsedStockItem[], string>({
-      query: (id) => ({ url: `${BASE}/${encodeURIComponent(id)}/stock/used` } as FetchArgs),
+      query: (id) =>
+        ({ url: `${BASE}/${encodeURIComponent(id)}/stock/used` } as FetchArgs),
       transformResponse: (res: unknown): UsedStockItem[] => {
         const arr = pluckArray(res, ["data", "items", "rows", "stock"]);
         return arr.filter(isRecord).map((x) => x as unknown as UsedStockItem);
@@ -309,7 +349,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       keepUnusedDataFor: 60,
     }),
 
-    listCategoriesAdmin: b.query<Pick<CategoryRow, "id" | "name" | "parent_id" | "is_featured">[], void>({
+    // GET /admin/categories
+    listCategoriesAdmin: b.query<
+      Pick<CategoryRow, "id" | "name" | "parent_id" | "is_featured">[],
+      void
+    >({
       query: () => ({ url: "/admin/categories", method: "GET" } as FetchArgs),
       keepUnusedDataFor: 300,
     }),
@@ -327,8 +371,6 @@ export const {
   useReorderProductsAdminMutation,
   useToggleActiveProductAdminMutation,
   useToggleHomepageProductAdminMutation,
-  useReplaceReviewsAdminMutation,
-  useReplaceFaqsAdminMutation,
   useSetProductStockAdminMutation,
   useListUsedStockAdminQuery,
   useListCategoriesAdminQuery,

@@ -1,67 +1,82 @@
-// =============================================================
+// -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/product_reviews.endpoints.ts
-// =============================================================
-import { baseApi as baseApi_m6 } from "../baseApi";
+// (Public product reviews)
+// -------------------------------------------------------------
+import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
+import type {
+  ProductReviewRow,
+  ReviewInput,
+} from "@/integrations/metahub/db/types/products";
 
-const toNumber_m6 = (x: unknown): number =>
-  typeof x === "number" ? x : Number(x as unknown);
+type ListReviewsParams = {
+  product_id?: string;
+  only_active?: boolean | 0 | 1;
+};
 
-type BoolLike6 = 0 | 1 | boolean;
-
-export type ProductReview = {
-  id: string;
+type CreateReviewBody = Omit<ReviewInput, "id"> & {
   product_id: string;
-  user_id?: string | null;
-  rating: number;                // 1..5
-  comment?: string | null;
-  is_active?: BoolLike6;
-  customer_name?: string | null;
-  review_date: string;
-  created_at: string;
-  updated_at?: string;
 };
 
-export type ApiProductReview = Omit<ProductReview, "rating"> & {
-  rating: number | string;
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+const pluckArray = (res: unknown, keys: string[]): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isRecord(res)) {
+    for (const k of keys) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
 };
 
-const normalizeReview = (r: ApiProductReview): ProductReview => ({
-  ...r,
-  rating: toNumber_m6(r.rating),
-});
-
-export const productReviewsApi = baseApi_m6.injectEndpoints({
+export const productReviewsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    listProductReviews: b.query<
-      ProductReview[],
-      { product_id?: string; only_active?: BoolLike6; limit?: number; offset?: number }
-    >({
-      query: (params) => {
-        const { product_id, only_active = 1, limit, offset } = params ?? {};
-        return {
-          url: "/product_reviews",
-          params: {
-            product_id,
-            only_active: only_active ? 1 : 0,
-            limit,
-            offset,
-          },
-        };
+    listProductReviews: b.query<ProductReviewRow[], ListReviewsParams | void>({
+      query: (params): FetchArgs => {
+        const qp: Record<string, string | number> = {};
+        if (params && (params as ListReviewsParams).product_id) {
+          qp.product_id = (params as ListReviewsParams).product_id as string;
+        }
+        if (params && (params as ListReviewsParams).only_active !== undefined) {
+          const onlyActive = (params as ListReviewsParams).only_active;
+          qp.only_active = onlyActive ? 1 : 0;
+        }
+        return { url: "/products/reviews", params: qp } as FetchArgs;
       },
-      transformResponse: (res: unknown): ProductReview[] =>
-        Array.isArray(res)
-          ? (res as ApiProductReview[]).map(normalizeReview)
-          : [],
-      providesTags: (result) =>
-        result
-          ? [
-              ...result.map((i) => ({ type: "Reviews" as const, id: i.id })),
-              { type: "Reviews" as const, id: "LIST" },
-            ]
-          : [{ type: "Reviews" as const, id: "LIST" }],
+      transformResponse: (res: unknown): ProductReviewRow[] => {
+        const rows = pluckArray(res, ["data", "items", "rows", "reviews"]);
+        return rows.filter(isRecord).map((x) => x as ProductReviewRow);
+      },
+      // admin replaceReviewsAdmin -> ProductReviews tag'i invalid ediyor
+      providesTags: (_result, _e, arg) => {
+        const params = (arg || {}) as ListReviewsParams;
+        return params.product_id
+          ? [{ type: "ProductReviews" as const, id: params.product_id }]
+          : [{ type: "ProductReviews" as const, id: "LIST" }];
+      },
+      keepUnusedDataFor: 60,
+    }),
+
+    createProductReview: b.mutation<ProductReviewRow, CreateReviewBody>({
+      query: (body): FetchArgs => ({
+        url: "/products/reviews",
+        method: "POST",
+        body,
+      }),
+      transformResponse: (res: unknown): ProductReviewRow =>
+        res as ProductReviewRow,
+      invalidatesTags: (_r, _e, body) => [
+        { type: "ProductReviews" as const, id: body.product_id },
+      ],
     }),
   }),
   overrideExisting: true,
 });
 
-export const { useListProductReviewsQuery } = productReviewsApi;
+export const {
+  useListProductReviewsQuery,
+  useCreateProductReviewMutation,
+} = productReviewsApi;

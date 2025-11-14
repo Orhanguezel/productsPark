@@ -1,36 +1,64 @@
-
-// =============================================================
+// -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/product_stock.endpoints.ts
-// =============================================================
-import { baseApi as baseApi_m8 } from "../baseApi";
+// (Public product stock)
+// -------------------------------------------------------------
+import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
+import type { Stock } from "@/integrations/metahub/db/types/products";
 
-const toNumber_m8 = (x: unknown): number => (typeof x === "number" ? x : Number(x as unknown));
-
-type BoolLike8 = 0 | 1 | boolean;
-
-export type ProductStock = {
-  id: string;
-  product_id: string;
-  sku?: string | null;
-  track_stock?: BoolLike8;
-  qty?: number | null;
-  in_stock?: BoolLike8;
-  updated_at?: string;
+type ListStockParams = {
+  product_id?: string;
+  is_used?: boolean | 0 | 1;
 };
 
-export type ApiProductStock = Omit<ProductStock, "qty"> & { qty?: number | string | null };
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
 
-const normalizeStock = (s: ApiProductStock): ProductStock => ({ ...s, qty: s.qty == null ? null : toNumber_m8(s.qty) });
+const pluckArray = (res: unknown, keys: string[]): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isRecord(res)) {
+    for (const k of keys) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
+};
 
-export const productStockApi = baseApi_m8.injectEndpoints({
+const normalizeStock = (row: Stock): Stock => ({
+  ...row,
+  code: row.code ?? row.stock_content,
+});
+
+export const productStockApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    getProductStockByProductId: b.query<ProductStock, string>({
-      query: (product_id) => ({ url: `/product_stock/by-product/${product_id}` }),
-      transformResponse: (res: unknown): ProductStock => normalizeStock(res as ApiProductStock),
-      providesTags: (_r, _e, product_id) => [{ type: "Stock", id: product_id }],
+    listProductStock: b.query<Stock[], ListStockParams | void>({
+      query: (params): FetchArgs => {
+        const qp: Record<string, string | number> = {};
+        if (params && (params as ListStockParams).product_id) {
+          qp.product_id = (params as ListStockParams).product_id as string;
+        }
+        if (params && (params as ListStockParams).is_used !== undefined) {
+          const isUsed = (params as ListStockParams).is_used;
+          qp.is_used = isUsed ? 1 : 0;
+        }
+        return { url: "/products/stock", params: qp } as FetchArgs;
+      },
+      transformResponse: (res: unknown): Stock[] => {
+        const rows = pluckArray(res, ["data", "items", "rows", "stock"]);
+        return rows.filter(isRecord).map((x) => normalizeStock(x as Stock));
+      },
+      // stok güncelleme admin tarafında Product tag'ini invalid ediyor
+      providesTags: (_result, _e, arg) => {
+        const params = (arg || {}) as ListStockParams;
+        return params.product_id
+          ? [{ type: "Product" as const, id: params.product_id }]
+          : [];
+      },
+      keepUnusedDataFor: 60,
     }),
   }),
   overrideExisting: true,
 });
 
-export const { useGetProductStockByProductIdQuery } = productStockApi;
+export const { useListProductStockQuery } = productStockApi;

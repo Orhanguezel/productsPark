@@ -1,18 +1,22 @@
+// src/modules/wallet/validation.ts
+
 import { z } from "zod";
 import { WALLET_DEPOSIT_STATUS, WALLET_TXN_TYPES } from "./wallet.types";
 
 export const WdrListQuerySchema = z.object({
-  select: z.string().optional(),          // opsiyonel; repository tüm kolonları döndürüyor
+  select: z.string().optional(),
   user_id: z.string().uuid().optional(),
   status: z.enum(WALLET_DEPOSIT_STATUS).optional(),
-  order: z.string().optional(),           // "created_at.desc" | ...
+  order: z.string().optional(),
   limit: z.coerce.number().int().positive().optional(),
   offset: z.coerce.number().int().nonnegative().optional(),
 });
 
 export const WdrCreateBodySchema = z.object({
-  user_id: z.string().uuid(),
-  amount: z.union([z.number(), z.string()])
+  // ✅ FE’den gelse bile BE tarafında JWT’den override edeceğiz
+  user_id: z.string().uuid().optional(),
+  amount: z
+    .union([z.number(), z.string()])
     .refine((v) => Number(v) > 0, "invalid_amount"),
   payment_method: z.string().min(1).default("havale"),
   payment_proof: z.string().url().nullable().optional(),
