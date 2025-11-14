@@ -1,3 +1,4 @@
+// modules/topbar/admin.routes.ts
 import type { FastifyInstance } from "fastify";
 import { requireAuth } from "@/common/middleware/auth";
 import {
@@ -7,12 +8,43 @@ import {
   adminUpdateTopbar,
   adminDeleteTopbar,
 } from "./admin.controller";
-import type { AdminTopbarListQuery, AdminTopbarCreate, AdminTopbarUpdate } from "./validation";
+import type {
+  AdminTopbarListQuery,
+  AdminTopbarCreate,
+  AdminTopbarUpdate,
+} from "./validation";
+
+
+const BASE_ADMIN = "/admin/topbar_settings";
 
 export async function registerTopbarAdmin(app: FastifyInstance) {
-  app.get<{ Querystring: AdminTopbarListQuery }>("/admin/topbar_settings", { preHandler: [requireAuth] }, adminListTopbar);
-  app.get<{ Params: { id: string } }>("/admin/topbar_settings/:id", { preHandler: [requireAuth] }, adminGetTopbarById);
-  app.post<{ Body: AdminTopbarCreate }>("/admin/topbar_settings", { preHandler: [requireAuth] }, adminCreateTopbar);
-  app.patch<{ Params: { id: string }; Body: AdminTopbarUpdate }>("/admin/topbar_settings/:id", { preHandler: [requireAuth] }, adminUpdateTopbar);
-  app.delete<{ Params: { id: string } }>("/admin/topbar_settings/:id", { preHandler: [requireAuth] }, adminDeleteTopbar);
+  app.get<{ Querystring: AdminTopbarListQuery }>(
+    `${BASE_ADMIN}`,
+    { preHandler: [requireAuth] },
+    adminListTopbar,
+  );
+
+  app.get<{ Params: { id: string } }>(
+    `${BASE_ADMIN}/:id`,
+    { preHandler: [requireAuth] },
+    adminGetTopbarById,
+  );
+
+  app.post<{ Body: AdminTopbarCreate }>(
+    `${BASE_ADMIN}`,
+    { preHandler: [requireAuth] },
+    adminCreateTopbar,
+  );
+
+  app.patch<{ Params: { id: string }; Body: AdminTopbarUpdate }>(
+    `${BASE_ADMIN}/:id`,
+    { preHandler: [requireAuth] },
+    adminUpdateTopbar,
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    `${BASE_ADMIN}/:id`,
+    { preHandler: [requireAuth] },
+    adminDeleteTopbar,
+  );
 }

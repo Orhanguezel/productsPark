@@ -1,3 +1,5 @@
+// src/modules/profiles/router.ts
+
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@/common/middleware/auth';
 import { getMyProfile, upsertMyProfile, type ProfileUpsertRequest } from './controller';

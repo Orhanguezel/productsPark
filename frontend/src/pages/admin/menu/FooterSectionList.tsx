@@ -1,10 +1,29 @@
+// =============================================================
+// FILE: FooterSectionList.tsx
+// =============================================================
 "use client";
+
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GripVertical, Pencil, Trash2 } from "lucide-react";
-import { DndContext, closestCenter, DragEndEvent, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  DndContext,
+  closestCenter,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { FooterSection } from "@/integrations/metahub/db/types/footer";
 
@@ -16,7 +35,11 @@ type Props = {
   headerRight?: React.ReactNode;
 };
 
-function SortableSectionRow({ section, onEdit, onDelete }: {
+function SortableSectionRow({
+  section,
+  onEdit,
+  onDelete,
+}: {
   section: FooterSection;
   onEdit: (s: FooterSection) => void;
   onDelete: (id: string) => void;
@@ -25,7 +48,11 @@ function SortableSectionRow({ section, onEdit, onDelete }: {
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 bg-card border rounded-lg hover:bg-accent/50 transition-colors">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 bg-card border rounded-lg hover:bg-accent/50 transition-colors"
+    >
       <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
         <GripVertical className="h-5 w-5 text-muted-foreground" />
       </div>
@@ -36,29 +63,55 @@ function SortableSectionRow({ section, onEdit, onDelete }: {
         </div>
       </div>
       <div className="flex gap-2">
-        <Button variant="ghost" size="sm" onClick={() => onEdit(section)}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="sm" onClick={() => onDelete(section.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(section)}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => onDelete(section.id)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
       </div>
     </div>
   );
 }
 
-export default function FooterSectionList({ sections, onReorder, onEdit, onDelete, headerRight }: Props) {
+export default function FooterSectionList({
+  sections,
+  onReorder,
+  onEdit,
+  onDelete,
+  headerRight,
+}: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // 🔹 Lokal sıralama state'i
+  const [localSections, setLocalSections] = useState<FooterSection[]>([]);
+
+  useEffect(() => {
+    const sorted = [...sections].sort(
+      (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0),
+    );
+    setLocalSections(sorted);
+  }, [sections]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = sections.findIndex(s => s.id === active.id);
-    const newIndex = sections.findIndex(s => s.id === over.id);
+    const oldIndex = localSections.findIndex((s) => s.id === active.id);
+    const newIndex = localSections.findIndex((s) => s.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const reordered = arrayMove(sections, oldIndex, newIndex).map((s, idx) => ({ id: s.id, display_order: idx }));
-    await onReorder(reordered);
+    const reordered = arrayMove(localSections, oldIndex, newIndex);
+    setLocalSections(reordered);
+
+    const payload = reordered.map((s, idx) => ({
+      id: s.id,
+      display_order: idx,
+    }));
+    await onReorder(payload);
   };
 
   return (
@@ -68,13 +121,29 @@ export default function FooterSectionList({ sections, onReorder, onEdit, onDelet
         {headerRight}
       </CardHeader>
       <CardContent>
-        {sections.length === 0 ? (
-          <p className="text-center text-muted-foreground py-4">Henüz bölüm eklenmemiş</p>
+        {localSections.length === 0 ? (
+          <p className="text-center text-muted-foreground py-4">
+            Henüz bölüm eklenmemiş
+          </p>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={localSections.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
               <div className="space-y-2">
-                {sections.map(s => <SortableSectionRow key={s.id} section={s} onEdit={onEdit} onDelete={onDelete} />)}
+                {localSections.map((s) => (
+                  <SortableSectionRow
+                    key={s.id}
+                    section={s}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                ))}
               </div>
             </SortableContext>
           </DndContext>

@@ -38,7 +38,11 @@ const parseJson = <T,>(val: any): T | null => {
   if (typeof val === "string") {
     const s = val.trim();
     if (!s) return null;
-    try { return JSON.parse(s) as T; } catch { return null; }
+    try {
+      return JSON.parse(s) as T;
+    } catch {
+      return null;
+    }
   }
   if (typeof val === "object") return val as T;
   return null;
@@ -71,7 +75,10 @@ function normalizeProduct(row: any) {
   p.demo_embed_enabled = toBool(p.demo_embed_enabled);
 
   // FE wants this alias if column absent → map to is_featured
-  p.show_on_homepage = "show_on_homepage" in p ? toBool(p.show_on_homepage) : toBool(p.is_featured);
+  p.show_on_homepage =
+    "show_on_homepage" in p
+      ? toBool(p.show_on_homepage)
+      : toBool(p.is_featured);
 
   // strict numbers
   p.stock_quantity = toNumber(p.stock_quantity) ?? 0;
@@ -106,7 +113,8 @@ export const listProducts: RouteHandler = async (req, reply) => {
       .where(and(eq(products.slug, q.slug), eq(products.is_active, 1 as any)))
       .limit(1);
 
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     const r = rows[0];
     return reply.send({ ...normalizeProduct(r.p), categories: r.c });
   }
@@ -143,12 +151,15 @@ export const listProducts: RouteHandler = async (req, reply) => {
     dir = q.order === "asc" ? "asc" : "desc";
   } else if (q.order && q.order.includes(".")) {
     const [col, d] = String(q.order).split(".");
-    sortKey = (["price", "rating", "created_at"] as const).includes(col as any)
+    sortKey = (["price", "rating", "created_at"] as const).includes(
+      col as any
+    )
       ? (col as keyof typeof colMap)
       : "created_at";
     dir = d?.toLowerCase() === "asc" ? "asc" : "desc";
   }
-  const orderExpr = dir === "asc" ? asc(colMap[sortKey]) : desc(colMap[sortKey]);
+  const orderExpr =
+    dir === "asc" ? asc(colMap[sortKey]) : desc(colMap[sortKey]);
 
   // count
   const countBase = db.select({ total: sql<number>`COUNT(*)` }).from(products);
@@ -173,7 +184,10 @@ export const listProducts: RouteHandler = async (req, reply) => {
 
   reply.header("x-total-count", String(Number(total || 0)));
   reply.header("content-range", `*/${Number(total || 0)}`);
-  reply.header("access-control-expose-headers", "x-total-count, content-range");
+  reply.header(
+    "access-control-expose-headers",
+    "x-total-count, content-range"
+  );
 
   return reply.send(out);
 };
@@ -201,12 +215,13 @@ export const getProductByIdOrSlug: RouteHandler = async (req, reply) => {
     .where(whereExpr)
     .limit(1);
 
-  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+  if (!rows.length)
+    return reply.code(404).send({ error: { message: "not_found" } });
   const r = rows[0];
   return reply.send({ ...normalizeProduct(r.p), categories: r.c });
 };
 
-/** Optional legacy: GET /products/:id */
+/** Optional legacy: GET /products/id/:id */
 export const getProductById: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   const rows = await db
@@ -219,7 +234,8 @@ export const getProductById: RouteHandler = async (req, reply) => {
     .where(eq(products.id, id))
     .limit(1);
 
-  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+  if (!rows.length)
+    return reply.code(404).send({ error: { message: "not_found" } });
   const r = rows[0];
   return reply.send({ ...normalizeProduct(r.p), categories: r.c });
 };
@@ -237,7 +253,8 @@ export const getProductBySlug: RouteHandler = async (req, reply) => {
     .where(and(eq(products.slug, slug), eq(products.is_active, 1 as any)))
     .limit(1);
 
-  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+  if (!rows.length)
+    return reply.code(404).send({ error: { message: "not_found" } });
   const r = rows[0];
   return reply.send({ ...normalizeProduct(r.p), categories: r.c });
 };
@@ -255,17 +272,35 @@ export const createProduct: RouteHandler = async (req, reply) => {
       updated_at: now(),
     });
 
-    const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id))
+      .limit(1);
     return reply.code(201).send(normalizeProduct(row));
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     if (e?.code === "ER_NO_REFERENCED_ROW_2") {
-      return reply.code(409).send({ error: { message: "fk_category_not_found", details: e.sqlMessage } });
+      return reply.code(409).send({
+        error: {
+          message: "fk_category_not_found",
+          details: e.sqlMessage,
+        },
+      });
     }
     if (e?.code === "ER_DUP_ENTRY") {
-      return reply.code(409).send({ error: { message: "duplicate_slug", details: e.sqlMessage } });
+      return reply.code(409).send({
+        error: {
+          message: "duplicate_slug",
+          details: e.sqlMessage,
+        },
+      });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -281,15 +316,29 @@ export const updateProduct: RouteHandler = async (req, reply) => {
       .set({ ...patch, updated_at: now() })
       .where(eq(products.id, id));
 
-    const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    const rows = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id))
+      .limit(1);
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(normalizeProduct(rows[0]));
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     if (e?.code === "ER_DUP_ENTRY") {
-      return reply.code(409).send({ error: { message: "duplicate_slug", details: e.sqlMessage } });
+      return reply.code(409).send({
+        error: {
+          message: "duplicate_slug",
+          details: e.sqlMessage,
+        },
+      });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -308,7 +357,10 @@ export const deleteProduct: RouteHandler = async (req, reply) => {
 /* ===================== */
 
 export const listProductFaqs: RouteHandler = async (req, reply) => {
-  const q = (req.query || {}) as { product_id?: string; only_active?: string };
+  const q = (req.query || {}) as {
+    product_id?: string;
+    only_active?: string;
+  };
   const conds: any[] = [];
   if (q.product_id) conds.push(eq(productFaqs.product_id, q.product_id));
   if (q.only_active === "1" || q.only_active === "true")
@@ -316,7 +368,10 @@ export const listProductFaqs: RouteHandler = async (req, reply) => {
   const whereExpr = conds.length ? and(...conds) : undefined;
 
   const base = db.select().from(productFaqs);
-  const rows = await (whereExpr ? base.where(whereExpr as any) : base).orderBy(productFaqs.display_order);
+  const rows = await (whereExpr
+    ? base.where(whereExpr as any)
+    : base
+  ).orderBy(productFaqs.display_order);
   return reply.send(rows);
 };
 
@@ -324,12 +379,25 @@ export const createProductFaq: RouteHandler = async (req, reply) => {
   try {
     const input = productFaqCreateSchema.parse(req.body || {});
     const id = input.id ?? randomUUID();
-    await (db.insert(productFaqs) as any).values({ ...input, id, created_at: now(), updated_at: now() });
-    const [row] = await db.select().from(productFaqs).where(eq(productFaqs.id, id)).limit(1);
+    await (db.insert(productFaqs) as any).values({
+      ...input,
+      id,
+      created_at: now(),
+      updated_at: now(),
+    });
+    const [row] = await db
+      .select()
+      .from(productFaqs)
+      .where(eq(productFaqs.id, id))
+      .limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -340,13 +408,24 @@ export const updateProductFaq: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
     const patch = productFaqUpdateSchema.parse(req.body || {});
-    await (db.update(productFaqs) as any).set({ ...patch, updated_at: now() }).where(eq(productFaqs.id, id));
-    const rows = await db.select().from(productFaqs).where(eq(productFaqs.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    await (db.update(productFaqs) as any)
+      .set({ ...patch, updated_at: now() })
+      .where(eq(productFaqs.id, id));
+    const rows = await db
+      .select()
+      .from(productFaqs)
+      .where(eq(productFaqs.id, id))
+      .limit(1);
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(rows[0]);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -362,7 +441,9 @@ export const deleteProductFaq: RouteHandler = async (_req, reply) => {
 export const listProductOptions: RouteHandler = async (req, reply) => {
   const q = (req.query || {}) as { product_id?: string };
   const base = db.select().from(productOptions);
-  const rows = await (q.product_id ? base.where(eq(productOptions.product_id, q.product_id)) : base);
+  const rows = await (q.product_id
+    ? base.where(eq(productOptions.product_id, q.product_id))
+    : base);
   return reply.send(rows);
 };
 
@@ -370,12 +451,25 @@ export const createProductOption: RouteHandler = async (req, reply) => {
   try {
     const input = productOptionCreateSchema.parse(req.body || {});
     const id = input.id ?? randomUUID();
-    await (db.insert(productOptions) as any).values({ ...input, id, created_at: now(), updated_at: now() });
-    const [row] = await db.select().from(productOptions).where(eq(productOptions.id, id)).limit(1);
+    await (db.insert(productOptions) as any).values({
+      ...input,
+      id,
+      created_at: now(),
+      updated_at: now(),
+    });
+    const [row] = await db
+      .select()
+      .from(productOptions)
+      .where(eq(productOptions.id, id))
+      .limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -386,13 +480,24 @@ export const updateProductOption: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
     const patch = productOptionUpdateSchema.parse(req.body || {});
-    await (db.update(productOptions) as any).set({ ...patch, updated_at: now() }).where(eq(productOptions.id, id));
-    const rows = await db.select().from(productOptions).where(eq(productOptions.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    await (db.update(productOptions) as any)
+      .set({ ...patch, updated_at: now() })
+      .where(eq(productOptions.id, id));
+    const rows = await db
+      .select()
+      .from(productOptions)
+      .where(eq(productOptions.id, id))
+      .limit(1);
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(rows[0]);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -406,7 +511,10 @@ export const deleteProductOption: RouteHandler = async (_req, reply) => {
 };
 
 export const listProductReviews: RouteHandler = async (req, reply) => {
-  const q = (req.query || {}) as { product_id?: string; only_active?: string };
+  const q = (req.query || {}) as {
+    product_id?: string;
+    only_active?: string;
+  };
   const conds: any[] = [];
   if (q.product_id) conds.push(eq(productReviews.product_id, q.product_id));
   if (q.only_active === "1" || q.only_active === "true")
@@ -414,7 +522,10 @@ export const listProductReviews: RouteHandler = async (req, reply) => {
   const whereExpr = conds.length ? and(...conds) : undefined;
 
   const base = db.select().from(productReviews);
-  const rows = await (whereExpr ? base.where(whereExpr as any) : base).orderBy(desc(productReviews.review_date));
+  const rows = await (whereExpr
+    ? base.where(whereExpr as any)
+    : base
+  ).orderBy(desc(productReviews.review_date));
   return reply.send(rows);
 };
 
@@ -429,11 +540,19 @@ export const createProductReview: RouteHandler = async (req, reply) => {
       created_at: now(),
       updated_at: now(),
     });
-    const [row] = await db.select().from(productReviews).where(eq(productReviews.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(productReviews)
+      .where(eq(productReviews.id, id))
+      .limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -444,13 +563,24 @@ export const updateProductReview: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
     const patch = productReviewUpdateSchema.parse(req.body || {});
-    await (db.update(productReviews) as any).set({ ...patch, updated_at: now() }).where(eq(productReviews.id, id));
-    const rows = await db.select().from(productReviews).where(eq(productReviews.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    await (db.update(productReviews) as any)
+      .set({ ...patch, updated_at: now() })
+      .where(eq(productReviews.id, id));
+    const rows = await db
+      .select()
+      .from(productReviews)
+      .where(eq(productReviews.id, id))
+      .limit(1);
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(rows[0]);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -464,7 +594,10 @@ export const deleteProductReview: RouteHandler = async (_req, reply) => {
 };
 
 export const listProductStock: RouteHandler = async (req, reply) => {
-  const q = (req.query || {}) as { product_id?: string; is_used?: string };
+  const q = (req.query || {}) as {
+    product_id?: string;
+    is_used?: string;
+  };
   const conds: any[] = [];
   if (q.product_id) conds.push(eq(productStock.product_id, q.product_id));
   if (q.is_used !== undefined) {
@@ -488,11 +621,19 @@ export const createProductStock: RouteHandler = async (req, reply) => {
       used_at: input.used_at ?? null,
       created_at: now(),
     });
-    const [row] = await db.select().from(productStock).where(eq(productStock.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(productStock)
+      .where(eq(productStock.id, id))
+      .limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });
@@ -503,13 +644,24 @@ export const updateProductStock: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
     const patch = productStockUpdateSchema.parse(req.body || {});
-    await (db.update(productStock) as any).set(patch).where(eq(productStock.id, id));
-    const rows = await db.select().from(productStock).where(eq(productStock.id, id)).limit(1);
-    if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+    await (db.update(productStock) as any)
+      .set(patch)
+      .where(eq(productStock.id, id));
+    const rows = await db
+      .select()
+      .from(productStock)
+      .where(eq(productStock.id, id))
+      .limit(1);
+    if (!rows.length)
+      return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(rows[0]);
   } catch (e: any) {
     if (e instanceof ZodError) {
-      return reply.code(422).send({ error: { message: "validation_error", details: e.issues } });
+      return reply
+        .code(422)
+        .send({
+          error: { message: "validation_error", details: e.issues },
+        });
     }
     req.log.error(e);
     return reply.code(500).send({ error: { message: "internal_error" } });

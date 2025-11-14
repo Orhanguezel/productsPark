@@ -1,46 +1,56 @@
-// =============================================================
+// -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/product_faqs.endpoints.ts
-// =============================================================
-import { baseApi as baseApi_m7 } from "../baseApi";
+// (Public product FAQs)
+// -------------------------------------------------------------
+import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
+import type { ProductFaqRow } from "@/integrations/metahub/db/types/products";
 
-type BoolLike7 = 0 | 1 | boolean;
-
-export type ProductFaq = {
-  id: string;
-  product_id: string;
-  question: string;
-  answer: string;
-  display_order: number;
-  is_active?: BoolLike7;
-  created_at?: string;
-  updated_at?: string;
+type ListFaqsParams = {
+  product_id?: string;
+  only_active?: boolean | 0 | 1;
 };
 
-export const productFaqsApi = baseApi_m7.injectEndpoints({
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+const pluckArray = (res: unknown, keys: string[]): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isRecord(res)) {
+    for (const k of keys) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
+};
+
+export const productFaqsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    listProductFaqs: b.query<
-      ProductFaq[],
-      { product_id?: string; only_active?: BoolLike7 }
-    >({
-      query: (params) => {
-        const { product_id, only_active = 1 } = params ?? {};
-        return {
-          url: "/product_faqs",
-          params: {
-            product_id,
-            only_active: only_active ? 1 : 0,
-          },
-        };
+    listProductFaqs: b.query<ProductFaqRow[], ListFaqsParams | void>({
+      query: (params): FetchArgs => {
+        const qp: Record<string, string | number> = {};
+        if (params && (params as ListFaqsParams).product_id) {
+          qp.product_id = (params as ListFaqsParams).product_id as string;
+        }
+        if (params && (params as ListFaqsParams).only_active !== undefined) {
+          const onlyActive = (params as ListFaqsParams).only_active;
+          qp.only_active = onlyActive ? 1 : 0;
+        }
+        return { url: "/products/faqs", params: qp } as FetchArgs;
       },
-      transformResponse: (res: unknown): ProductFaq[] =>
-        Array.isArray(res) ? (res as ProductFaq[]) : [],
-      providesTags: (result) =>
-        result
-          ? [
-              ...result.map((i) => ({ type: "Faqs" as const, id: i.id })),
-              { type: "Faqs" as const, id: "LIST" },
-            ]
-          : [{ type: "Faqs" as const, id: "LIST" }],
+      transformResponse: (res: unknown): ProductFaqRow[] => {
+        const rows = pluckArray(res, ["data", "items", "rows", "faqs"]);
+        return rows.filter(isRecord).map((x) => x as ProductFaqRow);
+      },
+      // admin tarafında replaceFaqsAdmin -> ProductFAQs tag'i invalid ediyor
+      providesTags: (_result, _e, arg) => {
+        const params = (arg || {}) as ListFaqsParams;
+        return params.product_id
+          ? [{ type: "ProductFAQs" as const, id: params.product_id }]
+          : [{ type: "ProductFAQs" as const, id: "LIST" }];
+      },
+      keepUnusedDataFor: 60,
     }),
   }),
   overrideExisting: true,

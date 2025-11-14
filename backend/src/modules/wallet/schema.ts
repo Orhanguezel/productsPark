@@ -1,3 +1,5 @@
+// src/modules/wallet/schema.ts
+
 import {
   mysqlTable, char, varchar, decimal, text, datetime, mysqlEnum,
 } from "drizzle-orm/mysql-core";

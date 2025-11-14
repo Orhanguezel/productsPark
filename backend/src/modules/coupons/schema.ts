@@ -1,5 +1,14 @@
 import {
-  mysqlTable, char, varchar, decimal, int, datetime, boolean, index, uniqueIndex,
+  mysqlTable,
+  char,
+  varchar,
+  decimal,
+  int,
+  datetime,
+  boolean,
+  index,
+  uniqueIndex,
+  text,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
@@ -8,9 +17,16 @@ export const coupons = mysqlTable(
   {
     id: char("id", { length: 36 }).primaryKey().notNull(),
     code: varchar("code", { length: 50 }).notNull(),
+
+    // 🆕 Kupon başlığı ve içerik metni (HTML / rich text)
+    title: varchar("title", { length: 200 }),
+    content_html: text("content_html"),
+
     // MySQL ENUM olsa da FE/BE esnekliği için varchar tutuyoruz
     discount_type: varchar("discount_type", { length: 20 }).notNull(), // 'percentage' | 'fixed'
-    discount_value: decimal("discount_value", { precision: 10, scale: 2 }).notNull().default("0.00"),
+    discount_value: decimal("discount_value", { precision: 10, scale: 2 })
+      .notNull()
+      .default("0.00"),
     min_purchase: decimal("min_purchase", { precision: 10, scale: 2 }),
     max_discount: decimal("max_discount", { precision: 10, scale: 2 }),
     usage_limit: int("usage_limit"),
@@ -18,7 +34,9 @@ export const coupons = mysqlTable(
     valid_from: datetime("valid_from", { fsp: 3 }),
     valid_until: datetime("valid_until", { fsp: 3 }),
     is_active: boolean("is_active").notNull().default(true),
-    created_at: datetime("created_at", { fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    created_at: datetime("created_at", { fsp: 3 })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP(3)`),
     updated_at: datetime("updated_at", { fsp: 3 })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`)
@@ -29,8 +47,8 @@ export const coupons = mysqlTable(
     index("coupons_active_idx").on(t.is_active),
     index("coupons_valid_from_idx").on(t.valid_from),
     index("coupons_valid_until_idx").on(t.valid_until),
-  ]
+  ],
 );
 
-export type CouponRow    = typeof coupons.$inferSelect;
+export type CouponRow = typeof coupons.$inferSelect;
 export type CouponInsert = typeof coupons.$inferInsert;

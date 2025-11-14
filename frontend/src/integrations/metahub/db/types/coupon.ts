@@ -2,12 +2,19 @@
 
 export type DiscountType = "percentage" | "fixed";
 
+/**
+ * API'den ham gelen kupon (public + admin)
+ * BE tarafı null/string/number karışık dönebileceği için esnek tutuldu.
+ */
 export type ApiCoupon = {
   id: string;
   code: string;
-  title?: string | null;
 
-  discount_type?: string | null;          // 'percentage' | 'fixed' | varyasyon
+  title?: string | null;
+  content_html?: string | null;
+
+  // 'percentage' | 'fixed' | bazen farklı string
+  discount_type?: string | null;
   discount_value?: number | string;
 
   min_purchase?: number | string | null;
@@ -20,7 +27,7 @@ export type ApiCoupon = {
 
   valid_from?: string | Date | null;
   valid_until?: string | Date | null;
-  valid_to?: string | Date | null;        // eski alan desteği
+  valid_to?: string | Date | null; // eski alan desteği
 
   applicable_to?: "all" | "category" | "product" | string | null;
   category_ids?: string | string[] | null;
@@ -31,10 +38,15 @@ export type ApiCoupon = {
   updated_at?: string | null;
 };
 
+/**
+ * FE'de normalize edilmiş kupon modeli
+ */
 export type Coupon = {
   id: string;
   code: string;
+
   title?: string | null;
+  content_html?: string | null;
 
   discount_type: DiscountType;
   discount_value: number;
@@ -46,7 +58,7 @@ export type Coupon = {
   max_uses: number | null;
   used_count: number | null;
 
-  valid_from: string | null;  // ISO
+  valid_from: string | null; // ISO
   valid_until: string | null; // ISO
 
   applicable_to?: "all" | "category" | "product";
@@ -56,3 +68,32 @@ export type Coupon = {
   created_at?: string;
   updated_at?: string;
 };
+
+/**
+ * Admin tarafında create/update için ortak gövde
+ * - CreateCouponBody → hepsi optional ama FE'de code, discount_type, discount_value zorunlu kullanılacak
+ * - UpdateCouponBody → hepsi optional (PATCH)
+ */
+export type CouponInputBase = {
+  code: string;
+  title?: string | null;
+  content_html?: string | null;
+
+  discount_type: DiscountType;
+  discount_value: number;
+
+  min_purchase?: number | null;
+  max_discount?: number | null;
+  usage_limit?: number | null;
+
+  valid_from?: string | null;  // ISO
+  valid_until?: string | null; // ISO
+  is_active?: boolean;
+
+  applicable_to?: "all" | "category" | "product";
+  category_ids?: string[] | null;
+  product_ids?: string[] | null;
+};
+
+export type CreateCouponBody = CouponInputBase;
+export type UpdateCouponBody = Partial<CouponInputBase>;

@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/pagination";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 
-// RTK Admin endpoints
+// RTK Admin endpoints (core ürün list/delete)
 import {
   useListProductsAdminQuery,
   useDeleteProductAdminMutation,
@@ -43,19 +43,29 @@ import {
 import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
 
 // Types
-import type { ProductAdmin, CategoryRow } from "@/integrations/metahub/db/types/products";
+import type {
+  ProductAdmin,
+  CategoryRow,
+} from "@/integrations/metahub/db/types/products";
 
 const formatTRY = (n: number) =>
-  new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 2 }).format(n ?? 0);
+  new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2,
+  }).format(n ?? 0);
 
 export default function ProductList() {
   const navigate = useNavigate();
 
   // server data
-  const { data: productsData = [], isFetching: loadingProducts } = useListProductsAdminQuery();
-  const { data: categories = [], isFetching: loadingCategories } = useListCategoriesAdminQuery();
+  const { data: productsData = [], isFetching: loadingProducts } =
+    useListProductsAdminQuery();
+  const { data: categories = [], isFetching: loadingCategories } =
+    useListCategoriesAdminQuery();
 
-  const [deleteProduct, { isLoading: deleting }] = useDeleteProductAdminMutation();
+  const [deleteProduct, { isLoading: deleting }] =
+    useDeleteProductAdminMutation();
 
   // ui state
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -74,7 +84,10 @@ export default function ProductList() {
     );
   };
 
-  const getCategoryName = (p: ProductAdmin, cats: Pick<CategoryRow, "id" | "name">[]): string | null => {
+  const getCategoryName = (
+    p: ProductAdmin,
+    cats: Pick<CategoryRow, "id" | "name">[]
+  ): string | null => {
     // Prefer embedded relation; else look up by category_id from list
     if (p.categories?.name) return p.categories.name;
     if (p.category_id) {
@@ -93,7 +106,9 @@ export default function ProductList() {
     }
 
     if (filterStatus !== "all") {
-      list = list.filter((p) => (!!p.is_active) === (filterStatus === "active"));
+      list = list.filter(
+        (p) => !!p.is_active === (filterStatus === "active")
+      );
     }
 
     if (searchQuery.trim()) {
@@ -102,7 +117,8 @@ export default function ProductList() {
         (p) =>
           (p.name ?? "").toLowerCase().includes(q) ||
           (p.slug ?? "").toLowerCase().includes(q) ||
-          (getCategoryName(p, categories)?.toLowerCase().includes(q) ?? false)
+          (getCategoryName(p, categories)?.toLowerCase().includes(q) ??
+            false)
       );
     }
 
@@ -117,9 +133,15 @@ export default function ProductList() {
   }, [productsData, filterCategory, filterStatus, searchQuery, categories]);
 
   // pagination
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredProducts.length / itemsPerPage)
+  );
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+  const currentProducts = filteredProducts.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -139,16 +161,22 @@ export default function ProductList() {
     if (startPage > 1) {
       items.push(
         <PaginationItem key="first">
-          <PaginationLink onClick={() => handlePageChange(1)}>1</PaginationLink>
+          <PaginationLink onClick={() => handlePageChange(1)}>
+            1
+          </PaginationLink>
         </PaginationItem>
       );
-      if (startPage > 2) items.push(<PaginationEllipsis key="ellipsis-start" />);
+      if (startPage > 2)
+        items.push(<PaginationEllipsis key="ellipsis-start" />);
     }
 
     for (let i = startPage; i <= endPage; i++) {
       items.push(
         <PaginationItem key={i}>
-          <PaginationLink onClick={() => handlePageChange(i)} isActive={currentPage === i}>
+          <PaginationLink
+            onClick={() => handlePageChange(i)}
+            isActive={currentPage === i}
+          >
             {i}
           </PaginationLink>
         </PaginationItem>
@@ -156,10 +184,13 @@ export default function ProductList() {
     }
 
     if (endPage < totalPages) {
-      if (endPage < totalPages - 1) items.push(<PaginationEllipsis key="ellipsis-end" />);
+      if (endPage < totalPages - 1)
+        items.push(<PaginationEllipsis key="ellipsis-end" />);
       items.push(
         <PaginationItem key="last">
-          <PaginationLink onClick={() => handlePageChange(totalPages)}>{totalPages}</PaginationLink>
+          <PaginationLink onClick={() => handlePageChange(totalPages)}>
+            {totalPages}
+          </PaginationLink>
         </PaginationItem>
       );
     }
@@ -174,7 +205,11 @@ export default function ProductList() {
       toast({ title: "Başarılı", description: "Ürün silindi." });
     } catch (err) {
       console.error(err);
-      toast({ title: "Hata", description: "Ürün silinirken bir hata oluştu.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Ürün silinirken bir hata oluştu.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -186,7 +221,10 @@ export default function ProductList() {
         <div className="flex flex-wrap gap-2 justify-between items-center">
           <h3 className="text-lg font-semibold">Ürün Yönetimi</h3>
           {/* sidebarda aktiflik için bu rota: /admin/products/new */}
-          <Button onClick={() => navigate("/admin/products/new")} className="gradient-primary">
+          <Button
+            onClick={() => navigate("/admin/products/new")}
+            className="gradient-primary"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Yeni Ürün
           </Button>
@@ -245,7 +283,8 @@ export default function ProductList() {
           <>
             <div className="text-sm text-muted-foreground mb-2">
               Toplam {filteredProducts.length} ürün bulundu
-              {filteredProducts.length > itemsPerPage && ` (Sayfa ${currentPage}/${totalPages})`}
+              {filteredProducts.length > itemsPerPage &&
+                ` (Sayfa ${currentPage}/${totalPages})`}
             </div>
 
             <Table>
@@ -283,16 +322,26 @@ export default function ProductList() {
 
                       <TableCell className="font-medium">
                         <div className="flex flex-col">
-                          <span className="line-clamp-1">{product.name}</span>
-                          <span className="text-xs text-muted-foreground">/{product.slug}</span>
+                          <span className="line-clamp-1">
+                            {product.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            /{product.slug}
+                          </span>
                         </div>
                       </TableCell>
 
                       <TableCell>
-                        {catName ? catName : <span className="text-muted-foreground">-</span>}
+                        {catName ? (
+                          catName
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
 
-                      <TableCell>{formatTRY(Number(product.price || 0))}</TableCell>
+                      <TableCell>
+                        {formatTRY(Number(product.price || 0))}
+                      </TableCell>
 
                       <TableCell>{product.stock_quantity ?? 0}</TableCell>
 
@@ -308,7 +357,9 @@ export default function ProductList() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/admin/products/edit/${product.id}`)}
+                          onClick={() =>
+                            navigate(`/admin/products/edit/${product.id}`)
+                          }
                           title="Düzenle"
                         >
                           <Pencil className="w-4 h-4" />
@@ -327,7 +378,10 @@ export default function ProductList() {
                 })}
                 {currentProducts.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell
+                      colSpan={7}
+                      className="text-center text-muted-foreground"
+                    >
                       Kayıt bulunamadı.
                     </TableCell>
                   </TableRow>
@@ -342,8 +396,15 @@ export default function ProductList() {
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
-                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        onClick={() =>
+                          currentPage > 1 &&
+                          handlePageChange(currentPage - 1)
+                        }
+                        className={
+                          currentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
                       />
                     </PaginationItem>
 
@@ -352,10 +413,13 @@ export default function ProductList() {
                     <PaginationItem>
                       <PaginationNext
                         onClick={() =>
-                          currentPage < totalPages && handlePageChange(currentPage + 1)
+                          currentPage < totalPages &&
+                          handlePageChange(currentPage + 1)
                         }
                         className={
-                          currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"
+                          currentPage === totalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
                         }
                       />
                     </PaginationItem>

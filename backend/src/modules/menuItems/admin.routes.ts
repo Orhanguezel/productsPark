@@ -9,11 +9,13 @@ import {
   adminReorderMenuItems,
 } from './admin.controller';
 
+const BASE = '/admin/menu_items';
+
 export async function registerMenuItemsAdmin(app: FastifyInstance) {
-  app.get('/admin/menu_items', { preHandler: [requireAuth] }, adminListMenuItems);
-  app.get('/admin/menu_items/:id', { preHandler: [requireAuth] }, adminGetMenuItemById);
-  app.post('/admin/menu_items', { preHandler: [requireAuth] }, adminCreateMenuItem);
-  app.patch('/admin/menu_items/:id', { preHandler: [requireAuth] }, adminUpdateMenuItem);
-  app.delete('/admin/menu_items/:id', { preHandler: [requireAuth] }, adminDeleteMenuItem);
-  app.post('/admin/menu_items/reorder', { preHandler: [requireAuth] }, adminReorderMenuItems);
+  app.get(`${BASE}`, { preHandler: [requireAuth] }, adminListMenuItems);
+  app.get(`${BASE}/:id`, { preHandler: [requireAuth] }, adminGetMenuItemById);
+  app.post(`${BASE}`, { preHandler: [requireAuth] }, adminCreateMenuItem);
+  app.patch(`${BASE}/:id`, { preHandler: [requireAuth] }, adminUpdateMenuItem);
+  app.delete(`${BASE}/:id`, { preHandler: [requireAuth] }, adminDeleteMenuItem);
+  app.post(`${BASE}/reorder`, { preHandler: [requireAuth] }, adminReorderMenuItems);
 }

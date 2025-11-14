@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/components/admin/AdminPanel/CouponManagement.tsx
+// (veya mevcut CouponManagement dosyan)
+// =============================================================
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -29,110 +34,79 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-interface Coupon {
-  id: string;
+import {
+  useListCouponsAdminQuery,
+  useCreateCouponAdminMutation,
+  useUpdateCouponAdminMutation,
+  useDeleteCouponAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+import type {
+  Coupon,
+  DiscountType,
+  CreateCouponBody,
+} from "@/integrations/metahub/db/types/coupon";
+
+type FormState = {
   code: string;
-  discount_type: "percentage" | "fixed";
+  title: string;
+  content_html: string;
+  discount_type: DiscountType;
   discount_value: number;
   min_purchase: number;
   max_uses: number | null;
-  used_count: number;
-  valid_from: string;
-  valid_until: string | null;
+  valid_from: string; // YYYY-MM-DD
+  valid_until: string | null; // YYYY-MM-DD | null
   is_active: boolean;
-}
+};
+
+const todayStr = () => new Date().toISOString().split("T")[0];
+
+const defaultForm: FormState = {
+  code: "",
+  title: "",
+  content_html: "",
+  discount_type: "percentage",
+  discount_value: 0,
+  min_purchase: 0,
+  max_uses: null,
+  valid_from: todayStr(),
+  valid_until: null,
+  is_active: true,
+};
 
 export function CouponManagement() {
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: coupons = [], isLoading, refetch } = useListCouponsAdminQuery();
+  const [createCoupon, { isLoading: isCreating }] =
+    useCreateCouponAdminMutation();
+  const [updateCoupon, { isLoading: isUpdating }] =
+    useUpdateCouponAdminMutation();
+  const [deleteCoupon, { isLoading: isDeleting }] =
+    useDeleteCouponAdminMutation();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
-  const [formData, setFormData] = useState({
-    code: "",
-    discount_type: "percentage" as "percentage" | "fixed",
-    discount_value: 0,
-    min_purchase: 0,
-    max_uses: null as number | null,
-    valid_from: new Date().toISOString().split("T")[0],
-    valid_until: null as string | null,
-    is_active: true,
-  });
+  const [formData, setFormData] = useState<FormState>(defaultForm);
 
-  useEffect(() => {
-    fetchCoupons();
-  }, []);
+  const saving = isCreating || isUpdating;
 
-  const fetchCoupons = async () => {
-    const { data, error } = await metahub
-      .from("coupons")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast.error("Kuponlar yüklenemedi");
-      console.error(error);
-    } else {
-      setCoupons((data as Coupon[]) || []);
-    }
-    setLoading(false);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (editingCoupon) {
-      const { error } = await metahub
-        .from("coupons")
-        .update(formData)
-        .eq("id", editingCoupon.id);
-
-      if (error) {
-        toast.error("Kupon güncellenemedi");
-        console.error(error);
-      } else {
-        toast.success("Kupon güncellendi");
-        setDialogOpen(false);
-        fetchCoupons();
-        resetForm();
-      }
-    } else {
-      const { error } = await metahub.from("coupons").insert([formData]);
-
-      if (error) {
-        toast.error("Kupon eklenemedi");
-        console.error(error);
-      } else {
-        toast.success("Kupon eklendi");
-        setDialogOpen(false);
-        fetchCoupons();
-        resetForm();
-      }
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Bu kuponu silmek istediğinizden emin misiniz?")) return;
-
-    const { error } = await metahub.from("coupons").delete().eq("id", id);
-
-    if (error) {
-      toast.error("Kupon silinemedi");
-      console.error(error);
-    } else {
-      toast.success("Kupon silindi");
-      fetchCoupons();
-    }
+  const resetForm = () => {
+    setEditingCoupon(null);
+    setFormData(defaultForm);
   };
 
   const handleEdit = (coupon: Coupon) => {
     setEditingCoupon(coupon);
     setFormData({
-      code: coupon.code,
+      code: coupon.code ?? "",
+      title: coupon.title ?? "",
+      content_html: coupon.content_html ?? "",
       discount_type: coupon.discount_type,
       discount_value: coupon.discount_value,
       min_purchase: coupon.min_purchase,
-      max_uses: coupon.max_uses,
-      valid_from: coupon.valid_from.split("T")[0],
+      max_uses: coupon.max_uses ?? null,
+      valid_from: coupon.valid_from
+        ? coupon.valid_from.split("T")[0]
+        : todayStr(),
       valid_until: coupon.valid_until
         ? coupon.valid_until.split("T")[0]
         : null,
@@ -141,21 +115,62 @@ export function CouponManagement() {
     setDialogOpen(true);
   };
 
-  const resetForm = () => {
-    setEditingCoupon(null);
-    setFormData({
-      code: "",
-      discount_type: "percentage",
-      discount_value: 0,
-      min_purchase: 0,
-      max_uses: null,
-      valid_from: new Date().toISOString().split("T")[0],
-      valid_until: null,
-      is_active: true,
-    });
+  const handleDelete = async (id: string) => {
+    if (!confirm("Bu kuponu silmek istediğinizden emin misiniz?")) return;
+    try {
+      await deleteCoupon(id).unwrap();
+      toast.success("Kupon silindi");
+      refetch();
+    } catch (err) {
+      console.error(err);
+      toast.error("Kupon silinemedi");
+    }
   };
 
-  if (loading) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const payload: CreateCouponBody = {
+      code: formData.code.trim(),
+      title: formData.title.trim() || null,
+      content_html: formData.content_html.trim() || null,
+      discount_type: formData.discount_type,
+      discount_value: Number(formData.discount_value),
+      min_purchase: Number.isFinite(formData.min_purchase)
+        ? formData.min_purchase
+        : 0,
+      // max_discount için UI alanın yok → null
+      max_discount: null,
+      usage_limit: formData.max_uses ?? null,
+      valid_from: formData.valid_from || null,
+      valid_until: formData.valid_until || null,
+      is_active: formData.is_active,
+      // Şimdilik kapsam kullanılmıyor → tüm site
+      applicable_to: "all",
+      category_ids: null,
+      product_ids: null,
+    };
+
+    try {
+      if (editingCoupon) {
+        await updateCoupon({ id: editingCoupon.id, body: payload }).unwrap();
+        toast.success("Kupon güncellendi");
+      } else {
+        await createCoupon(payload).unwrap();
+        toast.success("Kupon eklendi");
+      }
+      setDialogOpen(false);
+      resetForm();
+      refetch();
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        editingCoupon ? "Kupon güncellenemedi" : "Kupon eklenemedi",
+      );
+    }
+  };
+
+  if (isLoading) {
     return <div>Yükleniyor...</div>;
   }
 
@@ -165,7 +180,12 @@ export function CouponManagement() {
         <h2 className="text-2xl font-bold">Kupon Yönetimi</h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
+            <Button
+              onClick={() => {
+                resetForm();
+                setDialogOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Yeni Kupon
             </Button>
@@ -176,7 +196,34 @@ export function CouponManagement() {
                 {editingCoupon ? "Kupon Düzenle" : "Yeni Kupon Ekle"}
               </DialogTitle>
             </DialogHeader>
+
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Başlık & içerik metni */}
+              <div className="space-y-2">
+                <Label htmlFor="title">Kupon Başlığı</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
+                  placeholder="Örn: İlk sipariş indirimi"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="content_html">İçerik / Açıklama</Label>
+                <Textarea
+                  id="content_html"
+                  rows={3}
+                  value={formData.content_html}
+                  onChange={(e) =>
+                    setFormData({ ...formData, content_html: e.target.value })
+                  }
+                  placeholder="Sipariş özetinde gösterilecek metni yazın."
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="code">Kupon Kodu *</Label>
@@ -184,10 +231,13 @@ export function CouponManagement() {
                     id="code"
                     value={formData.code}
                     onChange={(e) =>
-                      setFormData({ ...formData, code: e.target.value.toUpperCase() })
+                      setFormData({
+                        ...formData,
+                        code: e.target.value.toUpperCase(),
+                      })
                     }
                     required
-                    placeholder="SUMMER2024"
+                    placeholder="SUMMER2025"
                   />
                 </div>
 
@@ -195,7 +245,7 @@ export function CouponManagement() {
                   <Label htmlFor="discount_type">İndirim Türü</Label>
                   <Select
                     value={formData.discount_type}
-                    onValueChange={(value: "percentage" | "fixed") =>
+                    onValueChange={(value: DiscountType) =>
                       setFormData({ ...formData, discount_type: value })
                     }
                   >
@@ -222,7 +272,7 @@ export function CouponManagement() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        discount_value: parseFloat(e.target.value),
+                        discount_value: parseFloat(e.target.value || "0"),
                       })
                     }
                     required
@@ -240,7 +290,7 @@ export function CouponManagement() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        min_purchase: parseFloat(e.target.value),
+                        min_purchase: parseFloat(e.target.value || "0"),
                       })
                     }
                     min="0"
@@ -255,12 +305,12 @@ export function CouponManagement() {
                   <Input
                     id="max_uses"
                     type="number"
-                    value={formData.max_uses || ""}
+                    value={formData.max_uses ?? ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         max_uses: e.target.value
-                          ? parseInt(e.target.value)
+                          ? parseInt(e.target.value, 10)
                           : null,
                       })
                     }
@@ -275,7 +325,10 @@ export function CouponManagement() {
                     type="date"
                     value={formData.valid_from}
                     onChange={(e) =>
-                      setFormData({ ...formData, valid_from: e.target.value })
+                      setFormData({
+                        ...formData,
+                        valid_from: e.target.value,
+                      })
                     }
                     required
                   />
@@ -288,7 +341,7 @@ export function CouponManagement() {
                   <Input
                     id="valid_until"
                     type="date"
-                    value={formData.valid_until || ""}
+                    value={formData.valid_until ?? ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
@@ -314,12 +367,18 @@ export function CouponManagement() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setDialogOpen(false)}
+                  onClick={() => {
+                    setDialogOpen(false);
+                  }}
                 >
                   İptal
                 </Button>
-                <Button type="submit">
-                  {editingCoupon ? "Güncelle" : "Ekle"}
+                <Button type="submit" disabled={saving}>
+                  {saving
+                    ? "Kaydediliyor..."
+                    : editingCoupon
+                    ? "Güncelle"
+                    : "Ekle"}
                 </Button>
               </div>
             </form>
@@ -352,26 +411,31 @@ export function CouponManagement() {
               </TableCell>
               <TableCell>₺{coupon.min_purchase}</TableCell>
               <TableCell>
-                {coupon.used_count}
+                {coupon.used_count ?? 0}
                 {coupon.max_uses ? ` / ${coupon.max_uses}` : " / ∞"}
               </TableCell>
               <TableCell>
                 <div className="text-xs">
-                  {new Date(coupon.valid_from).toLocaleDateString("tr-TR")}
+                  {coupon.valid_from
+                    ? new Date(coupon.valid_from).toLocaleDateString("tr-TR")
+                    : "-"}
                   {coupon.valid_until && (
                     <>
                       {" - "}
-                      {new Date(coupon.valid_until).toLocaleDateString("tr-TR")}
+                      {new Date(
+                        coupon.valid_until,
+                      ).toLocaleDateString("tr-TR")}
                     </>
                   )}
                 </div>
               </TableCell>
               <TableCell>
                 <span
-                  className={`px-2 py-1 rounded text-xs ${coupon.is_active
-                    ? "bg-green-100 text-green-800"
-                    : "bg-gray-100 text-gray-800"
-                    }`}
+                  className={`px-2 py-1 rounded text-xs ${
+                    coupon.is_active
+                      ? "bg-green-100 text-green-800"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
                 >
                   {coupon.is_active ? "Aktif" : "Pasif"}
                 </span>
@@ -389,6 +453,7 @@ export function CouponManagement() {
                     variant="destructive"
                     size="sm"
                     onClick={() => handleDelete(coupon.id)}
+                    disabled={isDeleting}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

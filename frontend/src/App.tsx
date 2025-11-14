@@ -16,28 +16,29 @@ import { CampaignPopup } from "./components/CampaignPopup";
 import { CartDrawer } from "./components/CartDrawer";
 
 // Lazy load pages
-const Index = lazy(() => import("./pages/Index"));
-const Products = lazy(() => import("./pages/Products"));
-const ProductDetail = lazy(() => import("./pages/ProductDetail"));
-const Categories = lazy(() => import("./pages/Categories"));
-const Cart = lazy(() => import("./pages/Cart"));
-const Checkout = lazy(() => import("./pages/Checkout"));
-const PaymentInfo = lazy(() => import("./pages/PaymentInfo"));
-const DepositPaymentInfo = lazy(() => import("./pages/DepositPaymentInfo"));
-const PaymentIframe = lazy(() => import("./pages/PaymentIframe"));
-const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
-const PaymentPending = lazy(() => import("./pages/PaymentPending"));
-const Auth = lazy(() => import("./pages/Auth"));
-const PasswordReset = lazy(() => import("./pages/PasswordReset"));
-const Blog = lazy(() => import("./pages/Blog"));
-const BlogDetail = lazy(() => import("./pages/BlogDetail"));
-const Contact = lazy(() => import("./pages/Contact"));
-const About = lazy(() => import("./pages/About"));
-const Documentation = lazy(() => import("./pages/Documentation"));
-const Admin = lazy(() => import("./pages/Admin"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Support = lazy(() => import("./pages/Support"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+const Index = lazy(() => import("./pages/public/Index"));
+const Products = lazy(() => import("./pages/public/product/Products"));
+const ProductDetail = lazy(() => import("./pages/public/product/ProductDetail"));
+const Categories = lazy(() => import("./pages/public/Categories"));
+const Cart = lazy(() => import("./pages/public/Cart"));
+const Checkout = lazy(() => import("./pages/public/checkout/Checkout"));
+const PaymentInfo = lazy(() => import("./pages/public/PaymentInfo"));
+const DepositPaymentInfo = lazy(() => import("./pages/public/DepositPaymentInfo"));
+const PaymentIframe = lazy(() => import("./pages/public/PaymentIframe"));
+const PaymentSuccess = lazy(() => import("./pages/public/PaymentSuccess"));
+const PaymentPending = lazy(() => import("./pages/public/PaymentPending"));
+const Auth = lazy(() => import("./pages/public/Auth"));
+const PasswordReset = lazy(() => import("./pages/public/PasswordReset"));
+const Blog = lazy(() => import("./pages/public/Blog"));
+const BlogDetail = lazy(() => import("./pages/public/BlogDetail"));
+const Contact = lazy(() => import("./pages/public/Contact"));
+const About = lazy(() => import("./pages/public/About"));
+const Documentation = lazy(() => import("./pages/public/Documentation"));
+const Admin = lazy(() => import("./pages/public/Admin"));
+const Dashboard = lazy(() => import("./pages/public/account/Dashboard"));
+const Support = lazy(() => import("./pages/public/Support"));
+const CouponDetailPage = lazy(() => import("./pages/public/CouponDetailPage"));
+const NotFound = lazy(() => import("./pages/public/NotFound"));
 const HomeSettings = lazy(() => import("./pages/admin/HomeSettings"));
 const ProductList = lazy(() => import("./pages/admin/product/ProductList"));
 const ProductForm = lazy(() => import("./pages/admin/product/ProductForm"));
@@ -49,7 +50,7 @@ const CouponList = lazy(() => import("./pages/admin/CouponList"));
 const CouponForm = lazy(() => import("./pages/admin/CouponForm"));
 const OrderList = lazy(() => import("./pages/admin/OrderList"));
 const OrderDetail = lazy(() => import("./pages/admin/OrderDetail"));
-const UserOrderDetail = lazy(() => import("./pages/UserOrderDetail"));
+const UserOrderDetail = lazy(() => import("./pages/public/UserOrderDetail"));
 const TicketList = lazy(() => import("./pages/admin/TicketList"));
 const TicketDetail = lazy(() => import("./pages/admin/TicketDetail"));
 const UserList = lazy(() => import("./pages/admin/UserList"));
@@ -61,14 +62,14 @@ const FakeNotificationList = lazy(() => import("./pages/admin/FakeNotificationLi
 const DepositRequestList = lazy(() => import("./pages/admin/DepositRequestList"));
 const PageList = lazy(() => import("./pages/admin/PageList"));
 const PageForm = lazy(() => import("./pages/admin/PageForm"));
-const CustomPage = lazy(() => import("./pages/CustomPage"));
+const CustomPage = lazy(() => import("./pages/public/CustomPage"));
 const MenuManagement = lazy(() => import("./pages/admin/menu/MenuManagement"));
 const ApiProviderList = lazy(() => import("./pages/admin/ApiProviderList"));
 const ApiProviderForm = lazy(() => import("./pages/admin/ApiProviderForm"));
 const TurkpinSettings = lazy(() => import("./pages/admin/TurkpinSettings"));
 const PaymentRequestList = lazy(() => import("./pages/admin/PaymentRequestList"));
 const Reports = lazy(() => import("./pages/admin/Reports"));
-const Sitemap = lazy(() => import("./pages/Sitemap"));
+const Sitemap = lazy(() => import("./pages/public/Sitemap"));
 const PopupList = lazy(() => import("./pages/admin/PopupList"));
 const PopupForm = lazy(() => import("./pages/admin/PopupForm"));
 const EmailTemplateList = lazy(() => import("./pages/admin/EmailTemplateList"));
@@ -126,6 +127,7 @@ const AppContent = () => {
             <Route path="/blog/:slug" element={<BlogDetail />} />
             <Route path="/iletisim" element={<Contact />} />
             <Route path="/dokumantasyon" element={<Documentation />} />
+            <Route path="/coupon" element={<CouponDetailPage />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/admin/reports" element={<Reports />} />
             <Route path="/admin/home-settings" element={<HomeSettings />} />

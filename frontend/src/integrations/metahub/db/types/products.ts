@@ -7,7 +7,7 @@ export type CategoryBrief = { id: string; name: string; slug: string };
 export type QuantityOption = { quantity: number; price: number };
 export type Badge = { text: string; icon?: string | null; active: boolean };
 
-/** Admin ve FE’de kullandığımız CustomField tipi */
+/** Admin ve FE’de kullandığımız CustomField tipi (public normalize) */
 export type CustomField = {
   id?: string; // local/BE id opsiyonel
   label: string;
@@ -29,10 +29,10 @@ export type CategoryRow = {
 export type ProductReviewRow = {
   id: string;
   product_id: string;
-  customer_name: string;
+  customer_name: string | null; // DB: DEFAULT NULL
   rating: number;
-  comment: string;
-  review_date: string; // YYYY-MM-DD
+  comment: string | null;
+  review_date: string; // DATETIME(3) → ISO string
   is_active: boolean | 0 | 1;
   created_at?: string;
   updated_at?: string;
@@ -49,7 +49,7 @@ export type ProductFaqRow = {
   updated_at?: string;
 };
 
-/** Form/FE için hafifletilmiş input tipleri */
+/** Form/FE için hafifletilmiş input tipleri (admin/public create/update) */
 export type ReviewInput = {
   id?: string; // yeni eklenende yok
   customer_name: string;
@@ -77,7 +77,7 @@ export type ProductStockRow = {
   order_item_id: string | null;
 };
 
-/** Ana ürün satırı (BE ham alan adları) */
+/** Ana ürün satırı (BE ham alan adları) — Admin tarafı ProductAdmin olarak kullanılıyor */
 export type ProductRow = {
   id: string;
   name: string;
@@ -100,6 +100,7 @@ export type ProductRow = {
   gallery_urls?: string[] | null;
   gallery_asset_ids?: string[] | null;
 
+  // BE JSON → genelde string[]; ama eski datada farklı şeyler olabilir
   features?: string[] | null;
 
   rating: number;
@@ -108,8 +109,17 @@ export type ProductRow = {
   product_type?: string | null;
   delivery_type?: "manual" | "auto_stock" | "file" | "api" | string | null;
 
-  custom_fields?: ReadonlyArray<Record<string, unknown>> | null;
-  quantity_options?: QuantityOption[] | null;
+  // BE JSON — ham kayıtları veya normalize CustomField[] gelebilir
+  custom_fields?:
+    | ReadonlyArray<Record<string, unknown>>
+    | ReadonlyArray<CustomField>
+    | null;
+
+  // BE JSON — genelde QuantityOption[]; ama ham JSON da olabilir
+  quantity_options?:
+    | QuantityOption[]
+    | ReadonlyArray<Record<string, unknown>>
+    | null;
 
   api_provider_id?: string | null;
   api_product_id?: string | null;
@@ -124,13 +134,15 @@ export type ProductRow = {
   demo_embed_enabled?: boolean | 0 | 1;
   demo_button_text?: string | null;
 
-  badges?: Badge[] | null;
+  // BE JSON badges alanı
+  badges?: Badge[] | ReadonlyArray<Record<string, unknown>> | null;
 
   sku?: string | null;
   stock_quantity: number;
 
   is_active: boolean | 0 | 1;
   is_featured?: boolean | 0 | 1;
+  // DB’de kolon yok; admin tarafında alias olarak kullanılabiliyor
   show_on_homepage?: boolean | 0 | 1;
   is_digital?: boolean | 0 | 1;
   requires_shipping?: boolean | 0 | 1;
@@ -168,7 +180,7 @@ export type ProductRow = {
   categories?: { id: string; name: string; slug: string };
 };
 
-/** FE normalize edilmiş ürün — public taraf */
+/** FE normalize edilmiş ürün — public taraf (products.endpoints.ts) */
 export type Product = {
   id: string;
   name: string;
@@ -196,13 +208,7 @@ export type Product = {
   product_type?: string | null;
   delivery_type?: "manual" | "auto_stock" | "file" | "api" | string | null;
 
-  custom_fields?: Array<{
-    id: string;
-    label: string;
-    type: "text" | "email" | "phone" | "url" | "textarea";
-    placeholder?: string | null;
-    required: boolean;
-  }> | null;
+  custom_fields?: Array<CustomField> | null;
 
   quantity_options?: QuantityOption[] | null;
 
@@ -249,6 +255,8 @@ export type Product = {
  * BE ham response tipi (string sayısallar, CSV/JSON dizi alanları vb.)
  * Legacy alanlar: compare_at_price, images
  * Yeni storage alanları: featured_image*, gallery_asset_ids
+ *
+ * Admin + public RTK endpoint’lerinin normalize ettiği ham tip.
  */
 export type ApiProduct = Omit<
   Product,
@@ -319,12 +327,14 @@ export type ApiProduct = Omit<
   updated_at?: string;
 };
 
+/** Admin tarafı için ana ürün tipi */
 export type ProductAdmin = ProductRow;
 
+/** Admin ve public review/faq alias’ları */
 export type Review = ProductReviewRow;
 export type FAQ = ProductFaqRow;
 
-/** Used Stock birleşik tipi */
+/** Used Stock birleşik tipi (admin listUsedStockAdmin) */
 export type UsedStockItem = ProductStockRow & {
   order: {
     id: string;
@@ -334,7 +344,7 @@ export type UsedStockItem = ProductStockRow & {
   } | null;
 };
 
-/** Public product options */
+/** Public product options (public options endpoint’i) */
 export type ProductOption = {
   id: string;
   product_id: string;
@@ -348,15 +358,15 @@ export type ProductOption = {
 export type Stock = {
   id: string;
   product_id: string;
-  code?: string;          // FE adı
-  stock_content?: string; // BE adı
+  code?: string;          // FE alias
+  stock_content?: string; // BE kolon adı
   is_used: boolean | 0 | 1;
   used_at?: string | null;
   created_at: string;
   order_item_id?: string | null;
 };
 
-/** Admin liste parametreleri */
+/** Admin liste parametreleri (admin + public list için temel) */
 export type ProductsAdminListParams = {
   q?: string;
   category_id?: string;
@@ -371,8 +381,15 @@ export type ProductsAdminListParams = {
 };
 
 /** Upsert/Patch tipleri (rating BE’de hesaplanır) */
-export type UpsertProductBody = Omit<ProductRow, "id" | "created_at" | "updated_at" | "categories" | "rating">;
+export type UpsertProductBody = Omit<
+  ProductRow,
+  "id" | "created_at" | "updated_at" | "categories" | "rating"
+>;
 export type PatchProductBody = Partial<UpsertProductBody>;
 
 /** API provider minimal tipi */
-export type ApiProviderRow = { id: string; name: string; is_active: boolean | 0 | 1 };
+export type ApiProviderRow = {
+  id: string;
+  name: string;
+  is_active: boolean | 0 | 1;
+};
