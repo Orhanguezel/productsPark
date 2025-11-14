@@ -1,3 +1,5 @@
+// src/pages/admin/BlogList.tsx
+
 import { useNavigate } from "react-router-dom";
 import {
   useListBlogPostsAdminQuery,
@@ -15,29 +17,46 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
-import "@/styles/richtext.css"; // ⬅️ wrap yardımcı olur
+import "@/styles/richtext.css";
 
 export default function BlogList() {
   const navigate = useNavigate();
   const { data: posts = [], isFetching } = useListBlogPostsAdminQuery(
     { sort: "created_at", order: "desc", limit: 200, offset: 0 },
-    { refetchOnMountOrArgChange: true }
+    { refetchOnMountOrArgChange: true },
   );
-  const [delPost, { isLoading: deleting }] = useDeleteBlogPostAdminMutation();
+  const [delPost, { isLoading: deleting }] =
+    useDeleteBlogPostAdminMutation();
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(posts.length / itemsPerPage)), [posts.length]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(posts.length / itemsPerPage)),
+    [posts.length],
+  );
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPosts = posts.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedPosts = posts.slice(
+    startIndex,
+    startIndex + itemsPerPage,
+  );
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Bu blog yazısını silmek istediğinizden emin misiniz?")) return;
+    if (
+      !confirm(
+        "Bu blog yazısını silmek istediğinizden emin misiniz?",
+      )
+    )
+      return;
     try {
       await delPost(id).unwrap();
       toast.success("Blog yazısı silindi.");
@@ -60,7 +79,10 @@ export default function BlogList() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold">Blog Yazıları</h3>
-          <Button onClick={() => navigate("/admin/blog/new")} className="gradient-primary">
+          <Button
+            onClick={() => navigate("/admin/blog/new")}
+            className="gradient-primary"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Yeni Blog Yazısı
           </Button>
@@ -71,22 +93,42 @@ export default function BlogList() {
           <Table className="min-w-full">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-1/2">Başlık</TableHead>
+                <TableHead className="w-[90px]">Kapak</TableHead>
+                <TableHead className="w-1/3">Başlık</TableHead>
                 <TableHead className="w-1/6">Yazar</TableHead>
                 <TableHead className="w-1/6">Durum</TableHead>
                 <TableHead className="w-1/6">Tarih</TableHead>
-                <TableHead className="text-right w-[120px]">İşlemler</TableHead>
+                <TableHead className="text-right w-[120px]">
+                  İşlemler
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedPosts.map((post) => (
+              {paginatedPosts.map((post: any) => (
                 <TableRow key={post.id}>
-                  <TableCell className="font-medium break-words [overflow-wrap:anywhere]">
+                  {/* Kapak görseli */}
+                  <TableCell>
+                    {post.image_url ? (
+                      <img
+                        src={post.image_url}
+                        alt={post.image_alt || post.title || "Kapak"}
+                        className="h-12 w-16 rounded object-cover border bg-muted"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        —
+                      </span>
+                    )}
+                  </TableCell>
+
+                  <TableCell className="font-medium break-words overflow-wrap:anywhere">
                     {post.title}
                   </TableCell>
-                  <TableCell className="break-words [overflow-wrap:anywhere]">
+
+                  <TableCell className="break-words overflow-wrap:anywhere">
                     {post.author_name || "—"}
                   </TableCell>
+
                   <TableCell>
                     {post.is_published ? (
                       <span className="text-green-600">Yayında</span>
@@ -94,14 +136,22 @@ export default function BlogList() {
                       <span className="text-yellow-600">Taslak</span>
                     )}
                   </TableCell>
+
                   <TableCell>
-                    {post.created_at ? new Date(post.created_at).toLocaleDateString("tr-TR") : "—"}
+                    {post.created_at
+                      ? new Date(
+                          post.created_at,
+                        ).toLocaleDateString("tr-TR")
+                      : "—"}
                   </TableCell>
+
                   <TableCell className="text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => navigate(`/admin/blog/edit/${post.id}`)}
+                      onClick={() =>
+                        navigate(`/admin/blog/edit/${post.id}`)
+                      }
                     >
                       <Pencil className="w-4 h-4" />
                     </Button>
@@ -128,11 +178,15 @@ export default function BlogList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
+                    if (currentPage > 1)
+                      setCurrentPage(currentPage - 1);
                   }}
                 />
               </PaginationItem>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              {Array.from(
+                { length: totalPages },
+                (_, i) => i + 1,
+              ).map((page) => (
                 <PaginationItem key={page}>
                   <PaginationLink
                     href="#"
@@ -151,7 +205,8 @@ export default function BlogList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                    if (currentPage < totalPages)
+                      setCurrentPage(currentPage + 1);
                   }}
                 />
               </PaginationItem>

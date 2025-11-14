@@ -2,6 +2,7 @@
 // FILE: FooterMenuForm.tsx
 // =============================================================
 "use client";
+
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,7 +31,7 @@ export type FooterMenuFormProps = {
   loading: boolean;
   pages: Page[];
   sections: FooterSection[];
-  initial?: Partial<FooterFormValues> | MenuItemAdmin;
+  initial?: Partial<FooterFormValues> | MenuItemAdmin | null;
   onClose: () => void;
   onSubmit: (payload: Omit<MenuItemAdmin, "id" | "display_order">) => Promise<void>;
   selectedItem?: MenuItemAdmin | null;
@@ -41,7 +42,7 @@ function isMenuItemAdmin(x: unknown): x is MenuItemAdmin {
   return !!x && typeof x === "object" && "location" in (x as any) && "type" in (x as any);
 }
 function isIconName(v: unknown): v is IconName {
-  return typeof v === "string" && availableIcons.some(i => i.name === v);
+  return typeof v === "string" && availableIcons.some((i) => i.name === v);
 }
 
 export default function FooterMenuForm({
@@ -59,13 +60,14 @@ export default function FooterMenuForm({
     (isMenuItemAdmin(initial) ? initial.title : (initial as Partial<FooterFormValues>)?.title) ?? "";
   const typeInitial: "page" | "custom" =
     (isMenuItemAdmin(initial) ? initial.type : (initial as Partial<FooterFormValues>)?.type) ?? "custom";
-  const urlInitial = (isMenuItemAdmin(initial) ? initial.url : (initial as Partial<FooterFormValues>)?.url) ?? "";
+  const urlInitial =
+    (isMenuItemAdmin(initial) ? initial.url : (initial as Partial<FooterFormValues>)?.url) ?? "";
   const pageIdInitial =
-    (isMenuItemAdmin(initial) ? (initial.page_id ?? "") : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
+    (isMenuItemAdmin(initial) ? initial.page_id ?? "" : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
   const iconRaw = isMenuItemAdmin(initial) ? initial.icon : (initial as Partial<FooterFormValues>)?.icon;
   const iconInitial: "" | IconName = isIconName(iconRaw) ? iconRaw : "";
   const sectionIdInitial =
-    (isMenuItemAdmin(initial) ? (initial.section_id ?? "") : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
+    (isMenuItemAdmin(initial) ? initial.section_id ?? "" : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
   const isActiveInitial =
     (isMenuItemAdmin(initial) ? initial.is_active : (initial as Partial<FooterFormValues>)?.is_active) ?? true;
 
@@ -79,9 +81,9 @@ export default function FooterMenuForm({
     const t: "page" | "custom" =
       (isMenuItemAdmin(initial) ? initial.type : (initial as Partial<FooterFormValues>)?.type) ?? "custom";
     const p =
-      (isMenuItemAdmin(initial) ? (initial.page_id ?? "") : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
+      (isMenuItemAdmin(initial) ? initial.page_id ?? "" : (initial as Partial<FooterFormValues>)?.page_id) ?? "";
     const sec =
-      (isMenuItemAdmin(initial) ? (initial.section_id ?? "") : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
+      (isMenuItemAdmin(initial) ? initial.section_id ?? "" : (initial as Partial<FooterFormValues>)?.section_id) ?? "";
     const icRaw2 = isMenuItemAdmin(initial) ? initial.icon : (initial as Partial<FooterFormValues>)?.icon;
     const ic = isIconName(icRaw2) ? icRaw2 : "";
     const act =
@@ -98,12 +100,12 @@ export default function FooterMenuForm({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
 
-    const selectedPage = pages.find(p => p.id === pageId);
+    const selectedPage = pages.find((p) => p.id === pageId);
     const sec = sectionId === "none" || sectionId === "" ? null : sectionId;
     const iconName = iconSel === "none" || iconSel === "" ? null : (iconSel as IconName);
 
     const payload: Omit<MenuItemAdmin, "id" | "display_order"> = {
-      title: String(fd.get("title") ?? (selectedPage?.title ?? "")),
+      title: String(fd.get("title") ?? selectedPage?.title ?? ""),
       type,
       url: type === "page" && selectedPage ? `/${selectedPage.slug}` : String(fd.get("url") ?? ""),
       page_id: type === "page" ? pageId : null,
@@ -128,12 +130,10 @@ export default function FooterMenuForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Tip</Label>
-            <Select
-              name="type"
-              value={type}
-              onValueChange={(v) => setType(v as "page" | "custom")}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={type} onValueChange={(v) => setType(v as "page" | "custom")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="page">Sayfa</SelectItem>
                 <SelectItem value="custom">Özel Link</SelectItem>
@@ -145,14 +145,16 @@ export default function FooterMenuForm({
           {type === "page" ? (
             <div className="space-y-2">
               <Label>Sayfa Seç</Label>
-              <Select
-                name="page_id"
-                value={pageId}
-                onValueChange={(v) => setPageId(v)}
-              >
-                <SelectTrigger><SelectValue placeholder="Sayfa seçin" /></SelectTrigger>
+              <Select value={pageId} onValueChange={(v) => setPageId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sayfa seçin" />
+                </SelectTrigger>
                 <SelectContent>
-                  {pages.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                  {pages.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.title}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <input type="hidden" name="page_id" value={pageId} />
@@ -165,22 +167,29 @@ export default function FooterMenuForm({
               </div>
               <div className="space-y-2">
                 <Label>URL</Label>
-                <Input name="url" defaultValue={urlInitial} placeholder="/link veya https://example.com" required />
+                <Input
+                  name="url"
+                  defaultValue={urlInitial}
+                  placeholder="/link veya https://example.com"
+                  required
+                />
               </div>
             </>
           )}
 
           <div className="space-y-2">
             <Label>Bölüm</Label>
-            <Select
-              name="section_id"
-              value={sectionId}
-              onValueChange={(v) => setSectionId(v)}
-            >
-              <SelectTrigger><SelectValue placeholder="Bölüm seçin (opsiyonel)" /></SelectTrigger>
+            <Select value={sectionId} onValueChange={(v) => setSectionId(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Bölüm seçin (opsiyonel)" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Bölümsüz</SelectItem>
-                {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
+                {sections.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <input type="hidden" name="section_id" value={sectionId} />
@@ -188,17 +197,18 @@ export default function FooterMenuForm({
 
           <div className="space-y-2">
             <Label>Icon (Opsiyonel)</Label>
-            <Select
-              name="icon"
-              value={iconSel}
-              onValueChange={(v) => setIconSel(v)}
-            >
-              <SelectTrigger><SelectValue placeholder="İcon seçin (opsiyonel)" /></SelectTrigger>
+            <Select value={iconSel} onValueChange={(v) => setIconSel(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="İcon seçin (opsiyonel)" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">İcon Yok</SelectItem>
-                {availableIcons.map(i => (
+                {availableIcons.map((i) => (
                   <SelectItem key={i.name} value={i.name}>
-                    <div className="flex items-center gap-2"><i.Icon className="h-4 w-4" />{i.name}</div>
+                    <div className="flex items-center gap-2">
+                      <i.Icon className="h-4 w-4" />
+                      {i.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -215,8 +225,12 @@ export default function FooterMenuForm({
           <input type="hidden" name="display_order" value={String(defaultOrder)} />
 
           <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" onClick={onClose}>İptal</Button>
-            <Button type="submit" disabled={loading}>{selectedItem ? "Güncelle" : "Ekle"}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              İptal
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {selectedItem ? "Güncelle" : "Ekle"}
+            </Button>
           </div>
         </form>
       </DialogContent>

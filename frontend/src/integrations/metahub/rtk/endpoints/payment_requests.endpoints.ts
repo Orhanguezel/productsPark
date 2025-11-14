@@ -14,13 +14,20 @@ const toNumber = (x: unknown): number => {
   return Number(x ?? 0);
 };
 
+export type PaymentRequestStatus =
+  | "pending"
+  | "approved"
+  | "paid"
+  | "failed"
+  | "cancelled";
+
 export type PaymentRequest = {
   id: string;
   order_id?: string | null;
   user_id?: string | null;
   amount: number;
   currency: string;
-  status: "pending" | "approved" | "paid" | "failed" | "cancelled";
+  status: PaymentRequestStatus;
   created_at?: string;
 };
 
@@ -33,14 +40,26 @@ const normalizeReq = (p: ApiPaymentRequest): PaymentRequest => ({
   amount: toNumber(p.amount),
 });
 
+/** ✅ BE create body ile birebir (id/created_at hariç) */
+export type CreatePaymentRequestBody = {
+  order_id: string;
+  user_id?: string | null;
+  amount: number | string;
+  currency: string;
+  payment_method: string;
+  payment_proof?: string | null;
+  status?: PaymentRequestStatus;
+};
+
 export const paymentRequestsApi = baseApi_prq.injectEndpoints({
   endpoints: (b) => ({
+    // Liste
     listPaymentRequests: b.query<
       PaymentRequest[],
       {
         user_id?: string;
         order_id?: string;
-        status?: PaymentRequest["status"];
+        status?: PaymentRequestStatus;
         limit?: number;
         offset?: number;
       }
@@ -53,16 +72,67 @@ export const paymentRequestsApi = baseApi_prq.injectEndpoints({
       providesTags: (result, _e, args) => {
         const base = [{ type: "PaymentRequests" as const, id: "LIST" }];
         const scoped: Array<{ type: "PaymentRequests"; id: string }> = [];
-        if (args?.user_id) scoped.push({ type: "PaymentRequests", id: `USER_${args.user_id}` });
-        if (args?.order_id) scoped.push({ type: "PaymentRequests", id: `ORDER_${args.order_id}` });
+        if (args?.user_id) {
+          scoped.push({
+            type: "PaymentRequests",
+            id: `USER_${args.user_id}`,
+          });
+        }
+        if (args?.order_id) {
+          scoped.push({
+            type: "PaymentRequests",
+            id: `ORDER_${args.order_id}`,
+          });
+        }
         const rows = result
-          ? result.map((r) => ({ type: "PaymentRequests" as const, id: r.id }))
+          ? result.map((r) => ({
+              type: "PaymentRequests" as const,
+              id: r.id,
+            }))
           : [];
         return [...rows, ...scoped, ...base];
+      },
+    }),
+
+    // ✅ CREATE
+    createPaymentRequest: b.mutation<PaymentRequest, CreatePaymentRequestBody>({
+      query: (body) => ({
+        url: "/payment_requests",
+        method: "POST",
+        body,
+      }),
+      transformResponse: (res: unknown): PaymentRequest =>
+        normalizeReq(res as ApiPaymentRequest),
+      invalidatesTags: (result) => {
+        const base = [{ type: "PaymentRequests" as const, id: "LIST" }];
+        if (!result) return base;
+
+        const extra: Array<{ type: "PaymentRequests"; id: string }> = [];
+        if (result.user_id) {
+          extra.push({
+            type: "PaymentRequests",
+            id: `USER_${result.user_id}`,
+          });
+        }
+        if (result.order_id) {
+          extra.push({
+            type: "PaymentRequests",
+            id: `ORDER_${result.order_id}`,
+          });
+        }
+
+        return [
+          { type: "PaymentRequests" as const, id: result.id },
+          ...extra,
+          ...base,
+        ];
       },
     }),
   }),
   overrideExisting: true,
 });
 
-export const { useListPaymentRequestsQuery } = paymentRequestsApi;
+export const {
+  useListPaymentRequestsQuery,
+  useCreatePaymentRequestMutation,
+} = paymentRequestsApi;

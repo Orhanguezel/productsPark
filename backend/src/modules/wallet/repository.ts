@@ -284,3 +284,17 @@ export async function adjustUserWallet(
     };
   });
 }
+
+
+/* ================= Me: Wallet Balance ================= */
+export async function getUserWalletBalance(userId: string): Promise<number> {
+  const row = await db
+    .select({ balance: users.wallet_balance })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row.length) throw new Error("user_not_found");
+  // DECIMAL -> number
+  return Number(row[0].balance as unknown as number);
+}

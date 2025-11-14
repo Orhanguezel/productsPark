@@ -22,17 +22,16 @@ function toNum(x: unknown): number {
 }
 function parseJson<T>(s?: string | null): T | null {
   if (!s) return null;
-  try { return JSON.parse(s) as T; } catch { return null; }
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
+  }
 }
 function iso(d?: Date | string | null): string | undefined {
   if (!d) return undefined;
   const dt = typeof d === "string" ? new Date(d) : d;
   return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
-}
-function getIdFromReq(req: any): string | undefined {
-  const p = (req.params as any)?.id;
-  const q = (req.query as any)?.id;
-  return (typeof p === "string" && p) || (typeof q === "string" && q) || undefined;
 }
 
 function mapRow(row: {
@@ -57,72 +56,83 @@ function mapRow(row: {
           price: toNum(p.price),
           image_url: p.image_url ?? null,
           delivery_type: p.delivery_type ?? null,
-          stock_quantity: p.stock_quantity == null ? null : toNum(p.stock_quantity),
+          stock_quantity:
+            p.stock_quantity == null ? null : toNum(p.stock_quantity),
           custom_fields:
-            parseJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields as any) ??
-            (Array.isArray(p.custom_fields) ? (p.custom_fields as any) : null),
-          quantity_options: parseJson<{ quantity: number; price: number }[]>(
-            p.quantity_options as any
-          ) ?? null,
+            parseJson<ReadonlyArray<Record<string, unknown>>>(
+              p.custom_fields as any
+            ) ??
+            (Array.isArray(p.custom_fields)
+              ? (p.custom_fields as any)
+              : null),
+          quantity_options:
+            parseJson<{ quantity: number; price: number }[]>(
+              p.quantity_options as any
+            ) ?? null,
           api_provider_id: p.api_provider_id ?? null,
           api_product_id: p.api_product_id ?? null,
-          api_quantity: p.api_quantity == null ? null : toNum(p.api_quantity),
+          api_quantity:
+            p.api_quantity == null ? null : toNum(p.api_quantity),
           category_id: p.category_id ?? null,
-          categories: row.cat ? { id: row.cat.id, name: row.cat.name } : null,
+          categories: row.cat
+            ? { id: row.cat.id, name: row.cat.name }
+            : null,
         }
       : null,
   };
 }
 
 type SortKey = "created_at" | "updated_at";
-function resolveSortAndOrder(q: CartItemListQuery, rawOrder?: string) {
-  if (rawOrder && rawOrder.includes(".")) {
-    const [col, d] = rawOrder.split(".");
-    const k: SortKey = col === "updated_at" ? "updated_at" : "created_at";
-    const dir = (d || "").toLowerCase() === "asc" ? "asc" : "desc";
-    return { sortKey: k, dir };
-  }
-  const sortKey: SortKey = q.sort === "updated_at" ? "updated_at" : "created_at";
-  const dir = (q.order as "asc" | "desc" | undefined) === "asc" ? "asc" : "desc";
-  return { sortKey, dir };
-}
 
 /** GET /cart_items */
 export const listCartItems: RouteHandler = async (req, reply) => {
-  const q = cartItemListQuerySchema.parse(req.query || {}) as CartItemListQuery;
-  const rawOrder = (req.query as any)?.order as string | undefined;
-  const { sortKey, dir } = resolveSortAndOrder(q, rawOrder);
+  try {
+    const q = cartItemListQuerySchema.parse(
+      req.query || {}
+    ) as CartItemListQuery;
 
-  let qb = db
-    .select({ cart: cartItems, prod: products, cat: categories })
-    .from(cartItems)
-    .leftJoin(products, eq(cartItems.product_id, products.id))
-    .leftJoin(categories, eq(products.category_id, categories.id))
-    .$dynamic();
+    const sortKey: SortKey =
+      q.sort === "updated_at" ? "updated_at" : "created_at";
+    const dir: "asc" | "desc" = q.order === "asc" ? "asc" : "desc";
 
-  const conds: unknown[] = [];
-  if (q.id)         conds.push(eq(cartItems.id, q.id));
-  if (q.user_id)    conds.push(eq(cartItems.user_id, q.user_id));
-  if (q.product_id) conds.push(eq(cartItems.product_id, q.product_id));
+    let qb = db
+      .select({ cart: cartItems, prod: products, cat: categories })
+      .from(cartItems)
+      .leftJoin(products, eq(cartItems.product_id, products.id))
+      .leftJoin(categories, eq(products.category_id, categories.id))
+      .$dynamic();
 
-  if (conds.length === 1) qb = qb.where(conds[0] as any);
-  else if (conds.length > 1) qb = qb.where(and(...(conds as any)));
+    const conds: unknown[] = [];
+    if (q.id) conds.push(eq(cartItems.id, q.id));
+    if (q.user_id) conds.push(eq(cartItems.user_id, q.user_id));
+    if (q.product_id) conds.push(eq(cartItems.product_id, q.product_id));
 
-  const orderExpr =
-    dir === "asc" ? asc((cartItems as any)[sortKey]) : desc((cartItems as any)[sortKey]);
-  qb = qb.orderBy(orderExpr);
+    if (conds.length === 1) qb = qb.where(conds[0] as any);
+    else if (conds.length > 1) qb = qb.where(and(...(conds as any)));
 
-  if (q.limit && q.limit > 0) qb = qb.limit(q.limit);
-  if (q.offset && q.offset >= 0) qb = qb.offset(q.offset);
+    const orderExpr =
+      dir === "asc"
+        ? asc((cartItems as any)[sortKey])
+        : desc((cartItems as any)[sortKey]);
+    qb = qb.orderBy(orderExpr);
 
-  const rows = await qb;
-  return reply.send(rows.map(mapRow));
+    if (q.limit && q.limit > 0) qb = qb.limit(q.limit);
+    if (q.offset && q.offset >= 0) qb = qb.offset(q.offset);
+
+    const rows = await qb;
+    return reply.send(rows.map(mapRow));
+  } catch (e) {
+    (req as any).log?.error?.(e);
+    return reply.code(400).send({ error: { message: "validation_error" } });
+  }
 };
 
 /** GET /cart_items/:id */
 export const getCartItemById: RouteHandler = async (req, reply) => {
-  const id = getIdFromReq(req);
-  if (!id) return reply.code(400).send({ error: { message: "id_required" } });
+  const { id } = (req.params || {}) as { id?: string };
+  if (!id) {
+    return reply.code(400).send({ error: { message: "id_required" } });
+  }
 
   const rows = await db
     .select({ cart: cartItems, prod: products, cat: categories })
@@ -132,14 +142,18 @@ export const getCartItemById: RouteHandler = async (req, reply) => {
     .where(eq(cartItems.id, id))
     .limit(1);
 
-  if (!rows.length) return reply.code(404).send({ error: { message: "not_found" } });
+  if (!rows.length) {
+    return reply.code(404).send({ error: { message: "not_found" } });
+  }
   return reply.send(mapRow(rows[0]!));
 };
 
 /** POST /cart_items */
 export const createCartItem: RouteHandler = async (req, reply) => {
   try {
-    const body = cartItemCreateSchema.parse(req.body || {}) as CartItemCreateInput;
+    const body = cartItemCreateSchema.parse(
+      req.body || {}
+    ) as CartItemCreateInput;
 
     const now = new Date();
     const id = randomUUID();
@@ -174,20 +188,26 @@ export const createCartItem: RouteHandler = async (req, reply) => {
   }
 };
 
-/** PATCH /cart_items/:id  veya  /cart_items?id=... */
+/** PATCH /cart_items/:id */
 export const updateCartItem: RouteHandler = async (req, reply) => {
   try {
-    const id = getIdFromReq(req);
-    if (!id) return reply.code(400).send({ error: { message: "id_required" } });
+    const { id } = (req.params || {}) as { id?: string };
+    if (!id) {
+      return reply.code(400).send({ error: { message: "id_required" } });
+    }
 
-    const patch = cartItemUpdateSchema.parse(req.body || {}) as CartItemUpdateInput;
+    const patch = cartItemUpdateSchema.parse(
+      req.body || {}
+    ) as CartItemUpdateInput;
     const now = new Date();
 
     const set: Partial<CartItemInsert> = { updated_at: now };
     if (patch.quantity != null) set.quantity = patch.quantity;
 
     if (patch.selected_options !== undefined) {
-      set.options = patch.selected_options ? JSON.stringify(patch.selected_options) : null;
+      set.options = patch.selected_options
+        ? JSON.stringify(patch.selected_options)
+        : null;
     } else if (patch.options !== undefined) {
       set.options = patch.options ? JSON.stringify(patch.options) : null;
     }
@@ -202,7 +222,9 @@ export const updateCartItem: RouteHandler = async (req, reply) => {
       .where(eq(cartItems.id, id))
       .limit(1);
 
-    if (!row) return reply.code(404).send({ error: { message: "not_found" } });
+    if (!row) {
+      return reply.code(404).send({ error: { message: "not_found" } });
+    }
     return reply.send(mapRow(row));
   } catch (e) {
     (req as any).log?.error?.(e);
@@ -210,10 +232,12 @@ export const updateCartItem: RouteHandler = async (req, reply) => {
   }
 };
 
-/** DELETE /cart_items/:id  veya  /cart_items?id=... */
+/** DELETE /cart_items/:id */
 export const deleteCartItem: RouteHandler = async (req, reply) => {
-  const id = getIdFromReq(req);
-  if (!id) return reply.code(400).send({ error: { message: "id_required" } });
+  const { id } = (req.params || {}) as { id?: string };
+  if (!id) {
+    return reply.code(400).send({ error: { message: "id_required" } });
+  }
 
   await db.delete(cartItems).where(eq(cartItems.id, id));
   return reply.code(204).send();

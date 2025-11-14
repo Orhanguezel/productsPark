@@ -1,95 +1,54 @@
-
 // -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/product_options.endpoints.ts
+// (Public product options)
 // -------------------------------------------------------------
-import { baseApi as baseApi2 } from "../baseApi";
+import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
+import type { ProductOption } from "@/integrations/metahub/db/types/products";
 
-const toNumber2 = (x: unknown): number => (typeof x === "number" ? x : Number(x as unknown));
-
-export type ProductOption = {
-  id: string;
-  product_id: string;
-  name: string;
-  position?: number | null;
-  is_required?: 0 | 1 | boolean;
+type ListOptionsParams = {
+  product_id?: string;
 };
 
-export type ApiProductOption = Omit<ProductOption, "position"> & { position?: number | string | null };
-const normalizeOption = (o: ApiProductOption): ProductOption => ({ ...o, position: o.position == null ? null : toNumber2(o.position) });
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
 
-export type ProductOptionValue = {
-  id: string;
-  option_id: string;
-  value: string;
-  position?: number | null;
+const pluckArray = (res: unknown, keys: string[]): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (isRecord(res)) {
+    for (const k of keys) {
+      const v = res[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
 };
 
-export type ApiProductOptionValue = Omit<ProductOptionValue, "position"> & { position?: number | string | null };
-const normalizeValue = (v: ApiProductOptionValue): ProductOptionValue => ({ ...v, position: v.position == null ? null : toNumber2(v.position) });
-
-export type UpsertOptionBody = Partial<Omit<ProductOption, "id">> & { id?: string; product_id: string; name: string };
-export type UpsertValueBody = Partial<Omit<ProductOptionValue, "id">> & { id?: string; option_id: string; value: string };
-
-export const productOptionsApi = baseApi2.injectEndpoints({
+export const productOptionsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    listProductOptions: b.query<ProductOption[], { product_id: string }>({
-      query: ({ product_id }) => ({ url: "/product_options", params: { product_id } }),
-      transformResponse: (res: unknown): ProductOption[] => Array.isArray(res) ? (res as ApiProductOption[]).map(normalizeOption) : [],
-      providesTags: (_r, _e, a) => [{ type: "Options" as const, id: `PRODUCT_${a.product_id}` }],
-    }),
-
-    listOptionValues: b.query<ProductOptionValue[], { option_id: string }>({
-      query: ({ option_id }) => ({ url: "/product_option_values", params: { option_id } }),
-      transformResponse: (res: unknown): ProductOptionValue[] => Array.isArray(res) ? (res as ApiProductOptionValue[]).map(normalizeValue) : [],
-      providesTags: (_r, _e, a) => [{ type: "OptionValues" as const, id: `OPTION_${a.option_id}` }],
-    }),
-
-    createOption: b.mutation<ProductOption, Omit<UpsertOptionBody, "id">>({
-      query: (body) => ({ url: "/product_options", method: "POST", body }),
-      transformResponse: (res: unknown): ProductOption => normalizeOption(res as ApiProductOption),
-      invalidatesTags: (r) => r ? [{ type: "Options" as const, id: `PRODUCT_${r.product_id}` }] : [],
-    }),
-
-    updateOption: b.mutation<ProductOption, { id: string; patch: Partial<UpsertOptionBody> }>({
-      query: ({ id, patch }) => ({ url: `/product_options/${id}`, method: "PATCH", body: patch }),
-      transformResponse: (res: unknown): ProductOption => normalizeOption(res as ApiProductOption),
-      invalidatesTags: (r) => r ? [{ type: "Options" as const, id: `PRODUCT_${r.product_id}` }] : [],
-    }),
-
-    deleteOption: b.mutation<{ success: true }, { id: string; product_id: string }>({
-      query: ({ id }) => ({ url: `/product_options/${id}`, method: "DELETE" }),
-      transformResponse: (res: unknown): { success: true } => (res as { success: true }) ?? { success: true },
-      invalidatesTags: (_r, _e, a) => [{ type: "Options" as const, id: `PRODUCT_${a.product_id}` }],
-    }),
-
-    createOptionValue: b.mutation<ProductOptionValue, Omit<UpsertValueBody, "id">>({
-      query: (body) => ({ url: "/product_option_values", method: "POST", body }),
-      transformResponse: (res: unknown): ProductOptionValue => normalizeValue(res as ApiProductOptionValue),
-      invalidatesTags: (r) => r ? [{ type: "OptionValues" as const, id: `OPTION_${r.option_id}` }] : [],
-    }),
-
-    updateOptionValue: b.mutation<ProductOptionValue, { id: string; patch: Partial<UpsertValueBody> }>({
-      query: ({ id, patch }) => ({ url: `/product_option_values/${id}`, method: "PATCH", body: patch }),
-      transformResponse: (res: unknown): ProductOptionValue => normalizeValue(res as ApiProductOptionValue),
-      invalidatesTags: (r) => r ? [{ type: "OptionValues" as const, id: `OPTION_${r.option_id}` }] : [],
-    }),
-
-    deleteOptionValue: b.mutation<{ success: true }, { id: string; option_id: string }>({
-      query: ({ id }) => ({ url: `/product_option_values/${id}`, method: "DELETE" }),
-      transformResponse: (res: unknown): { success: true } => (res as { success: true }) ?? { success: true },
-      invalidatesTags: (_r, _e, a) => [{ type: "OptionValues" as const, id: `OPTION_${a.option_id}` }],
+    listProductOptions: b.query<ProductOption[], ListOptionsParams | void>({
+      query: (params): FetchArgs => {
+        const qp: Record<string, string> = {};
+        if (params && (params as ListOptionsParams).product_id) {
+          qp.product_id = (params as ListOptionsParams).product_id as string;
+        }
+        return { url: "/products/options", params: qp } as FetchArgs;
+      },
+      transformResponse: (res: unknown): ProductOption[] => {
+        const rows = pluckArray(res, ["data", "items", "rows", "options"]);
+        return rows.filter(isRecord).map((x) => x as ProductOption);
+      },
+      // İstersek Product tag'ine bağlayabiliriz, stock/options admin güncellemesinde invalidate olsun diye
+      providesTags: (_result, _e, arg) => {
+        const params = (arg || {}) as ListOptionsParams;
+        return params.product_id
+          ? [{ type: "Product" as const, id: params.product_id }]
+          : [];
+      },
+      keepUnusedDataFor: 60,
     }),
   }),
   overrideExisting: true,
 });
 
-export const {
-  useListProductOptionsQuery,
-  useListOptionValuesQuery,
-  useCreateOptionMutation,
-  useUpdateOptionMutation,
-  useDeleteOptionMutation,
-  useCreateOptionValueMutation,
-  useUpdateOptionValueMutation,
-  useDeleteOptionValueMutation,
-} = productOptionsApi;
+export const { useListProductOptionsQuery } = productOptionsApi;

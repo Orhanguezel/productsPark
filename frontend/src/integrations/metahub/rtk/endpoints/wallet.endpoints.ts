@@ -43,26 +43,14 @@ const pluckArray = <T>(res: unknown, keys: readonly string[] = DEFAULT_PLUCK_KEY
   return [];
 };
 
-/* ---------------- normalizers ---------------- */
-const normalizeWdr = (r: ApiWalletDepositRequest): WalletDepositRequest => ({
-  ...r,
-  amount: toNumber(r.amount),
-  payment_proof: r.payment_proof ?? r.proof_image_url ?? null,
-  admin_notes: r.admin_notes ?? r.admin_note ?? null,
-  processed_at: r.processed_at ?? null,
-});
-
-const normalizeTxn = (t: ApiWalletTransaction): WalletTransaction => ({
-  ...t,
-  amount: toNumber(t.amount),
-  description: t.description ?? null,
-});
-
-/* ---------------- query param builders ---------------- */
-const normalizeOrder = (ord?: string): string | undefined => {
-  if (ord === "asc" || ord === "desc") return `created_at.${ord}`;
-  return ord;
+const readOptionalString = (obj: unknown, key: string): string | undefined => {
+  if (!isObj(obj)) return undefined;
+  const val = obj[key];
+  return typeof val === "string" ? val : undefined;
 };
+
+const normalizeOrder = (ord?: string): string | undefined =>
+  ord === "asc" || ord === "desc" ? `created_at.${ord}` : ord;
 
 const toWdrParams = (p?: ListParams): QueryParamsStrict | undefined => {
   if (!p) return undefined;
@@ -87,24 +75,33 @@ const toTxnParams = (p?: ListTxnParams): QueryParamsStrict | undefined => {
   return Object.keys(q).length ? (q as QueryParamsStrict) : undefined;
 };
 
-/* ---------------- types (endpoint-specific) ---------------- */
-type AdjustWalletApiResult = {
-  ok: boolean;
-  balance: number | string;
-  transaction: ApiWalletTransaction;
+const dropUserId = (
+  qp?: QueryParamsStrict
+): Partial<Omit<QueryParamsStrict, "user_id">> | undefined => {
+  if (!qp) return undefined;
+  const { user_id: _omit, ...rest } = qp as unknown as Record<string, unknown>;
+  return rest as Partial<Omit<QueryParamsStrict, "user_id">>;
 };
 
-type AdjustWalletResult = {
-  ok: boolean;
-  balance: number;
-  transaction: WalletTransaction;
-};
+/* ---------------- normalizers ---------------- */
+const normalizeWdr = (r: ApiWalletDepositRequest): WalletDepositRequest => ({
+  ...r,
+  amount: toNumber(r.amount),
+  payment_proof: r.payment_proof ?? readOptionalString(r, "proof_image_url") ?? null,
+  admin_notes: r.admin_notes ?? readOptionalString(r, "admin_note") ?? null,
+  processed_at: r.processed_at ?? null,
+});
 
-/* ---------------- endpoints (combined) ---------------- */
+const normalizeTxn = (t: ApiWalletTransaction): WalletTransaction => ({
+  ...t,
+  amount: toNumber(t.amount),
+  description: t.description ?? null,
+});
+
+/* ---------------- endpoints ---------------- */
 export const walletApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     /* ==== Deposit Requests ==== */
-
     listWalletDepositRequests: b.query<WalletDepositRequest[], ListParams | void>({
       query: (params): FetchArgs => {
         const qp = toWdrParams(params as ListParams | undefined);
@@ -128,7 +125,6 @@ export const walletApi = baseApi.injectEndpoints({
       WalletDepositRequest,
       { user_id: string; amount: number; payment_method?: string; payment_proof?: string | null }
     >({
-      // BE: POST /wallet_deposit_requests (auth)
       query: (body): FetchArgs => ({
         url: "/wallet_deposit_requests",
         method: "POST",
@@ -141,9 +137,13 @@ export const walletApi = baseApi.injectEndpoints({
 
     updateWalletDepositRequest: b.mutation<
       WalletDepositRequest,
-      { id: string; patch: Partial<Pick<WalletDepositRequest, "status" | "admin_notes" | "payment_proof" | "processed_at">> }
+      {
+        id: string;
+        patch: Partial<
+          Pick<WalletDepositRequest, "status" | "admin_notes" | "payment_proof" | "processed_at">
+        >;
+      }
     >({
-      // BE: PATCH /wallet_deposit_requests/:id (admin)
       query: ({ id, patch }): FetchArgs => ({
         url: `/wallet_deposit_requests/${id}`,
         method: "PATCH",
@@ -154,13 +154,11 @@ export const walletApi = baseApi.injectEndpoints({
       invalidatesTags: (_r, _e, arg) => [
         { type: "WalletDepositRequests", id: arg.id },
         { type: "WalletDepositRequests", id: "LIST" },
-        // onay/ret durumunda genelde txn listesi değişir:
         { type: "WalletTransactions", id: "LIST" },
       ],
     }),
 
-    /* ==== Wallet Transactions ==== */
-
+    /* ==== Wallet Transactions (ADMIN) ==== */
     listWalletTransactions: b.query<WalletTransaction[], ListTxnParams | void>({
       query: (params): FetchArgs => {
         const qp = toTxnParams(params as ListTxnParams | undefined);
@@ -180,26 +178,61 @@ export const walletApi = baseApi.injectEndpoints({
       keepUnusedDataFor: 30,
     }),
 
-    /* ==== Admin: Adjust User Wallet (atomik) ==== */
+    /* ==== Me: Wallet Balance ==== */
+    getMyWalletBalance: b.query<number, void>({
+      query: (): FetchArgs => ({ url: "/me/wallet_balance" }),
+      transformResponse: (res: unknown): number => {
+        if (isObj(res) && "balance" in res) {
+          const v = (res as { balance: unknown }).balance;
+          return typeof v === "number" ? v : Number(v ?? 0);
+        }
+        return 0;
+      },
+      providesTags: [{ type: "WalletTransactions", id: "LIST" }],
+      keepUnusedDataFor: 15,
+    }),
+
+    /* ==== Me: Wallet Transactions ==== */
+    listMyWalletTransactions: b.query<
+      WalletTransaction[],
+      { limit?: number; offset?: number; order?: "asc" | "desc" | string } | void
+    >({
+      query: (params): FetchArgs => {
+        const qp = toTxnParams(params as ListTxnParams | undefined);
+        const meParams = dropUserId(qp);
+        return meParams && Object.keys(meParams).length > 0
+          ? { url: "/me/wallet_transactions", params: meParams as Record<string, unknown> }
+          : { url: "/me/wallet_transactions" };
+      },
+      transformResponse: (res: unknown): WalletTransaction[] =>
+        pluckArray<ApiWalletTransaction>(res).map(normalizeTxn),
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((t) => ({ type: "WalletTransactions" as const, id: t.id })),
+              { type: "WalletTransactions" as const, id: "LIST" },
+            ]
+          : [{ type: "WalletTransactions" as const, id: "LIST" }],
+      keepUnusedDataFor: 30,
+    }),
+
+    /* ==== Admin: Adjust User Wallet ==== */
     adjustUserWallet: b.mutation<
-      AdjustWalletResult,
+      { ok: boolean; balance: number; transaction: WalletTransaction },
       { id: string; amount: number; description?: string }
     >({
-      // BE: POST /admin/users/:id/wallet/adjust (admin)
       query: ({ id, amount, description }): FetchArgs => ({
         url: `/admin/users/${id}/wallet/adjust`,
         method: "POST",
         body: { amount, description },
       }),
-      transformResponse: (res: unknown): AdjustWalletResult => {
-        const r = res as AdjustWalletApiResult;
-        return {
-          ok: !!r.ok,
-          balance: toNumber(r.balance),
-          transaction: normalizeTxn(r.transaction),
-        };
+      transformResponse: (res: unknown) => {
+        const ok = isObj(res) && Boolean((res as Record<string, unknown>).ok);
+        const balanceRaw = isObj(res) ? (res as Record<string, unknown>).balance : 0;
+        const txnRaw = isObj(res) ? (res as Record<string, unknown>).transaction : undefined;
+        const txn = normalizeTxn((txnRaw ?? {}) as ApiWalletTransaction);
+        return { ok, balance: toNumber(balanceRaw), transaction: txn };
       },
-      // txn listesi değişir → invalidates
       invalidatesTags: [{ type: "WalletTransactions", id: "LIST" }],
     }),
   }),
@@ -210,6 +243,8 @@ export const {
   useListWalletDepositRequestsQuery,
   useCreateWalletDepositRequestMutation,
   useUpdateWalletDepositRequestMutation,
-  useListWalletTransactionsQuery,
+  useListWalletTransactionsQuery,   // admin
+  useGetMyWalletBalanceQuery,       // me
+  useListMyWalletTransactionsQuery, // me
   useAdjustUserWalletMutation,
 } = walletApi;

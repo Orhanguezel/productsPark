@@ -10,14 +10,16 @@ import {
   checkoutFromCart,
 } from './controller';
 
+const BASE = "/orders";
+
 export async function registerOrders(app: FastifyInstance) {
-  app.get('/orders', { preHandler: [requireAuth] }, listOrdersNormalized);
-  app.get('/orders/by-user/:userId', { preHandler: [requireAuth] }, listOrdersByUserNormalized);
-  app.get('/orders/:id', { preHandler: [requireAuth] }, getOrder);
+  app.get(`${BASE}`, { preHandler: [requireAuth] }, listOrdersNormalized);
+  app.get(`${BASE}/by-user/:userId`, { preHandler: [requireAuth] }, listOrdersByUserNormalized);
+  app.get(`${BASE}/:id`, { preHandler: [requireAuth] }, getOrder);
 
-  app.post('/orders', { preHandler: [requireAuth] }, createOrder);
-  app.post('/orders/checkout', { preHandler: [requireAuth] }, checkoutFromCart);
+  app.post(`${BASE}`, { preHandler: [requireAuth] }, createOrder);
+  app.post(`${BASE}/checkout`, { preHandler: [requireAuth] }, checkoutFromCart);
 
-  app.patch('/orders/:id', { preHandler: [requireAuth] }, updateOrder);
+  app.patch(`${BASE}/:id`, { preHandler: [requireAuth] }, updateOrder);
   app.patch('/order_items/:id', { preHandler: [requireAuth] }, updateOrderItem);
 }

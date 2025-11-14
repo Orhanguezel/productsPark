@@ -3,6 +3,7 @@
 // =============================================================
 "use client";
 
+import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -17,27 +18,31 @@ import { toast } from "@/hooks/use-toast";
 // ---- Quill güvenli mod ----
 import { buildSafeQuillModules, QUILL_FORMATS } from "../common/safeQuill";
 
-// ---- RTK (Admin Products) ----
+// ---- RTK (Admin Products – core) ----
 import {
   useGetProductAdminQuery,
   useCreateProductAdminMutation,
   useUpdateProductAdminMutation,
-  useReplaceReviewsAdminMutation,
-  useReplaceFaqsAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
+
+// ---- RTK (Admin – FAQs / Reviews / Stock) ----
+import { useReplaceFaqsAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/products_admin.faqs.endpoints";
+import { useReplaceReviewsAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/products_admin.reviews.endpoints";
+import {
   useSetProductStockAdminMutation,
   useListUsedStockAdminQuery,
 } from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
+
 import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
 
 // ---- RTK (Api Providers - ayrı endpoint) ----
 import { useListApiProvidersQuery } from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
 
-// ---- RTK (Public read-only) ----
-import {
-  useListProductFaqsQuery,
-  useListProductReviewsQuery,
-  useListProductStockQuery,
-} from "@/integrations/metahub/rtk/endpoints/products.endpoints";
+// ---- RTK (Public read-only – listeleme) ----
+// yeni yapıya göre ayrı endpoint dosyalarından çekiyoruz
+import { useListProductFaqsQuery } from "@/integrations/metahub/rtk/endpoints/product_faqs.endpoints";
+import { useListProductReviewsQuery } from "@/integrations/metahub/rtk/endpoints/product_reviews.endpoints";
+import { useListProductStockQuery } from "@/integrations/metahub/rtk/endpoints/product_stock.endpoints";
 
 // ---- RTK (Storage - ADMIN) ----
 import { useUploadStorageAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
@@ -54,7 +59,12 @@ import type {
   ProductReviewRow,
   ProductFaqRow,
 } from "@/integrations/metahub/db/types/products";
-import type { ReviewInput, FAQInput, CustomField, Badge } from "@/integrations/metahub/db/types/products";
+import type {
+  ReviewInput,
+  FAQInput,
+  CustomField,
+  Badge,
+} from "@/integrations/metahub/db/types/products";
 
 // ---- Sections ----
 import BasicInfo from "./form/sections/BasicInfo";
@@ -140,21 +150,31 @@ export default function ProductForm() {
   const contentImageInputRef = useRef<HTMLInputElement | null>(null);
 
   // ------------------ Queries ------------------
-  const { data: product, isFetching: fetchingProduct } = useGetProductAdminQuery(idParam as string, {
-    skip: isCreate,
-  });
+  const { data: product, isFetching: fetchingProduct } = useGetProductAdminQuery(
+    idParam as string,
+    { skip: isCreate }
+  );
   const { data: categories = [] } = useListCategoriesAdminQuery();
 
   // API Providers
-  const { data: apiProvidersRaw = [] } = useListApiProvidersQuery({ activeOnly: true });
+  const { data: apiProvidersRaw = [] } = useListApiProvidersQuery({
+    activeOnly: true,
+  });
 
   type RawProvider =
-    | { id?: string | number; provider_id?: string | number; name?: string; provider_name?: string }
+    | {
+        id?: string | number;
+        provider_id?: string | number;
+        name?: string;
+        provider_name?: string;
+      }
     | null
     | undefined;
 
   const apiProviders: ApiProvider[] = useMemo(() => {
-    const arr: RawProvider[] = Array.isArray(apiProvidersRaw) ? (apiProvidersRaw as RawProvider[]) : [];
+    const arr: RawProvider[] = Array.isArray(apiProvidersRaw)
+      ? (apiProvidersRaw as RawProvider[])
+      : [];
     return arr
       .map((p) => ({
         id: String(p?.id ?? p?.provider_id ?? ""),
@@ -167,35 +187,49 @@ export default function ProductForm() {
     { product_id: idParam as string, only_active: false },
     { skip: isCreate }
   );
-  const { data: reviewsRead = [], isFetching: fetchingReviews } = useListProductReviewsQuery(
-    { product_id: idParam as string, only_active: false },
-    { skip: isCreate }
-  );
+  const { data: reviewsRead = [], isFetching: fetchingReviews } =
+    useListProductReviewsQuery(
+      { product_id: idParam as string, only_active: false },
+      { skip: isCreate }
+    );
 
   const { data: unusedStock = [] } = useListProductStockQuery(
     { product_id: idParam as string, is_used: 0 },
     { skip: isCreate }
   );
 
-  const { data: usedStock = [] } = useListUsedStockAdminQuery(idParam as string, {
-    skip: isCreate,
-  });
+  const { data: usedStock = [] } = useListUsedStockAdminQuery(
+    idParam as string,
+    {
+      skip: isCreate,
+    }
+  );
 
   // ------------------ Mutations ------------------
-  const [createProduct, { isLoading: creating }] = useCreateProductAdminMutation();
-  const [updateProduct, { isLoading: updating }] = useUpdateProductAdminMutation();
-  const [replaceReviews, { isLoading: savingReviews }] = useReplaceReviewsAdminMutation();
-  const [replaceFaqs, { isLoading: savingFaqs }] = useReplaceFaqsAdminMutation();
-  const [setProductStock, { isLoading: savingStock }] = useSetProductStockAdminMutation();
+  const [createProduct, { isLoading: creating }] =
+    useCreateProductAdminMutation();
+  const [updateProduct, { isLoading: updating }] =
+    useUpdateProductAdminMutation();
 
-  const [uploadAsset, { isLoading: uploading }] = useUploadStorageAssetAdminMutation();
+  const [replaceReviews, { isLoading: savingReviews }] =
+    useReplaceReviewsAdminMutation();
+  const [replaceFaqs, { isLoading: savingFaqs }] =
+    useReplaceFaqsAdminMutation();
+  const [setProductStock, { isLoading: savingStock }] =
+    useSetProductStockAdminMutation();
+
+  const [uploadAsset, { isLoading: uploading }] =
+    useUploadStorageAssetAdminMutation();
 
   // ------------------ Local UI State ------------------
   const [loading, setLoading] = useState(false);
   const [isCopyMode, setIsCopyMode] = useState(false);
 
   const parentCategories = useMemo(
-    () => (categories as Pick<CategoryRow, "id" | "name" | "parent_id">[]).filter((c) => !c.parent_id),
+    () =>
+      (categories as Pick<CategoryRow, "id" | "name" | "parent_id">[]).filter(
+        (c) => !c.parent_id
+      ),
     [categories]
   );
   const [selectedParentId, setSelectedParentId] = useState<string>("");
@@ -212,7 +246,9 @@ export default function ProductForm() {
   const [faqs, setFAQs] = useState<FAQInput[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [badges, setBadges] = useState<Badge[]>([]);
-  const [quantityOptions, setQuantityOptions] = useState<{ quantity: number; price: number }[]>([]);
+  const [quantityOptions, setQuantityOptions] = useState<
+    { quantity: number; price: number }[]
+  >([]);
   const [stockList, setStockList] = useState("");
 
   const [formData, setFormData] = useState<Partial<ProductAdmin>>({
@@ -272,7 +308,9 @@ export default function ProductForm() {
     if (isCreate || !product) return;
 
     if (product.category_id) {
-      const currentCat = (categories as CategoryRow[]).find((c) => c.id === product.category_id);
+      const currentCat = (categories as CategoryRow[]).find(
+        (c) => c.id === product.category_id
+      );
       if (currentCat?.parent_id) setSelectedParentId(currentCat.parent_id);
       else setSelectedParentId(product.category_id);
     }
@@ -287,8 +325,10 @@ export default function ProductForm() {
       demo_embed_enabled: (product.demo_embed_enabled ? 1 : 0) as 0 | 1,
     });
 
-    setCustomFields((product.custom_fields as unknown as CustomField[]) ?? []);
-    setQuantityOptions(product.quantity_options ?? []);
+    setCustomFields(
+      (product.custom_fields as unknown as CustomField[]) ?? []
+    );
+    setQuantityOptions(product.quantity_options as { quantity: number; price: number }[] ?? []);
     setBadges((product.badges as Badge[]) ?? []);
   }, [isCreate, product, categories]);
 
@@ -303,7 +343,8 @@ export default function ProductForm() {
   // hydrate stock list
   useEffect(() => {
     if (isCreate) return;
-    if ((product?.delivery_type ?? formData.delivery_type) !== "auto_stock") return;
+    if ((product?.delivery_type ?? formData.delivery_type) !== "auto_stock")
+      return;
 
     const list = (unusedStock ?? []).flatMap((s) => {
       if (s && typeof s === "object") {
@@ -357,15 +398,26 @@ export default function ProductForm() {
   const handleFeaturedUpload = async (file: File) => {
     try {
       if (!file.type.startsWith("image/")) {
-        toast({ title: "Geçersiz", description: "Lütfen görsel dosyası seçin.", variant: "destructive" });
+        toast({
+          title: "Geçersiz",
+          description: "Lütfen görsel dosyası seçin.",
+          variant: "destructive",
+        });
         return;
       }
       if (file.size > 5 * 1024 * 1024) {
-        toast({ title: "Büyük Dosya", description: "Maksimum 5MB.", variant: "destructive" });
+        toast({
+          title: "Büyük Dosya",
+          description: "Maksimum 5MB.",
+          variant: "destructive",
+        });
         return;
       }
 
-      const folder = `products/${safeFolder((formData.slug as string) || slugify((formData.name as string) || "product"))}/cover`;
+      const folder = `products/${safeFolder(
+        (formData.slug as string) ||
+          slugify((formData.name as string) || "product")
+      )}/cover`;
 
       const asset = await uploadAsset({
         file,
@@ -375,7 +427,10 @@ export default function ProductForm() {
       }).unwrap();
 
       const url = (asset as UploadedAssetLike)?.url || "";
-      const assetId = (asset as UploadedAssetLike)?.asset_id ?? (asset as UploadedAssetLike)?.id ?? "";
+      const assetId =
+        (asset as UploadedAssetLike)?.asset_id ??
+        (asset as UploadedAssetLike)?.id ??
+        "";
 
       if (!url) throw new Error("Yükleme başarısız (url yok)");
 
@@ -389,32 +444,57 @@ export default function ProductForm() {
       toast({ title: "Yüklendi", description: "Kapak görseli yüklendi." });
     } catch (err: unknown) {
       const dataMsg =
-        (err as { data?: { message?: string; error?: { message?: string } } })?.data?.message ||
-        (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
-      toast({ title: "Hata", description: dataMsg || "Görsel yüklenemedi.", variant: "destructive" });
+        (err as {
+          data?: { message?: string; error?: { message?: string } };
+        })?.data?.message ||
+        (err as {
+          data?: { error?: { message?: string } };
+        })?.data?.error?.message;
+      toast({
+        title: "Hata",
+        description: dataMsg || "Görsel yüklenemedi.",
+        variant: "destructive",
+      });
     }
   };
 
   const onUploadFeatured = async (
-    arg: File | { target?: { files?: FileList | null }; currentTarget?: { files?: FileList | null } }
+    arg:
+      | File
+      | {
+          target?: { files?: FileList | null };
+          currentTarget?: { files?: FileList | null };
+        }
   ) => {
-    const file = arg instanceof File ? arg : arg?.target?.files?.[0] ?? arg?.currentTarget?.files?.[0] ?? null;
+    const file =
+      arg instanceof File
+        ? arg
+        : arg?.target?.files?.[0] ??
+          arg?.currentTarget?.files?.[0] ??
+          null;
     if (!file) {
-      toast({ title: "Dosya yok", description: "Bir görsel seçiniz.", variant: "destructive" });
+      toast({
+        title: "Dosya yok",
+        description: "Bir görsel seçiniz.",
+        variant: "destructive",
+      });
       return;
     }
     await handleFeaturedUpload(file);
   };
 
   // --- Quill içerik görseli: gizli input + gerçek embed akışı
-  const onPickContentImage: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+  const onPickContentImage: React.ChangeEventHandler<HTMLInputElement> = async (
+    e
+  ) => {
     const file = e.target.files?.[0] || null;
     e.target.value = ""; // aynı dosyayı tekrar seçebilmek için
     if (!file) return;
 
     try {
       const folder = `products/${safeFolder(
-        (formData.slug as string) || slugify((formData.name as string) || "product")
+        (formData.slug as string) ||
+          slugify((formData.name as string) || "product")
       )}/content`;
 
       const asset = await uploadAsset({
@@ -429,11 +509,16 @@ export default function ProductForm() {
 
       const q = lastQuillRef.current;
       if (!q) {
-        toast({ title: "Editör bulunamadı", description: "İçerik editörü hazır değil.", variant: "destructive" });
+        toast({
+          title: "Editör bulunamadı",
+          description: "İçerik editörü hazır değil.",
+          variant: "destructive",
+        });
         return;
       }
 
-      const alt = window.prompt("Görsel alt metni (SEO için opsiyonel):") || "";
+      const alt =
+        window.prompt("Görsel alt metni (SEO için opsiyonel):") || "";
       const range = q.getSelection(true);
       const index = range ? range.index : q.getLength();
 
@@ -447,12 +532,23 @@ export default function ProductForm() {
         q.setSelection(index + 1, 0);
       }
 
-      toast({ title: "Görsel eklendi", description: "İçeriğe görsel eklendi." });
+      toast({
+        title: "Görsel eklendi",
+        description: "İçeriğe görsel eklendi.",
+      });
     } catch (err: unknown) {
       const dataMsg =
-        (err as { data?: { message?: string; error?: { message?: string } } })?.data?.message ||
-        (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
-      toast({ title: "Hata", description: dataMsg || "İçerik görseli yüklenemedi.", variant: "destructive" });
+        (err as {
+          data?: { message?: string; error?: { message?: string } };
+        })?.data?.message ||
+        (err as {
+          data?: { error?: { message?: string } };
+        })?.data?.error?.message;
+      toast({
+        title: "Hata",
+        description: dataMsg || "İçerik görseli yüklenemedi.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -466,25 +562,37 @@ export default function ProductForm() {
           lastQuillRef.current = q as QuillEditor;
           // ekstra olarak drop event'lerini de kapat (ihtiyat)
           try {
-            (q as any)?.root?.addEventListener?.("drop", (ev: DragEvent) => {
-              const hasImg =
-                !!ev.dataTransfer?.files?.length ||
-                Array.from(ev.dataTransfer?.items ?? []).some(
-                  (it) => it.kind === "file" || (it.type || "").toLowerCase().startsWith("image/")
-                );
-              if (hasImg) {
-                ev.preventDefault();
-                ev.stopPropagation();
+            (q as any)?.root?.addEventListener?.(
+              "drop",
+              (ev: DragEvent) => {
+                const hasImg =
+                  !!ev.dataTransfer?.files?.length ||
+                  Array.from(ev.dataTransfer?.items ?? []).some(
+                    (it) =>
+                      it.kind === "file" ||
+                      (it.type || "")
+                        .toLowerCase()
+                        .startsWith("image/")
+                  );
+                if (hasImg) {
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                }
               }
-            });
-          } catch {/* no-op */}
+            );
+          } catch {
+            /* no-op */
+          }
         }
       ),
     []
   );
 
   // ========================= Actions / Submit =========================
-  const setField = <K extends keyof ProductAdmin>(key: K, val: ProductAdmin[K] | unknown) => {
+  const setField = <K extends keyof ProductAdmin>(
+    key: K,
+    val: ProductAdmin[K] | unknown
+  ) => {
     setFormData((f) => ({ ...f, [key]: val as ProductAdmin[K] }));
   };
 
@@ -497,14 +605,19 @@ export default function ProductForm() {
       slug: `${(f.slug ?? product.slug).trim()}-kopya-${ts}`,
       name: `${(f.name ?? product.name).trim()} (Kopya)`,
     }));
-    toast({ title: "Kopyalama Modu", description: "İstediğiniz değişiklikleri yapıp kaydedebilirsiniz." });
+    toast({
+      title: "Kopyalama Modu",
+      description: "İstediğiniz değişiklikleri yapıp kaydedebilirsiniz.",
+    });
   };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const finalCategoryId = (formData.category_id as string) || (selectedParentId ? selectedParentId : null);
+    const finalCategoryId =
+      (formData.category_id as string) ||
+      (selectedParentId ? selectedParentId : null);
     const extra = formData as Partial<ExtraProductFields>;
 
     const basePayload: UpsertProductBody & PatchProductBody = {
@@ -512,7 +625,10 @@ export default function ProductForm() {
       slug: String(formData.slug ?? "").trim(),
 
       price: Number(formData.price ?? 0),
-      original_price: formData.original_price == null ? null : Number(formData.original_price),
+      original_price:
+        formData.original_price == null
+          ? null
+          : Number(formData.original_price),
 
       stock_quantity: Number(formData.stock_quantity ?? 0),
       category_id: (finalCategoryId as string) ?? null,
@@ -522,22 +638,26 @@ export default function ProductForm() {
 
       image_url: (formData.image_url ?? null) as string | null,
       featured_image: (formData.featured_image ?? null) as string | null,
-      featured_image_asset_id: (formData.featured_image_asset_id ?? null) as string | null,
+      featured_image_asset_id: (formData.featured_image_asset_id ??
+        null) as string | null,
       featured_image_alt: (formData.featured_image_alt ?? null) as string | null,
       gallery_urls: (formData.gallery_urls ?? null) as string[] | null,
-      gallery_asset_ids: (formData.gallery_asset_ids ?? null) as string[] | null,
+      gallery_asset_ids: (formData.gallery_asset_ids ??
+        null) as string[] | null,
 
       is_active: !!formData.is_active,
       show_on_homepage: !!formData.show_on_homepage,
       is_featured: !!formData.is_featured,
       requires_shipping: !!formData.requires_shipping,
 
-      delivery_type: (formData.delivery_type ?? "manual") as UpsertProductBody["delivery_type"],
+      delivery_type: (formData.delivery_type ??
+        "manual") as UpsertProductBody["delivery_type"],
       file_url: (formData.file_url ?? null) as string | null,
 
       api_provider_id: (formData.api_provider_id ?? null) as string | null,
       api_product_id: (formData.api_product_id ?? null) as string | null,
-      api_quantity: formData.api_quantity == null ? null : Number(formData.api_quantity),
+      api_quantity:
+        formData.api_quantity == null ? null : Number(formData.api_quantity),
 
       article_content: (formData.article_content ?? null) as string | null,
       article_enabled: !!formData.article_enabled,
@@ -547,7 +667,8 @@ export default function ProductForm() {
 
       badges: (badges ?? null) as UpsertProductBody["badges"],
       custom_fields: (customFields ?? null) as UpsertProductBody["custom_fields"],
-      quantity_options: (quantityOptions ?? null) as UpsertProductBody["quantity_options"],
+      quantity_options: (quantityOptions ??
+        null) as UpsertProductBody["quantity_options"],
 
       min_order: (formData.min_order ?? null) as number | null,
       max_order: (formData.max_order ?? null) as number | null,
@@ -580,10 +701,15 @@ export default function ProductForm() {
       let productId = idParam as string | undefined;
 
       if (isCreate || isCopyMode) {
-        const created = await createProduct(basePayload as UpsertProductBody).unwrap();
+        const created = await createProduct(
+          basePayload as UpsertProductBody
+        ).unwrap();
         productId = created.id;
       } else {
-        await updateProduct({ id: idParam as string, body: basePayload as PatchProductBody }).unwrap();
+        await updateProduct({
+          id: idParam as string,
+          body: basePayload as PatchProductBody,
+        }).unwrap();
         productId = idParam as string;
       }
 
@@ -619,18 +745,27 @@ export default function ProductForm() {
           updated_at: undefined,
         }));
 
+        // NOTE:
+        // Şu an hala replace uçlarını kullanıyoruz.
+        // Section’lara admin CRUD eklediğinde, bu kısım sadeleşebilir
+        // (ya da sadece yeni eklenen/değişenler için kullanılabilir).
         await replaceReviews({ id: productId, reviews: reviewsPayload }).unwrap();
         await replaceFaqs({ id: productId, faqs: faqsPayload }).unwrap();
       }
 
       toast({
         title: "Başarılı",
-        description: (isCreate || isCopyMode) ? "Ürün oluşturuldu." : "Ürün güncellendi.",
+        description:
+          isCreate || isCopyMode ? "Ürün oluşturuldu." : "Ürün güncellendi.",
       });
       navigate("/admin/products");
     } catch (err: unknown) {
       console.error(err);
-      toast({ title: "Hata", description: "Ürün kaydedilirken bir hata oluştu.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Ürün kaydedilirken bir hata oluştu.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -638,7 +773,15 @@ export default function ProductForm() {
 
   // ========================== Render ==========================
   return (
-    <AdminLayout title={isCopyMode ? "Ürünü Kopyala" : isCreate ? "Yeni Ürün Ekle" : "Ürünü Düzenle"}>
+    <AdminLayout
+      title={
+        isCopyMode
+          ? "Ürünü Kopyala"
+          : isCreate
+          ? "Yeni Ürün Ekle"
+          : "Ürünü Düzenle"
+      }
+    >
       {/* gizli input: Quill içerik görseli (embed fix) */}
       <input
         ref={contentImageInputRef}
@@ -651,13 +794,21 @@ export default function ProductForm() {
 
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/products")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/admin/products")}
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Geri
           </Button>
 
           {!isCreate && !isCopyMode && (
-            <Button type="button" variant="outline" onClick={handleCopyProduct}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCopyProduct}
+            >
               Ürünü Kopyala
             </Button>
           )}
@@ -669,10 +820,21 @@ export default function ProductForm() {
               <CardTitle>Temel Bilgiler</CardTitle>
               <Button
                 type="submit"
-                disabled={loading || creating || updating || savingFaqs || savingReviews || savingStock}
+                disabled={
+                  loading ||
+                  creating ||
+                  updating ||
+                  savingFaqs ||
+                  savingReviews ||
+                  savingStock
+                }
               >
                 <Save className="mr-2 h-4 w-4" />
-                {loading || creating || updating ? "Kaydediliyor..." : isCreate || isCopyMode ? "Oluştur" : "Güncelle"}
+                {loading || creating || updating
+                  ? "Kaydediliyor..."
+                  : isCreate || isCopyMode
+                  ? "Oluştur"
+                  : "Güncelle"}
               </Button>
             </CardHeader>
 
@@ -684,7 +846,7 @@ export default function ProductForm() {
                 onUploadFeatured={onUploadFeatured}
                 uploading={uploading}
                 quillModules={quillModules}
-                quillFormats={QUILL_FORMATS}   // <<< EKLENDİ
+                quillFormats={QUILL_FORMATS}
               />
 
               <CategorySelect
@@ -702,7 +864,9 @@ export default function ProductForm() {
             <CardContent className="pt-6">
               <Tabs defaultValue="customization" className="w-full">
                 <TabsList className="grid w-full grid-cols-7">
-                  <TabsTrigger value="customization">Ürün Özelleştirme</TabsTrigger>
+                  <TabsTrigger value="customization">
+                    Ürün Özelleştirme
+                  </TabsTrigger>
                   <TabsTrigger value="demo">Demo & Önizleme</TabsTrigger>
                   <TabsTrigger value="faq">Sıkça Sorulan Sorular</TabsTrigger>
                   <TabsTrigger value="reviews">Müşteri Yorumları</TabsTrigger>
@@ -743,20 +907,37 @@ export default function ProductForm() {
                     idParam={idParam}
                     usedStock={(usedStock ?? []) as UsedStockItem[]}
                     apiProviders={apiProviders}
-                    onUploadFile={async (arg) => {
+                    onUploadFile={async (
+                      arg:
+                        | File
+                        | {
+                            target?: { files?: FileList | null };
+                            currentTarget?: { files?: FileList | null };
+                          }
+                    ) => {
                       const ev = arg as {
                         target?: { files?: FileList | null };
                         currentTarget?: { files?: FileList | null };
                       };
-                      const f = ev?.target?.files?.[0] ?? ev?.currentTarget?.files?.[0] ?? (arg as File);
+                      const f =
+                        ev?.target?.files?.[0] ??
+                        ev?.currentTarget?.files?.[0] ??
+                        (arg as File);
                       if (!f) return;
                       try {
                         if (f.size > 50 * 1024 * 1024) {
-                          toast({ title: "Büyük Dosya", description: "Maksimum 50MB.", variant: "destructive" });
+                          toast({
+                            title: "Büyük Dosya",
+                            description: "Maksimum 50MB.",
+                            variant: "destructive",
+                          });
                           return;
                         }
                         const folder = `products/${safeFolder(
-                          (formData.slug as string) || slugify((formData.name as string) || "product")
+                          (formData.slug as string) ||
+                            slugify(
+                              (formData.name as string) || "product"
+                            )
                         )}/files`;
 
                         const asset = await uploadAsset({
@@ -766,15 +947,37 @@ export default function ProductForm() {
                           metadata: { module: "products", type: "file" },
                         }).unwrap();
 
-                        const url = (asset as UploadedAssetLike)?.url || "";
-                        if (!url) throw new Error("Yükleme başarısız (url yok)");
-                        setFormData((fd) => ({ ...fd, file_url: (url || null) as string | null }));
-                        toast({ title: "Yüklendi", description: "Dosya yüklendi." });
+                        const url =
+                          (asset as UploadedAssetLike)?.url || "";
+                        if (!url)
+                          throw new Error("Yükleme başarısız (url yok)");
+                        setFormData((fd) => ({
+                          ...fd,
+                          file_url: (url || null) as string | null,
+                        }));
+                        toast({
+                          title: "Yüklendi",
+                          description: "Dosya yüklendi.",
+                        });
                       } catch (e: unknown) {
                         const dataMsg =
-                          (e as { data?: { message?: string; error?: { message?: string } } })?.data?.message ||
-                          (e as { data?: { error?: { message?: string } } })?.data?.error?.message;
-                        toast({ title: "Hata", description: dataMsg || "Dosya yüklenemedi.", variant: "destructive" });
+                          (e as {
+                            data?: {
+                              message?: string;
+                              error?: { message?: string };
+                            };
+                          })?.data?.message ||
+                          (e as {
+                            data?: {
+                              error?: { message?: string };
+                            };
+                          })?.data?.error?.message;
+                        toast({
+                          title: "Hata",
+                          description:
+                            dataMsg || "Dosya yüklenemedi.",
+                          variant: "destructive",
+                        });
                       }
                     }}
                     uploading={uploading}
@@ -782,7 +985,10 @@ export default function ProductForm() {
                 </TabsContent>
 
                 <TabsContent value="turkpin" className="space-y-6 mt-6">
-                  <TurkpinSettings formData={formData} setFormData={setFormData} />
+                  <TurkpinSettings
+                    formData={formData}
+                    setFormData={setFormData}
+                  />
                 </TabsContent>
 
                 <TabsContent value="article" className="space-y-6 mt-6">
@@ -790,7 +996,7 @@ export default function ProductForm() {
                     formData={formData}
                     setField={setField}
                     quillModules={quillModules}
-                    quillFormats={QUILL_FORMATS}   // <<< EKLENDİ
+                    quillFormats={QUILL_FORMATS}
                   />
                 </TabsContent>
               </Tabs>
@@ -798,7 +1004,11 @@ export default function ProductForm() {
           </Card>
 
           <div className="flex gap-2 justify-end mt-6">
-            <Button type="button" variant="outline" onClick={() => navigate("/admin/products")}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate("/admin/products")}
+            >
               İptal
             </Button>
             <Button
@@ -816,7 +1026,11 @@ export default function ProductForm() {
                 savingStock
               }
             >
-              {loading || creating || updating ? "Kaydediliyor..." : isCreate || isCopyMode ? "Oluştur" : "Güncelle"}
+              {loading || creating || updating
+                ? "Kaydediliyor..."
+                : isCreate || isCopyMode
+                ? "Oluştur"
+                : "Güncelle"}
             </Button>
           </div>
         </form>

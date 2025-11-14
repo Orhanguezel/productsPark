@@ -1,19 +1,27 @@
-// =============================================================
+// -------------------------------------------------------------
 // FILE: src/integrations/metahub/rtk/endpoints/products.endpoints.ts
-// =============================================================
+// (Public products)
+// -------------------------------------------------------------
 import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
 import type {
   Product,
   ApiProduct,
-  FAQ,
-  Review,
-  ProductOption,
-  Stock,
+  ProductsAdminListParams,
 } from "@/integrations/metahub/db/types/products";
 
-/* ---------------- type guards & helpers ---------------- */
-type NumericLike = number | string | null | undefined;
-type BoolLike = boolean | 0 | 1 | "0" | "1" | null | undefined;
+const BASE = "/products";
+
+type ProductsListParams = Omit<
+  ProductsAdminListParams,
+  "show_on_homepage" | "sort"
+> & {
+  sort?: "price" | "rating" | "created_at";
+  slug?: string;
+  /** Guest sepet için çoklu id filtresi */
+  ids?: string[];
+};
+
 type QueryParams = Record<string, string | number | boolean | undefined>;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -30,364 +38,201 @@ const pluckArray = (res: unknown, keys: string[]): unknown[] => {
   return [];
 };
 
-const asNumber = (v: NumericLike, fallback = 0): number => {
-  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
-  return fallback;
+const toNumber = (x: unknown): number => {
+  if (typeof x === "number") return x;
+  const n = Number(x as unknown);
+  return Number.isFinite(n) ? n : 0;
 };
-const toNumOptional = (v: NumericLike): number | null => {
-  if (v === null || v === undefined) return null;
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
-  return null;
+
+const toNullableNumber = (x: unknown): number | null => {
+  if (x === null || x === undefined || x === "") return null;
+  const n = Number(x as unknown);
+  return Number.isFinite(n) ? n : null;
 };
-const parseArr = (v: unknown): string[] | null => {
+
+const toBool = (x: unknown): boolean => {
+  if (typeof x === "boolean") return x;
+  if (typeof x === "number") return x !== 0;
+  const s = String(x ?? "").toLowerCase();
+  return s === "true" || s === "1";
+};
+
+const toArray = (v: unknown): string[] | null => {
+  if (v == null) return null;
   if (Array.isArray(v)) return v.map(String).filter(Boolean);
   if (typeof v === "string") {
     const s = v.trim();
     if (!s) return null;
     try {
       const parsed = JSON.parse(s);
-      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x)).filter(Boolean);
     } catch {
       /* csv fallback */
     }
-    return s.split(",").map((x) => x.trim()).filter(Boolean);
+    return s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
   }
   return null;
 };
-const asBool01 = (v: BoolLike, fallback = false): 0 | 1 => {
-  if (v === true || v === 1 || v === "1") return 1;
-  if (v === false || v === 0 || v === "0") return 0;
-  return fallback ? 1 : 0;
+
+const toQueryParams = (params?: ProductsListParams): QueryParams => {
+  if (!params) return {};
+  const qp: QueryParams = {};
+  if (params.q) qp.q = params.q;
+  if (params.category_id) qp.category_id = params.category_id;
+  if (params.is_active !== undefined) qp.is_active = params.is_active ? 1 : 0;
+  if (typeof params.min_price === "number") qp.min_price = params.min_price;
+  if (typeof params.max_price === "number") qp.max_price = params.max_price;
+  if (typeof params.limit === "number") qp.limit = params.limit;
+  if (typeof params.offset === "number") qp.offset = params.offset;
+  if (params.sort) qp.sort = params.sort;
+  if (params.order) qp.order = params.order;
+  if (params.slug) qp.slug = params.slug;
+  // 👇 Guest sepeti için çoklu id
+  if (params.ids && params.ids.length > 0) {
+    qp.ids = params.ids.join(",");
+  }
+  return qp;
 };
 
-/* ---------------- normalize (Product) ---------------- */
-const normalizeProduct = (p: ApiProduct): Product => {
-  const price = asNumber(p.price, 0);
+const normalizePublicProduct = (p: ApiProduct): Product => {
+  const galleryUrls = toArray(p.gallery_urls) ?? toArray(p.images);
 
-  const originalPrice =
-    p.original_price != null
-      ? asNumber(p.original_price, 0)
-      : p.compare_at_price != null
-      ? asNumber(p.compare_at_price, 0)
-      : null;
+  return {
+    id: String((p as { id: unknown }).id),
+    name: String((p as { name?: unknown }).name ?? ""),
+    slug: String((p as { slug?: unknown }).slug ?? ""),
 
-  const cost = toNumOptional(p.cost);
+    description: (p.description ?? null) as string | null,
+    short_description: (p.short_description ?? null) as string | null,
+    category_id: (p.category_id ?? null) as string | null,
 
-  const gallery =
-    parseArr(p.gallery_urls) ??
-    parseArr(p.images) ??
-    (typeof p.image_url === "string" && p.image_url.trim() ? [p.image_url] : null);
+    price: toNumber(p.price),
+    original_price: toNullableNumber(
+      (p.original_price ?? p.compare_at_price) as unknown
+    ),
+    cost: toNullableNumber(p.cost as unknown),
 
-  const galleryAssetIds = parseArr(p.gallery_asset_ids);
-  const features = parseArr(p.features);
+    image_url: (p.image_url ?? null) as string | null,
+    featured_image: (p.featured_image ?? p.image_url ?? null) as string | null,
+    featured_image_asset_id: (p.featured_image_asset_id ?? null) as string | null,
+    featured_image_alt: (p.featured_image_alt ?? p.name ?? null) as string | null,
 
-  const isActive = asBool01(p.is_active, true);
-  const isFeatured = asBool01(p.is_featured ?? 0, false);
-  const requiresShipping = asBool01(p.requires_shipping ?? 1, true);
-  const articleEnabled = asBool01(p.article_enabled ?? 0, false);
-  const demoEmbedEnabled = asBool01(p.demo_embed_enabled ?? 0, false);
+    gallery_urls: galleryUrls,
+    gallery_asset_ids: toArray(p.gallery_asset_ids),
+    features: toArray(p.features),
 
-  const rating = p.rating == null ? 5 : asNumber(p.rating, 5);
-  const reviewCount =
-    p.review_count == null ? 0 : Math.max(0, Math.floor(asNumber(p.review_count, 0)));
+    rating: toNumber(p.rating ?? 0),
+    review_count: toNumber(p.review_count ?? 0),
 
-  const featuredImage =
-    (typeof p.featured_image === "string" && p.featured_image.trim() && p.featured_image) ||
-    (typeof p.image_url === "string" && p.image_url.trim() && p.image_url) ||
-    (Array.isArray(gallery) && gallery.length > 0 ? gallery[0] : null);
+    product_type: (p.product_type ?? null) as string | null,
+    delivery_type: p.delivery_type as Product["delivery_type"],
 
-  const stockQ = (p as unknown as { stock_quantity?: NumericLike }).stock_quantity;
+    custom_fields: (p.custom_fields as Product["custom_fields"]) ?? null,
+    quantity_options: (p.quantity_options as Product["quantity_options"]) ?? null,
 
-  const product: Product = {
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
+    api_provider_id: (p.api_provider_id ?? null) as string | null,
+    api_product_id: (p.api_product_id ?? null) as string | null,
+    api_quantity: toNullableNumber(p.api_quantity as unknown),
 
-    description: p.description ?? null,
-    short_description: p.short_description ?? null,
-    category_id: p.category_id ?? null,
+    meta_title: (p.meta_title ?? null) as string | null,
+    meta_description: (p.meta_description ?? null) as string | null,
 
-    price,
-    original_price: originalPrice,
-    cost,
+    article_content: (p.article_content ?? null) as string | null,
+    article_enabled: (toBool(p.article_enabled ?? false) ? 1 : 0) as
+      | 0
+      | 1
+      | boolean,
+    demo_url: (p.demo_url ?? null) as string | null,
+    demo_embed_enabled: (toBool(p.demo_embed_enabled ?? false) ? 1 : 0) as
+      | 0
+      | 1
+      | boolean,
+    demo_button_text: (p.demo_button_text ?? null) as string | null,
 
-    image_url: typeof p.image_url === "string" ? p.image_url : null,
-    featured_image: featuredImage ?? null,
-    featured_image_asset_id: p.featured_image_asset_id ?? null,
-    featured_image_alt: p.featured_image_alt ?? null,
-    gallery_urls: gallery,
-    gallery_asset_ids: galleryAssetIds,
+    badges: (p.badges as Product["badges"]) ?? null,
 
-    features,
+    sku: (p.sku ?? null) as string | null,
+    stock_quantity: toNumber((p as { stock_quantity?: unknown }).stock_quantity),
 
-    rating,
-    review_count: reviewCount,
+    is_active: (toBool(p.is_active ?? false) ? 1 : 0) as 0 | 1 | boolean,
+    is_featured: (toBool(p.is_featured ?? false) ? 1 : 0) as 0 | 1 | boolean,
+    requires_shipping: (toBool(p.requires_shipping ?? false) ? 1 : 0) as
+      | 0
+      | 1
+      | boolean,
 
-    product_type: p.product_type ?? null,
-    delivery_type: (p.delivery_type as Product["delivery_type"]) ?? "manual",
+    // genişletmeler
+    brand_id: (p.brand_id ?? null) as string | null,
+    vendor: (p.vendor ?? null) as string | null,
+    barcode: (p.barcode ?? null) as string | null,
+    gtin: (p.gtin ?? null) as string | null,
+    mpn: (p.mpn ?? null) as string | null,
+    weight_grams: toNullableNumber(p.weight_grams as unknown),
+    size_length_mm: toNullableNumber(p.size_length_mm as unknown),
+    size_width_mm: toNullableNumber(p.size_width_mm as unknown),
+    size_height_mm: toNullableNumber(p.size_height_mm as unknown),
 
-    custom_fields: p.custom_fields ?? null,
-    quantity_options: p.quantity_options ?? null,
-
-    api_provider_id: p.api_provider_id ?? null,
-    api_product_id: p.api_product_id ?? null,
-    api_quantity: p.api_quantity ?? null,
-
-    meta_title: p.meta_title ?? null,
-    meta_description: p.meta_description ?? null,
-
-    article_content: p.article_content ?? null,
-    article_enabled: articleEnabled,
-    demo_url: p.demo_url ?? null,
-    demo_embed_enabled: demoEmbedEnabled,
-    demo_button_text: p.demo_button_text ?? null,
-
-    badges: p.badges ?? null,
-
-    sku: p.sku ?? null,
-    stock_quantity: asNumber(stockQ, 0),
-
-    is_active: isActive,
-    is_featured: isFeatured,
-    requires_shipping: requiresShipping,
-
-    created_at: p.created_at ?? "",
-    updated_at: p.updated_at ?? p.created_at ?? "",
+    created_at: String(p.created_at ?? ""),
+    updated_at: String(p.updated_at ?? "") || String(p.created_at ?? ""),
 
     categories: p.categories
-      ? { id: p.categories.id, name: p.categories.name, slug: p.categories.slug }
+      ? {
+          id: String(p.categories.id),
+          name: String(p.categories.name),
+          slug: (p.categories.slug ?? null) as string | null,
+        }
       : undefined,
   };
-
-  if ((!product.gallery_urls || product.gallery_urls.length === 0) && product.image_url) {
-    product.gallery_urls = [product.image_url];
-  }
-  return product;
 };
 
-/* ---------------- mapping helpers (no-any) ---------------- */
-const toFAQ = (x: unknown): FAQ => {
-  if (!isRecord(x)) {
-    return {
-      id: "",
-      product_id: "",
-      question: "",
-      answer: "",
-      display_order: 0,
-      is_active: 1,
-      created_at: "",
-      updated_at: "",
-    };
-  }
-  return {
-    id: String(x.id ?? ""),
-    product_id: String(x.product_id ?? ""),
-    question: String(x.question ?? ""),
-    answer: String(x.answer ?? ""),
-    display_order: asNumber(x.display_order as NumericLike, 0),
-    is_active: asBool01(x.is_active as BoolLike),
-    created_at: String(x.created_at ?? ""),
-    updated_at: String(x.updated_at ?? ""),
-  };
-};
-
-const toReview = (x: unknown): Review => {
-  if (!isRecord(x)) {
-    return {
-      id: "",
-      product_id: "",
-      customer_name: "",
-      rating: 5,
-      comment: "",
-      review_date: "",
-      is_active: 1,
-      created_at: "",
-      updated_at: "",
-    };
-  }
-  const rd = String(x.review_date ?? x.created_at ?? "");
-  return {
-    id: String(x.id ?? ""),
-    product_id: String(x.product_id ?? ""),
-    customer_name: String(x.customer_name ?? ""),
-    rating: asNumber(x.rating as NumericLike, 5),
-    comment: String(x.comment ?? ""),
-    review_date: rd,
-    is_active: asBool01(x.is_active as BoolLike),
-    created_at: String(x.created_at ?? ""),
-    updated_at: String(x.updated_at ?? ""),
-  };
-};
-
-const toOption = (x: unknown): ProductOption => {
-  if (!isRecord(x)) {
-    return { id: "", product_id: "", option_name: "", option_values: [], created_at: "", updated_at: "" };
-  }
-  const raw = x.option_values as unknown;
-  const values = Array.isArray(raw) ? raw.map((v) => String(v)) : parseArr(raw) ?? [];
-  return {
-    id: String(x.id ?? ""),
-    product_id: String(x.product_id ?? ""),
-    option_name: String(x.option_name ?? ""),
-    option_values: values,
-    created_at: String(x.created_at ?? ""),
-    updated_at: String(x.updated_at ?? ""),
-  };
-};
-
-const toStock = (x: unknown): Stock => {
-  if (!isRecord(x)) {
-    return {
-      id: "",
-      product_id: "",
-      code: "",
-      stock_content: "",
-      is_used: 0,
-      used_at: null,
-      created_at: "",
-      order_item_id: null,
-    };
-  }
-  const rawCode = (x.code as unknown) ?? (x.stock_content as unknown) ?? "";
-  const code = typeof rawCode === "string" ? rawCode : String(rawCode ?? "");
-  return {
-    id: String(x.id ?? ""),
-    product_id: String(x.product_id ?? ""),
-    code,
-    stock_content: String(x.stock_content ?? code),
-    is_used: asBool01(x.is_used as BoolLike),
-    used_at: (x.used_at as string | null | undefined) ?? null,
-    created_at: String(x.created_at ?? ""),
-    order_item_id: (x.order_item_id as string | null | undefined) ?? null,
-  };
-};
-
-/* ---------------- RTK endpoints ---------------- */
 export const productsApi = baseApi.injectEndpoints({
-  endpoints: (builder) => ({
-    // GET /products
-    listProducts: builder.query<
-      Product[],
-      | {
-          category_id?: string;
-          is_active?: boolean | 0 | 1;
-          q?: string;
-          limit?: number;
-          offset?: number;
-          sort?: "price" | "rating" | "created_at";
-          order?: "asc" | "desc";
-          slug?: string;
-        }
-      | void
-    >({
-      query: (params) => {
-        const q: { url: string; params?: QueryParams } = { url: "/products" };
-        if (params) {
-          q.params = {
-            ...params,
-            is_active:
-              params.is_active === undefined ? undefined : (params.is_active ? 1 : 0),
-          };
-        }
-        return q;
+  endpoints: (b) => ({
+    listProducts: b.query<Product[], ProductsListParams | void>({
+      query: (params): FetchArgs => {
+        const qp = params ? toQueryParams(params) : {};
+        return { url: BASE, params: qp } as FetchArgs;
       },
       transformResponse: (res: unknown): Product[] => {
-        const arr = pluckArray(res, ["data", "items", "rows", "result", "products"]);
-        if (arr.length) return (arr as unknown[]).map((x) => normalizeProduct(x as ApiProduct));
-        if (Array.isArray(res)) return (res as unknown[]).map((x) => normalizeProduct(x as ApiProduct));
-        return [];
+        const rows = pluckArray(res, ["data", "items", "rows", "result", "products"]);
+        return rows.filter(isRecord).map((x) => normalizePublicProduct(x as ApiProduct));
       },
       providesTags: (result) =>
         result
           ? [
               ...result.map((p) => ({ type: "Product" as const, id: p.id })),
-              { type: "Products" as const, id: "LIST" },
+              { type: "Products" as const, id: "PUBLIC_LIST" },
             ]
-          : [{ type: "Products" as const, id: "LIST" }],
+          : [{ type: "Products" as const, id: "PUBLIC_LIST" }],
       keepUnusedDataFor: 60,
     }),
 
-    // GET /products/:idOrSlug
-    getProduct: builder.query<Product, string>({
-      query: (idOrSlug) => ({ url: `/products/${encodeURIComponent(idOrSlug)}` }),
-      transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
-      providesTags: (r) =>
-        r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
+    getProduct: b.query<Product, string>({
+      query: (idOrSlug): FetchArgs => ({
+        url: `${BASE}/${encodeURIComponent(idOrSlug)}`,
+      }),
+      transformResponse: (res: unknown): Product => {
+        const obj = Array.isArray(res) ? (res[0] as unknown) : res;
+        return normalizePublicProduct(obj as ApiProduct);
+      },
+      providesTags: (_r, _e, idOrSlug) => [
+        { type: "Product" as const, id: idOrSlug },
+      ],
       keepUnusedDataFor: 300,
     }),
 
-    // Backward compat
-    getProductBySlug: builder.query<Product, string>({
-      query: (slug) => ({ url: `/products/by-slug/${encodeURIComponent(slug)}` }),
-      transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
-      providesTags: (r) =>
-        r ? [{ type: "Product", id: r.id }] : [{ type: "Products", id: "LIST" }],
+    getProductBySlug: b.query<Product, string>({
+      query: (slug): FetchArgs => ({
+        url: `${BASE}/by-slug/${encodeURIComponent(slug)}`,
+      }),
+      transformResponse: (res: unknown): Product =>
+        normalizePublicProduct(res as ApiProduct),
+      providesTags: (_r, _e, slug) => [
+        { type: "Product" as const, id: slug },
+      ],
       keepUnusedDataFor: 300,
-    }),
-
-    getProductById: builder.query<Product, string>({
-      query: (id) => ({ url: `/products/${encodeURIComponent(id)}` }),
-      transformResponse: (res: unknown): Product => normalizeProduct(res as ApiProduct),
-      providesTags: (_r, _e, id) => [{ type: "Product", id }],
-      keepUnusedDataFor: 300,
-    }),
-
-    // GET /product_faqs
-    listProductFaqs: builder.query<FAQ[], { product_id: string; only_active?: boolean | 0 | 1 }>({
-      query: ({ product_id, only_active = 1 }) => ({
-        url: "/product_faqs",
-        params: { product_id, only_active: only_active ? 1 : 0, is_active: only_active ? 1 : 0 },
-      }),
-      transformResponse: (res: unknown): FAQ[] => {
-        const arr = pluckArray(res, ["data", "items", "rows", "faqs"]);
-        return (arr as unknown[]).map(toFAQ);
-      },
-      providesTags: (_r, _e, arg) => [{ type: "Faqs" as const, id: arg.product_id }],
-      keepUnusedDataFor: 60,
-    }),
-
-    // GET /product_reviews
-    listProductReviews: builder.query<Review[], { product_id: string; only_active?: boolean | 0 | 1 }>({
-      query: ({ product_id, only_active = 1 }) => ({
-        url: "/product_reviews",
-        params: { product_id, only_active: only_active ? 1 : 0, is_active: only_active ? 1 : 0 },
-      }),
-      transformResponse: (res: unknown): Review[] => {
-        const arr = pluckArray(res, ["data", "items", "rows", "reviews"]);
-        return (arr as unknown[]).map(toReview);
-      },
-      providesTags: (_r, _e, arg) => [{ type: "Reviews" as const, id: arg.product_id }],
-      keepUnusedDataFor: 60,
-    }),
-
-    // GET /product_options
-    listProductOptions: builder.query<ProductOption[], { product_id: string }>({
-      query: ({ product_id }) => ({ url: "/product_options", params: { product_id } }),
-      transformResponse: (res: unknown): ProductOption[] => {
-        const arr = pluckArray(res, ["data", "items", "rows", "options"]);
-        return (arr as unknown[]).map(toOption);
-      },
-      providesTags: (_r, _e, arg) => [{ type: "Options" as const, id: arg.product_id }],
-      keepUnusedDataFor: 60,
-    }),
-
-    // GET /product_stock
-    listProductStock: builder.query<Stock[], { product_id: string; is_used?: boolean | 0 | 1 }>({
-      query: ({ product_id, is_used }) => ({
-        url: "/product_stock",
-        params: {
-          product_id,
-          ...(is_used === undefined ? {} : { is_used: is_used ? 1 : 0 }),
-        } as QueryParams,
-      }),
-      transformResponse: (res: unknown): Stock[] => {
-        const arr = pluckArray(res, ["data", "items", "rows", "stock"]);
-        return (arr as unknown[]).map(toStock);
-      },
-      providesTags: (_r, _e, arg) => [{ type: "Stock" as const, id: arg.product_id }],
-      keepUnusedDataFor: 60,
     }),
   }),
   overrideExisting: true,
@@ -396,10 +241,5 @@ export const productsApi = baseApi.injectEndpoints({
 export const {
   useListProductsQuery,
   useGetProductQuery,
-  useGetProductByIdQuery,
   useGetProductBySlugQuery,
-  useListProductFaqsQuery,
-  useListProductReviewsQuery,
-  useListProductOptionsQuery,
-  useListProductStockQuery,
 } = productsApi;

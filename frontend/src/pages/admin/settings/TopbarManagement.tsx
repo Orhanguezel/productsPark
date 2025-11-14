@@ -4,20 +4,46 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { Plus, Save, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-import type { TopbarSetting, UpsertTopbarBody } from "@/integrations/metahub/db/types/topbar";
+import type { TopbarSetting } from "@/integrations/metahub/db/types/topbar";
+import type { Coupon } from "@/integrations/metahub/db/types/coupon";
+
 import {
   useListTopbarAdminQuery,
   useCreateTopbarAdminMutation,
@@ -29,20 +55,28 @@ import { useListCouponsAdminQuery } from "@/integrations/metahub/rtk/endpoints/a
 const emptyToNull = (v: string | null | undefined) =>
   v == null ? null : v.trim() === "" ? null : v.trim();
 
-const initialForm: UpsertTopbarBody = {
-  is_active: true,
-  message: "",
-  coupon_id: null,
-  link_url: null,
-  link_text: null,
-  show_ticker: false,
-};
-
 type AdminTopbarRow = TopbarSetting & {
   coupon_id?: string | null;
   coupon_code?: string | null;
 };
 
+type FormState = {
+  is_active: boolean;
+  message: string;
+  coupon_id: string | null;
+  link_url: string;
+  show_ticker: boolean;
+};
+
+const initialForm: FormState = {
+  is_active: true,
+  message: "",
+  coupon_id: null,
+  link_url: "",
+  show_ticker: false,
+};
+
+// Sentinel değer: Radix Select için "boş" state
 const NONE = "__none__";
 
 export default function TopbarManagement() {
@@ -52,34 +86,35 @@ export default function TopbarManagement() {
     limit: 100,
   });
 
-  const {
-    data: coupons = [],
-    isFetching: couponsFetching,
-    isError: couponsError,
-  } = useListCouponsAdminQuery({
-    is_active: 1,
-    limit: 200,
-    // sort: "created_at",
-    // order: "desc",
-  });
+  const { data: coupons = [], isLoading: couponsLoading, refetch: refetchCoupons } = useListCouponsAdminQuery();
 
   const couponIndex = useMemo(() => {
     const m: Record<string, string> = {};
-    for (const c of coupons) m[c.id] = c.code;
+    for (const c of coupons as Coupon[]) {
+      m[c.id] = c.code;
+    }
     return m;
   }, [coupons]);
-  const couponCodeById = (id?: string | null) => (id ? couponIndex[id] ?? null : null);
 
-  const [createTopbar, { isLoading: creating }] = useCreateTopbarAdminMutation();
-  const [updateTopbar, { isLoading: updating }] = useUpdateTopbarAdminMutation();
-  const [deleteTopbar, { isLoading: deleting }] = useDeleteTopbarAdminMutation();
+  const couponCodeById = (id?: string | null) =>
+    id ? couponIndex[id] ?? null : null;
+
+  const [createTopbar, { isLoading: creating }] =
+    useCreateTopbarAdminMutation();
+  const [updateTopbar, { isLoading: updating }] =
+    useUpdateTopbarAdminMutation();
+  const [deleteTopbar, { isLoading: deleting }] =
+    useDeleteTopbarAdminMutation();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AdminTopbarRow | null>(null);
-  const [form, setForm] = useState<UpsertTopbarBody>(initialForm);
+  const [form, setForm] = useState<FormState>(initialForm);
 
   const list: AdminTopbarRow[] = items as AdminTopbarRow[];
-  const active = useMemo(() => list.find((x) => x.is_active) || null, [list]);
+  const active = useMemo(
+    () => list.find((x) => x.is_active) || null,
+    [list],
+  );
 
   const disabled = isFetching || creating || updating || deleting;
 
@@ -95,8 +130,7 @@ export default function TopbarManagement() {
       is_active: !!item.is_active,
       message: item.message ?? "",
       coupon_id: item.coupon_id ?? null,
-      link_url: item.link_url ?? null,
-      link_text: item.link_text ?? null,
+      link_url: item.link_url ?? "",
       show_ticker: !!item.show_ticker,
     });
     setOpen(true);
@@ -107,12 +141,13 @@ export default function TopbarManagement() {
       toast.error("Mesaj alanı zorunludur");
       return;
     }
-    const body: UpsertTopbarBody = {
+
+    const body = {
+      // UpsertTopbarBody ile birebir
       is_active: !!form.is_active,
       message: form.message.trim(),
       coupon_id: form.coupon_id ?? null,
-      link_url: emptyToNull(form.link_url ?? null),
-      link_text: emptyToNull(form.link_text ?? null),
+      link_url: emptyToNull(form.link_url),
       show_ticker: !!form.show_ticker,
     };
 
@@ -127,7 +162,8 @@ export default function TopbarManagement() {
       setOpen(false);
     } catch (e: unknown) {
       const msg =
-        (e as { data?: { message?: string }; message?: string })?.data?.message ||
+        (e as { data?: { message?: string }; message?: string })?.data
+          ?.message ||
         (e as { message?: string })?.message ||
         "Kaydedilemedi";
       toast.error(msg);
@@ -141,7 +177,8 @@ export default function TopbarManagement() {
       toast.success("Silindi");
     } catch (e: unknown) {
       const msg =
-        (e as { data?: { message?: string }; message?: string })?.data?.message ||
+        (e as { data?: { message?: string }; message?: string })?.data
+          ?.message ||
         (e as { message?: string })?.message ||
         "Silinemedi";
       toast.error(msg);
@@ -161,7 +198,9 @@ export default function TopbarManagement() {
       </CardHeader>
 
       <CardContent>
-        {isFetching && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
+        {isFetching && (
+          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+        )}
 
         <Table>
           <TableHeader>
@@ -175,20 +214,32 @@ export default function TopbarManagement() {
           </TableHeader>
           <TableBody>
             {list.map((t) => {
-              const code = t.coupon_code ?? couponCodeById(t.coupon_id) ?? "-";
+              const code =
+                t.coupon_code ??
+                couponCodeById(t.coupon_id) ??
+                "-";
               return (
                 <TableRow key={t.id}>
                   <TableCell>
-                    <Badge variant={t.is_active ? "default" : "secondary"}>
+                    <Badge
+                      variant={t.is_active ? "default" : "secondary"}
+                    >
                       {t.is_active ? "Aktif" : "Pasif"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="max-w-lg truncate">{t.message}</TableCell>
+                  <TableCell className="max-w-lg truncate">
+                    {t.message}
+                  </TableCell>
                   <TableCell className="font-mono">{code}</TableCell>
                   <TableCell>
-                    {t.link_text && t.link_url ? (
-                      <a className="underline" href={t.link_url} target="_blank" rel="noreferrer">
-                        {t.link_text}
+                    {t.link_url ? (
+                      <a
+                        className="underline"
+                        href={t.link_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {t.link_url}
                       </a>
                     ) : (
                       "-"
@@ -196,10 +247,20 @@ export default function TopbarManagement() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(t)} disabled={disabled}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(t)}
+                        disabled={disabled}
+                      >
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => del(t.id)} disabled={disabled}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => del(t.id)}
+                        disabled={disabled}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -209,7 +270,10 @@ export default function TopbarManagement() {
             })}
             {list.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="text-center py-8 text-muted-foreground"
+                >
                   Kayıt yok.
                 </TableCell>
               </TableRow>
@@ -218,10 +282,18 @@ export default function TopbarManagement() {
         </Table>
 
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-2xl" aria-describedby="topbar-dialog-desc">
+          <DialogContent
+            className="max-w-2xl"
+            aria-describedby="topbar-dialog-desc"
+          >
             <DialogHeader>
-              <DialogTitle>{editing ? "Topbarı Düzenle" : "Yeni Topbar"}</DialogTitle>
-              <DialogDescription id="topbar-dialog-desc" className="sr-only">
+              <DialogTitle>
+                {editing ? "Topbarı Düzenle" : "Yeni Topbar"}
+              </DialogTitle>
+              <DialogDescription
+                id="topbar-dialog-desc"
+                className="sr-only"
+              >
                 Topbar ayarlarını burada düzenleyebilirsiniz.
               </DialogDescription>
             </DialogHeader>
@@ -230,7 +302,9 @@ export default function TopbarManagement() {
               <div className="flex items-center gap-2">
                 <Switch
                   checked={!!form.is_active}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, is_active: v }))
+                  }
                 />
                 <Label>Aktif</Label>
               </div>
@@ -240,58 +314,75 @@ export default function TopbarManagement() {
                 <Textarea
                   rows={3}
                   value={form.message}
-                  onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      message: e.target.value,
+                    }))
+                  }
                 />
               </div>
 
               <div className="space-y-2">
                 <Label>Kupon</Label>
-                {/* Radix hatası için boş-string yerine sentinel */}
                 <Select
                   value={form.coupon_id ?? NONE}
                   onValueChange={(val) =>
-                    setForm((f) => ({ ...f, coupon_id: val === NONE ? null : val }))
+                    setForm((f) => ({
+                      ...f,
+                      coupon_id: val === NONE ? null : val,
+                    }))
                   }
-                  disabled={couponsFetching}
+                  disabled={couponsLoading}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={couponsFetching ? "Yükleniyor..." : "Kupon seçin (opsiyonel)"} />
+                    <SelectValue
+                      placeholder={
+                        couponsLoading
+                          ? "Yükleniyor..."
+                          : "Kupon seçin (opsiyonel)"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE}>— Kupon yok —</SelectItem>
-                    {coupons.map((c) => (
+                    {(coupons as Coupon[]).map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.code} {c.discount_type === "percentage" ? `(%${c.discount_value})` : `(${c.discount_value})`}
+                        {c.code}{" "}
+                        {c.discount_type === "percentage"
+                          ? `(%${c.discount_value})`
+                          : `(${c.discount_value})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {couponsError && (
-                  <p className="text-xs text-destructive">Kuponlar alınamadı (liste boş olabilir).</p>
+                {!couponsLoading && coupons.length === 0 && (
+                  <p className="text-xs text-destructive">
+                    Kuponlar alınamadı (liste boş olabilir).
+                  </p>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Link URL</Label>
-                  <Input
-                    value={form.link_url ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, link_url: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Link Metni</Label>
-                  <Input
-                    value={form.link_text ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, link_text: e.target.value }))}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>Link URL</Label>
+                <Input
+                  value={form.link_url}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      link_url: e.target.value,
+                    }))
+                  }
+                  placeholder="/kampanyalar"
+                />
               </div>
 
               <div className="flex items-center gap-2">
                 <Switch
                   checked={!!form.show_ticker}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, show_ticker: v }))}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, show_ticker: v }))
+                  }
                 />
                 <Label>Metni kayan yazı yap</Label>
               </div>
@@ -299,7 +390,9 @@ export default function TopbarManagement() {
               <div className="flex justify-end">
                 <Button onClick={save} disabled={creating || updating}>
                   <Save className="w-4 h-4 mr-2" />
-                  {creating || updating ? "Kaydediliyor..." : "Kaydet"}
+                  {creating || updating
+                    ? "Kaydediliyor..."
+                    : "Kaydet"}
                 </Button>
               </div>
             </div>
@@ -308,9 +401,16 @@ export default function TopbarManagement() {
 
         {active && (
           <p className="text-xs text-muted-foreground mt-4">
-            Aktif Topbar: <span className="font-medium">{active.message}</span>
+            Aktif Topbar:{" "}
+            <span className="font-medium">{active.message}</span>
             {active.coupon_id ? (
-              <> — Kupon: <span className="font-mono">{couponCodeById(active.coupon_id) ?? "-"}</span></>
+              <>
+                {" "}
+                — Kupon:{" "}
+                <span className="font-mono">
+                  {couponCodeById(active.coupon_id) ?? "-"}
+                </span>
+              </>
             ) : null}
           </p>
         )}

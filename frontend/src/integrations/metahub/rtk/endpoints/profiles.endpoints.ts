@@ -1,3 +1,5 @@
+// src/integrations/metahub/rtk/endpoints/profiles.endpoints.ts
+
 import { baseApi } from "../baseApi";
 
 export type Profile = {
