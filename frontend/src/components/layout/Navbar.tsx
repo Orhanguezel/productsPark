@@ -1,5 +1,11 @@
 // src/components/layout/Navbar.tsx
-import { useState, useEffect, useCallback, type ComponentType, type SVGProps } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import {
   ShoppingCart,
   User as UserIcon,
@@ -15,12 +21,12 @@ import {
   Mail,
   BookOpen,
   LifeBuoy,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useCart } from "@/hooks/useCart";
-import { metahub } from "@/integrations/metahub/client";
 import { Topbar } from "./Topbar";
 import {
   DropdownMenu,
@@ -31,19 +37,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-interface MenuItem {
-  id: string;
-  title: string;
-  url: string;
-  icon: string | null;
-  is_active: boolean;
-}
-
-type ProfileRow = {
-  full_name?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-};
+import { useNotifications } from "@/hooks/useNotifications";
+import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
+import { useListMenuItemsQuery } from "@/integrations/metahub/rtk/endpoints/menu_items.endpoints";
+import { useListUserRolesQuery } from "@/integrations/metahub/rtk/endpoints/user_roles.endpoints";
+import { useGetSiteSettingByKeyQuery } from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 
 /** ---- Icon map'i typesafe ---- */
 const ICONS = { Home, ShoppingBag, Grid3x3, Info, Mail, BookOpen, LifeBuoy } as const;
@@ -57,102 +55,90 @@ const getMenuIcon = (iconName: string | null): IconCmp | null => {
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [themeMode, setThemeMode] = useState<"user_choice" | "dark_only" | "light_only">("user_choice");
-  const [displayName, setDisplayName] = useState<string>("");
+  const [themeMode, setThemeMode] = useState<
+    "user_choice" | "dark_only" | "light_only"
+  >("user_choice");
 
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { cartCount } = useCart();
 
-  /** ---- Display name resolve (profiles → metadata → user.full_name → email) ---- */
-  const resolveDisplayName = useCallback(async () => {
-    if (!user) {
-      setDisplayName("");
-      return;
-    }
+  // 🔔 Notifications (sadece sayı için yeterli)
+  const { unreadCount } = useNotifications();
 
-    // 1) profiles tablosu
-    let name = "";
-    try {
-      const { data: profile } = await metahub
-        .from<ProfileRow>("profiles")
-        .select("full_name, first_name, last_name")
-        .eq("id", user.id)
-        .maybeSingle();
+  // 👤 Profil (RTK)
+  const { data: profile } = useGetMyProfileQuery(undefined, {
+    skip: !user,
+  });
 
-      const combined =
-        (profile?.full_name?.trim() ||
-          [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
-          "");
+  // 📋 Menu items (header için)
+  const { data: menuItemsData } = useListMenuItemsQuery({
+    location: "header",
+    is_active: true,
+    limit: 50,
+  });
+  const menuItems = menuItemsData ?? [];
 
-      name = combined;
-    } catch {
-      // sessiz geç
-    }
+  // 🛡 Admin rolü kontrolü
+  const { data: rolesData } = useListUserRolesQuery(
+    user?.id
+      ? { user_id: user.id, role: "admin", limit: 1, offset: 0 }
+      : undefined,
+    { skip: !user?.id },
+  );
+  const isAdmin = !!rolesData?.length;
 
-    // 2) user_metadata + user.full_name fallback
-    if (!name) {
-      const meta = (user as { user_metadata?: { full_name?: string | null; name?: string | null } | null })
-        ?.user_metadata;
-      name =
-        meta?.full_name?.trim() ||
-        meta?.name?.trim() ||
-        (user as { full_name?: string | null })?.full_name?.trim() ||
-        "";
-    }
-
-    setDisplayName(name || user.email || "");
-  }, [user]);
-
-  const fetchMenuItems = useCallback(async (): Promise<void> => {
-    const { data } = await metahub
-      .from("menu_items")
-      .select("id, title, url, icon, is_active")
-      .eq("location", "header")
-      .eq("is_active", true)
-      .order("display_order", { ascending: true });
-
-    if (data) setMenuItems(data);
-  }, []);
-
-  const checkAdminStatus = useCallback(async (): Promise<void> => {
-    if (!user?.id) {
-      setIsAdmin(false);
-      return;
-    }
-    const { data } = await metahub
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-
-    setIsAdmin(!!data);
-  }, [user?.id]);
-
-  const fetchThemeSettings = useCallback(async (): Promise<void> => {
-    const { data } = await metahub
-      .from("site_settings")
-      .select("value")
-      .eq("key", "theme_mode")
-      .maybeSingle();
-
-    if (data?.value) {
-      const mode = data.value as "user_choice" | "dark_only" | "light_only";
-      setThemeMode(mode);
-      if (mode === "dark_only") setTheme("dark");
-      else if (mode === "light_only") setTheme("light");
-    }
-  }, [setTheme]);
+  // 🎨 Tema ayarı (site_settings.theme_mode)
+  const { data: themeSetting } = useGetSiteSettingByKeyQuery("theme_mode");
 
   useEffect(() => {
-    void fetchMenuItems();
-    void checkAdminStatus();
-    void fetchThemeSettings();
-    void resolveDisplayName();
-  }, [fetchMenuItems, checkAdminStatus, fetchThemeSettings, resolveDisplayName]);
+    if (!themeSetting?.value) return;
+    const mode = themeSetting
+      .value as "user_choice" | "dark_only" | "light_only";
+    setThemeMode(mode);
+    if (mode === "dark_only") setTheme("dark");
+    else if (mode === "light_only") setTheme("light");
+  }, [themeSetting, setTheme]);
+
+  /** ---- Display name resolve (profile → user_metadata → user.full_name → email) ---- */
+  const displayName = useMemo(() => {
+    if (!user) return "";
+
+    // 1) profiles tablosu
+    const fromProfile =
+      profile?.full_name?.trim() ||
+      ""
+        .concat(
+          (profile as any)?.first_name
+            ? String((profile as any).first_name).trim()
+            : "",
+          " ",
+          (profile as any)?.last_name
+            ? String((profile as any).last_name).trim()
+            : "",
+        )
+        .trim();
+
+    if (fromProfile) return fromProfile;
+
+    // 2) user_metadata + user.full_name fallback
+    const meta = (user as {
+      user_metadata?: { full_name?: string | null; name?: string | null } | null;
+      full_name?: string | null;
+      email?: string | null;
+    })?.user_metadata;
+
+    const metaName =
+      meta?.full_name?.trim() ||
+      meta?.name?.trim() ||
+      (user as any)?.full_name?.trim() ||
+      "";
+
+    if (metaName) return metaName;
+
+    // 3) email fallback
+    return user.email || "";
+  }, [user, profile]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -168,7 +154,9 @@ const Navbar = () => {
             {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">D</span>
+                <span className="text-primary-foreground font-bold text-sm">
+                  D
+                </span>
               </div>
               <span className="font-bold text-xl">Dijital Market</span>
             </div>
@@ -176,7 +164,7 @@ const Navbar = () => {
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-6">
               {menuItems.map((item) => {
-                const IconComponent = getMenuIcon(item.icon);
+                const IconComponent = getMenuIcon(item.icon as string | null);
                 return (
                   <a
                     key={item.id}
@@ -192,6 +180,7 @@ const Navbar = () => {
 
             {/* Right Side Actions */}
             <div className="flex items-center gap-3">
+              {/* Tema toggle (sadece user_choice ise göster) */}
               {themeMode === "user_choice" && (
                 <Button
                   variant="ghost"
@@ -199,10 +188,15 @@ const Navbar = () => {
                   onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                   className="hidden md:flex"
                 >
-                  {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                  {theme === "dark" ? (
+                    <Sun className="h-5 w-5" />
+                  ) : (
+                    <Moon className="h-5 w-5" />
+                  )}
                 </Button>
               )}
 
+              {/* Sepet */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -217,6 +211,25 @@ const Navbar = () => {
                 )}
               </Button>
 
+              {/* Notifications (sadece login kullanıcı için) */}
+              {user && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative"
+                  // 🔴 Bildirim ikonuna tıklayınca hesabım + tab=notifications
+                  onClick={() => (window.location.href = "/hesabim?tab=notifications")}
+                >
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-[4px]">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              )}
+
+              {/* Kullanıcı menüsü */}
               {user ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -230,19 +243,27 @@ const Navbar = () => {
                         <span className="font-medium">{displayName}</span>
                         {/* E-posta zaten isim değilse altta küçük göster */}
                         {displayName !== user.email && (
-                          <span className="text-xs text-muted-foreground">{user.email}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {user.email}
+                          </span>
                         )}
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => (window.location.href = "/hesabim")}>
+                    <DropdownMenuItem
+                      onClick={() => (window.location.href = "/hesabim")}
+                    >
                       Hesabım
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => (window.location.href = "/destek")}>
+                    <DropdownMenuItem
+                      onClick={() => (window.location.href = "/destek")}
+                    >
                       Destek
                     </DropdownMenuItem>
                     {isAdmin && (
-                      <DropdownMenuItem onClick={() => (window.location.href = "/admin")}>
+                      <DropdownMenuItem
+                        onClick={() => (window.location.href = "/admin")}
+                      >
                         Yönetim
                       </DropdownMenuItem>
                     )}
@@ -255,7 +276,11 @@ const Navbar = () => {
                 </DropdownMenu>
               ) : (
                 <>
-                  <Button variant="ghost" size="icon" onClick={() => (window.location.href = "/giris")}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => (window.location.href = "/giris")}
+                  >
                     <UserIcon className="h-5 w-5" />
                   </Button>
 
@@ -268,13 +293,18 @@ const Navbar = () => {
                 </>
               )}
 
+              {/* Mobile Menu Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 className="md:hidden"
                 onClick={() => setIsMenuOpen((v) => !v)}
               >
-                {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                {isMenuOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
               </Button>
             </div>
           </div>
@@ -284,7 +314,7 @@ const Navbar = () => {
             <div className="md:hidden py-4 border-t border-border">
               <div className="flex flex-col gap-4">
                 {menuItems.map((item) => {
-                  const IconComponent = getMenuIcon(item.icon);
+                  const IconComponent = getMenuIcon(item.icon as string | null);
                   return (
                     <a
                       key={item.id}
@@ -296,8 +326,12 @@ const Navbar = () => {
                     </a>
                   );
                 })}
+
                 {user ? (
-                  <Button className="gradient-primary text-white w-full" onClick={handleSignOut}>
+                  <Button
+                    className="gradient-primary text-white w-full"
+                    onClick={handleSignOut}
+                  >
                     Çıkış Yap
                   </Button>
                 ) : (

@@ -1,8 +1,8 @@
 // ===================================================================
 // FILE: src/modules/orders/admin.routes.ts
 // ===================================================================
-import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '@/common/middleware/auth';
+import type { FastifyInstance } from "fastify";
+import { requireAuth, requireAdmin } from "@/common/middleware/auth";
 
 import {
   listOrdersAdmin,
@@ -14,23 +14,27 @@ import {
   updateOrderFulfillmentAdmin,
   listOrderTimelineAdmin,
   addOrderNoteAdmin,
-  deleteOrderAdmin,               // ⬅️ EKLE
-} from './admin.controller';
+  deleteOrderAdmin,
+} from "./admin.controller";
+
+const BASE = "/admin/orders";
 
 export async function registerAdminOrders(app: FastifyInstance) {
-  const guard = { preHandler: [requireAuth] };
+  // Sadece admin kullanıcılar erişebilsin
+  const guard = { preHandler: [requireAuth, requireAdmin] };
 
-  app.get('/admin/orders', guard, listOrdersAdmin);
-  app.get('/admin/orders/:id', guard, getOrderAdminById);
-  app.get('/admin/orders/:id/items', guard, listOrderItemsAdmin);
+  app.get(`${BASE}`, guard, listOrdersAdmin);
+  app.get(`${BASE}/:id`, guard, getOrderAdminById);
+  app.get(`${BASE}/:id/items`, guard, listOrderItemsAdmin);
 
-  app.patch('/admin/orders/:id/status', guard, updateOrderStatusAdmin);
-  app.post('/admin/orders/:id/cancel', guard, cancelOrderAdmin);
-  app.post('/admin/orders/:id/refund', guard, refundOrderAdmin);
-  app.patch('/admin/orders/:id/fulfillment', guard, updateOrderFulfillmentAdmin);
+  app.patch(`${BASE}/:id/status`, guard, updateOrderStatusAdmin);
+  app.post(`${BASE}/:id/cancel`, guard, cancelOrderAdmin);
+  app.post(`${BASE}/:id/refund`, guard, refundOrderAdmin);
+  app.patch(`${BASE}/:id/fulfillment`, guard, updateOrderFulfillmentAdmin);
 
-  app.get('/admin/orders/:id/timeline', guard, listOrderTimelineAdmin);
-  app.post('/admin/orders/:id/timeline', guard, addOrderNoteAdmin);
+  app.get(`${BASE}/:id/timeline`, guard, listOrderTimelineAdmin);
+  app.post(`${BASE}/:id/timeline`, guard, addOrderNoteAdmin);
 
-  app.delete('/admin/orders/:id', guard, deleteOrderAdmin); // ⬅️ YENİ
+  app.delete(`${BASE}/:id`, guard, deleteOrderAdmin);
 }
+

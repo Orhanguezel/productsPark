@@ -1,11 +1,15 @@
+// src/modules/support/router.ts
+
 import type { FastifyInstance } from "fastify";
 import { SupportController } from "./controller";
+
+const BASE="/support_tickets";
 
 export async function registerSupport(app: FastifyInstance) {
   // LIST — public
   app.route({
     method: "GET",
-    url: "/support_tickets",
+    url: `${BASE}`,
     config: { public: true },
     handler: SupportController.listTickets,
   });
@@ -13,7 +17,7 @@ export async function registerSupport(app: FastifyInstance) {
   // GET by id — public
   app.route({
     method: "GET",
-    url: "/support_tickets/:id",
+    url: `${BASE}/:id`,
     config: { public: true },
     handler: SupportController.getTicket,
   });
@@ -21,14 +25,14 @@ export async function registerSupport(app: FastifyInstance) {
   // CREATE ticket — protected (config.public yok → auth plugin devreye girer)
   app.route({
     method: "POST",
-    url: "/support_tickets",
+    url: `${BASE}`,
     handler: SupportController.createTicket,
   });
 
   // UPDATE ticket — protected (RBAC kontrolü controller içinde)
   app.route({
     method: "PATCH",
-    url: "/support_tickets/:id",
+    url: `${BASE}/:id`,
     handler: SupportController.updateTicket,
   });
 

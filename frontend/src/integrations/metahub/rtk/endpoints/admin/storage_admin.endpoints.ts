@@ -1,230 +1,254 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints.ts
+// Admin Storage — list/get/create(multipart)/bulkCreate/patch/delete/bulkDelete/folders/diag
 // =============================================================
-import { baseApi } from "../../baseApi";
-import type { FetchArgs } from "@reduxjs/toolkit/query";
+import { baseApi } from "@/integrations/metahub/rtk/baseApi";
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type {
-  StorageMeta,
   StorageAsset,
-  ApiStorageAsset,
-  StorageListParams,
-} from "../../../db/types/storage";
+  StorageUpdateInput,
+  StorageListQuery,
+} from "@/integrations/metahub/db/types/storage";
 
-// ---------- utils (type-safe) ----------
-const toIso = (x: unknown): string => {
-  if (x instanceof Date) return x.toISOString();
-  if (typeof x === "number" || typeof x === "string") {
-    const d = new Date(x);
-    return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-  }
-  return new Date().toISOString();
-};
-const toNum = (x: unknown): number => {
-  if (typeof x === "number" && Number.isFinite(x)) return x;
-  if (typeof x === "string") {
-    const n = Number(x);
-    return Number.isFinite(n) ? n : 0;
-  }
-  if (typeof x === "bigint") return Number(x);
-  const n = Number((x as unknown) ?? 0);
-  return Number.isFinite(n) ? n : 0;
-};
-const tryParse = <T>(x: unknown): T => {
-  if (typeof x === "string") {
-    try { return JSON.parse(x) as T; } catch { /* ignore */ }
-  }
-  return x as T;
+type ListResponse = { items: StorageAsset[]; total: number };
+
+type BulkCreateErrorItem = {
+  file: string;
+  error: {
+    where?: string;
+    message?: string;
+    http?: number | null;
+  };
 };
 
-const normalize = (a: ApiStorageAsset): StorageAsset => ({
-  ...a,
-  size: toNum(a.size),
-  width: a.width == null ? null : toNum(a.width),
-  height: a.height == null ? null : toNum(a.height),
-  metadata: a.metadata == null ? null : tryParse<StorageMeta>(a.metadata),
-  created_at: toIso(a.created_at),
-  updated_at: toIso(a.updated_at),
+type BulkCreateResponse = {
+  count: number;
+  items: Array<StorageAsset | BulkCreateErrorItem>;
+};
+
+// NULL-güvenli tag helper
+const listTags = (items?: StorageAsset[]) =>
+  items && items.length
+    ? [
+        { type: "Storage" as const, id: "LIST" as const },
+        ...items.map((r) => ({ type: "Storage" as const, id: r.id })),
+      ]
+    : [{ type: "Storage" as const, id: "LIST" as const }];
+
+// Backend query tipini Record<string, string | number>’e çevir
+const toQueryParams = (
+  q?: Partial<StorageListQuery>
+): Record<string, string | number> => {
+  if (!q) return {};
+
+  const params: Record<string, string | number> = {};
+
+  if (q.q) params.q = q.q;
+  if (q.bucket) params.bucket = q.bucket;
+  if (q.folder != null) params.folder = q.folder;
+  if (q.mime) params.mime = q.mime;
+  if (typeof q.limit === "number") params.limit = q.limit;
+  if (typeof q.offset === "number") params.offset = q.offset;
+  if (q.sort) params.sort = q.sort;
+  if (q.order) params.order = q.order;
+
+  return params;
+};
+
+// Hata helper (eslint no-explicit-any için: FetchBaseQueryError union'ı kullan)
+const makeCustomError = (
+  message: string,
+  data?: unknown
+): FetchBaseQueryError => ({
+  status: "CUSTOM_ERROR",
+  error: message,
+  data,
 });
-
-const toParams = (p: StorageListParams) => ({
-  q: p.q,
-  bucket: p.bucket,
-  folder: p.folder ?? undefined,
-  mime: p.mime,
-  limit: p.limit,
-  offset: p.offset,
-  sort: p.sort,
-  order: p.order,
-});
-
-const cleanParams = (obj: Record<string, unknown>) =>
-  Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null)) as Record<string, string | number>;
-
-// ---------- Blob guard ----------
-function dataUrlToBlob(dataUrl: string): Blob {
-  const [meta, data] = dataUrl.split(",");
-  const mime = /data:(.*?);base64/.exec(meta || "")?.[1] || "application/octet-stream";
-  const bin = atob(data || "");
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
-}
-
-type HasFiles = { files?: FileList | null };
-type EventLike = { target?: HasFiles; currentTarget?: HasFiles };
-
-function pickFromEvent(x: unknown): File | Blob | null {
-  const ev = x as EventLike;
-  const fl = ev?.target?.files ?? ev?.currentTarget?.files;
-  if (fl && fl.length > 0) return fl[0]!;
-  return null;
-}
-
-function ensureBlob(f: unknown): { blob: Blob; filename: string } {
-  // 0) ChangeEvent desteği
-  const evFile = pickFromEvent(f);
-  if (evFile instanceof File) return { blob: evFile, filename: evFile.name || "upload.bin" };
-  if (evFile instanceof Blob) return { blob: evFile, filename: "upload.bin" };
-
-  // 1) File
-  if (f instanceof File) return { blob: f, filename: f.name || "upload.bin" };
-  // 2) Blob
-  if (f instanceof Blob) return { blob: f, filename: "upload.bin" };
-  // 3) FileList
-  if (typeof FileList !== "undefined" && f instanceof FileList && f.length > 0) {
-    const first = f[0]!;
-    return { blob: first, filename: (first as File).name || "upload.bin" };
-  }
-  // 4) Array-like (File[] | Blob[])
-  if (Array.isArray(f) && f.length > 0) {
-    const first = f[0]!;
-    if (first instanceof File) return { blob: first, filename: first.name || "upload.bin" };
-    if (first instanceof Blob) return { blob: first, filename: "upload.bin" };
-  }
-  // 5) { file: File | Blob }
-  if (typeof f === "object" && f !== null) {
-    const obj = f as { file?: File | Blob };
-    if (obj.file instanceof File) return { blob: obj.file, filename: obj.file.name || "upload.bin" };
-    if (obj.file instanceof Blob) return { blob: obj.file, filename: "upload.bin" };
-  }
-  // 6) dataURL
-  if (typeof f === "string" && f.startsWith("data:")) {
-    const b = dataUrlToBlob(f);
-    return { blob: b, filename: "upload.bin" };
-  }
-
-  // http(s) URL async ister → FE tarafında normalizeToFile hallediliyor.
-  throw new Error("file_required");
-}
-
-// ---------- endpoints ----------
-const BASE = "/admin/storage";
 
 export const storageAdminApi = baseApi.injectEndpoints({
-  endpoints: (b) => ({
-    listStorageAssetsAdmin: b.query<StorageAsset[], StorageListParams | void>({
-      query: (params) => {
-        const fa: FetchArgs = { url: `${BASE}/assets` };
-        if (params) fa.params = cleanParams(toParams(params));
-        return fa;
-      },
-      transformResponse: (res: unknown): StorageAsset[] => {
-        if (Array.isArray(res)) return (res as ApiStorageAsset[]).map(normalize);
-        const maybe = res as { data?: unknown };
-        return Array.isArray(maybe?.data) ? (maybe.data as ApiStorageAsset[]).map(normalize) : [];
-      },
-      providesTags: (result) =>
-        result
-          ? [
-              ...result.map((a) => ({ type: "StorageAsset" as const, id: a.id })),
-              { type: "StorageAssets" as const, id: "LIST" },
-            ]
-          : [{ type: "StorageAssets" as const, id: "LIST" }],
+  endpoints: (builder) => ({
+    listAssetsAdmin: builder.query<ListResponse, Partial<StorageListQuery> | void>(
+      {
+        query: (q) => ({
+          url: "/admin/storage/assets",
+          method: "GET",
+          params: toQueryParams(q as Partial<StorageListQuery>),
+        }),
+        transformResponse: (data: StorageAsset[], meta) => {
+          const headers = meta?.response?.headers;
+          const totalStr =
+            headers?.get?.("x-total-count") ??
+            headers?.get?.("X-Total-Count") ??
+            undefined;
+          const total = totalStr ? Number(totalStr) : data?.length ?? 0;
+          return { items: data ?? [], total };
+        },
+        providesTags: (res) => listTags(res?.items),
+      }
+    ),
+
+    getAssetAdmin: builder.query<StorageAsset, { id: string }>({
+      query: ({ id }) => ({
+        url: `/admin/storage/assets/${encodeURIComponent(id)}`,
+        method: "GET",
+      }),
+      providesTags: (res) => (res ? [{ type: "Storage", id: res.id }] : []),
     }),
 
-    getStorageAssetAdmin: b.query<StorageAsset, string>({
-      query: (id) => ({ url: `${BASE}/assets/${id}` } as FetchArgs),
-      transformResponse: (res: unknown): StorageAsset => normalize(res as ApiStorageAsset),
-      providesTags: (_r, _e, id) => [{ type: "StorageAsset", id }],
-    }),
-
-    uploadStorageAssetAdmin: b.mutation<
+    // Tekli create (multipart)
+    createAssetAdmin: builder.mutation<
       StorageAsset,
       {
-        file: File | Blob | string | FileList | { file?: File | Blob } | EventLike;
-        bucket?: string;
-        folder?: string | null;
-        metadata?: StorageMeta;
+        file: File;
+        bucket: string;
+        folder?: string;
+        metadata?: Record<string, string> | null;
       }
     >({
-      query: ({ file, bucket, folder, metadata }) => {
-        const form = new FormData();
+      async queryFn(args, _api, _extra, baseQuery) {
+        try {
+          const fd = new FormData();
+          fd.append("file", args.file, args.file.name);
+          fd.append("bucket", args.bucket);
+          if (args.folder) fd.append("folder", args.folder);
+          if (args.metadata) {
+            fd.append("metadata", JSON.stringify(args.metadata));
+          }
 
-        // Blob/File garantile (+ Event, FileList, {file} destekli)
-        const { blob, filename } = ensureBlob(file);
-        form.append("file", blob, filename);
+          const res = await baseQuery({
+            url: "/admin/storage/assets",
+            method: "POST",
+            body: fd,
+          });
 
-        if (bucket) form.append("bucket", bucket);
-        if (folder != null) form.append("folder", folder);
-        if (metadata) form.append("metadata", JSON.stringify(metadata));
+          if (res.error) {
+            return { error: res.error as FetchBaseQueryError };
+          }
 
-        const fa: FetchArgs = {
-          url: `${BASE}/assets`,
-          method: "POST",
-          body: form, // boundary otomatik
-        };
-        return fa;
+          return { data: res.data as StorageAsset };
+        } catch (e) {
+          const error = makeCustomError(
+            "create_failed",
+            e instanceof Error ? { message: e.message } : e
+          );
+          return { error };
+        }
       },
-      transformResponse: (res: unknown): StorageAsset => normalize(res as ApiStorageAsset),
-      invalidatesTags: [{ type: "StorageAssets" as const, id: "LIST" }],
+      invalidatesTags: (res) =>
+        res
+          ? [
+              { type: "Storage", id: res.id },
+              { type: "Storage", id: "LIST" },
+            ]
+          : [{ type: "Storage", id: "LIST" }],
     }),
 
-    updateStorageAssetAdmin: b.mutation<
-      StorageAsset,
-      { id: string; body: { name?: string; folder?: string | null; metadata?: StorageMeta } }
+    // Çoklu create (multipart; form-level bucket/folder/metadata + birden çok file)
+    bulkCreateAssetsAdmin: builder.mutation<
+      BulkCreateResponse,
+      {
+        files: File[];
+        bucket: string;
+        folder?: string;
+        metadata?: Record<string, string> | null;
+      }
     >({
-      query: ({ id, body }) =>
-        ({ url: `${BASE}/assets/${id}`, method: "PATCH", body } as FetchArgs),
-      transformResponse: (res: unknown): StorageAsset => normalize(res as ApiStorageAsset),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "StorageAsset", id: arg.id },
-        { type: "StorageAssets", id: "LIST" },
+      async queryFn(args, _api, _extra, baseQuery) {
+        try {
+          const fd = new FormData();
+          fd.append("bucket", args.bucket);
+          if (args.folder) fd.append("folder", args.folder);
+          if (args.metadata) {
+            fd.append("metadata", JSON.stringify(args.metadata));
+          }
+          for (const f of args.files) {
+            fd.append("files", f, f.name);
+          }
+
+          const res = await baseQuery({
+            url: "/admin/storage/assets/bulk",
+            method: "POST",
+            body: fd,
+          });
+
+          if (res.error) {
+            return { error: res.error as FetchBaseQueryError };
+          }
+
+          return { data: res.data as BulkCreateResponse };
+        } catch (e) {
+          const error = makeCustomError(
+            "bulk_create_failed",
+            e instanceof Error ? { message: e.message } : e
+          );
+          return { error };
+        }
+      },
+      invalidatesTags: () => [{ type: "Storage", id: "LIST" }],
+    }),
+
+    patchAssetAdmin: builder.mutation<
+      StorageAsset,
+      { id: string; body: StorageUpdateInput }
+    >({
+      query: ({ id, body }) => ({
+        url: `/admin/storage/assets/${encodeURIComponent(id)}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_res, _err, arg) => [
+        { type: "Storage", id: arg.id },
+        { type: "Storage", id: "LIST" },
       ],
     }),
 
-    deleteStorageAssetAdmin: b.mutation<{ ok: true }, string>({
-      query: (id) => ({ url: `${BASE}/assets/${id}`, method: "DELETE" } as FetchArgs),
-      transformResponse: () => ({ ok: true as const }),
-      invalidatesTags: [{ type: "StorageAssets" as const, id: "LIST" }],
+    deleteAssetAdmin: builder.mutation<{ ok: true } | void, { id: string }>({
+      query: ({ id }) => ({
+        url: `/admin/storage/assets/${encodeURIComponent(id)}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_res, _err, arg) => [
+        { type: "Storage", id: arg.id },
+        { type: "Storage", id: "LIST" },
+      ],
     }),
 
-    bulkDeleteStorageAssetsAdmin: b.mutation<{ deleted: number }, { ids: string[] }>({
-      query: (body) =>
-        ({ url: `${BASE}/assets/bulk-delete`, method: "POST", body } as FetchArgs),
-      transformResponse: (res: unknown): { deleted: number } => {
-        const obj = (res && typeof res === "object") ? (res as Record<string, unknown>) : {};
-        const v = (obj as Record<string, unknown>)["deleted"];
-        return { deleted: typeof v === "number" ? v : Number(v ?? 0) || 0 };
-      },
-      invalidatesTags: [{ type: "StorageAssets" as const, id: "LIST" }],
+    bulkDeleteAssetsAdmin: builder.mutation<{ deleted: number }, { ids: string[] }>(
+      {
+        query: ({ ids }) => ({
+          url: "/admin/storage/assets/bulk-delete",
+          method: "POST",
+          body: { ids },
+        }),
+        invalidatesTags: (_res, _err, arg) => [
+          { type: "Storage", id: "LIST" },
+          ...arg.ids.map((id) => ({ type: "Storage" as const, id })),
+        ],
+      }
+    ),
+
+    listFoldersAdmin: builder.query<string[], void>({
+      query: () => ({ url: "/admin/storage/folders", method: "GET" }),
+      providesTags: () => [{ type: "Storage", id: "FOLDERS" }],
     }),
 
-    listStorageFoldersAdmin: b.query<string[], void>({
-      query: () => ({ url: `${BASE}/folders` } as FetchArgs),
-      transformResponse: (res: unknown): string[] =>
-        Array.isArray(res) ? (res as unknown[]).map((x) => String(x)) : [],
-      providesTags: [{ type: "StorageFolders" as const, id: "LIST" }],
+    diagCloudinaryAdmin: builder.query<
+      { ok: boolean; cloud: string; uploaded?: { public_id: string; secure_url: string } },
+      void
+    >({
+      query: () => ({ url: "/admin/storage/_diag/cloud", method: "GET" }),
     }),
   }),
   overrideExisting: true,
 });
 
 export const {
-  useListStorageAssetsAdminQuery,
-  useGetStorageAssetAdminQuery,
-  useUploadStorageAssetAdminMutation,
-  useUpdateStorageAssetAdminMutation,
-  useDeleteStorageAssetAdminMutation,
-  useBulkDeleteStorageAssetsAdminMutation,
-  useListStorageFoldersAdminQuery,
+  useListAssetsAdminQuery,
+  useGetAssetAdminQuery,
+  useCreateAssetAdminMutation,
+  useBulkCreateAssetsAdminMutation,
+  usePatchAssetAdminMutation,
+  useDeleteAssetAdminMutation,
+  useBulkDeleteAssetsAdminMutation,
+  useListFoldersAdminQuery,
+  useDiagCloudinaryAdminQuery,
 } = storageAdminApi;

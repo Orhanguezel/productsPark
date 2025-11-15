@@ -1,3 +1,4 @@
+// src/modules/storage/schema.ts
 import {
   mysqlTable,
   char,

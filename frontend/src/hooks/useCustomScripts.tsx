@@ -1,9 +1,14 @@
-// src/hooks/useCustomScriptsRenderer.tsx
-import { useEffect, useState, useCallback } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/hooks/useCustomScriptsRenderer.tsx
+// =============================================================
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
+import { metahub } from "@/integrations/metahub/client";
 import type { SiteSettingRow } from "@/integrations/metahub/db/types/site";
 import type { SubscriptionResult } from "@/integrations/metahub/realtime/channel";
+import {
+  useGetSiteSettingByKeyQuery,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 
 /* ---------- Realtime şekli: mevcut Channel API'ine yapısal uyum ---------- */
 type ChannelStatus = "SUBSCRIBED" | "TIMED_OUT" | "CLOSED" | "CHANNEL_ERROR";
@@ -12,7 +17,9 @@ type Handler = (payload: unknown) => void;
 interface ChannelLike {
   on(event: string, cb: Handler): ChannelLike;
   on(event: string, filter: Record<string, unknown>, cb: Handler): ChannelLike;
-  subscribe(cb?: (s: ChannelStatus) => void): Promise<SubscriptionResult> | SubscriptionResult | unknown;
+  subscribe(
+    cb?: (s: ChannelStatus) => void
+  ): Promise<SubscriptionResult> | SubscriptionResult | unknown;
 }
 
 interface RealtimeClientLike {
@@ -22,8 +29,11 @@ interface RealtimeClientLike {
 
 const isRealtimeClientLike = (x: unknown): x is RealtimeClientLike => {
   const o = x as Record<string, unknown>;
-  return !!o && typeof (o as { channel?: unknown }).channel === "function" &&
-         typeof (o as { removeChannel?: unknown }).removeChannel === "function";
+  return (
+    !!o &&
+    typeof (o as { channel?: unknown }).channel === "function" &&
+    typeof (o as { removeChannel?: unknown }).removeChannel === "function"
+  );
 };
 
 /* ---------- Tip korumaları ---------- */
@@ -49,7 +59,8 @@ const isPromise = <T,>(x: unknown): x is Promise<T> =>
 const isSubscriptionResult = (x: unknown): x is SubscriptionResult => {
   if (typeof x !== "object" || x === null) return false;
   const any = x as { data?: unknown; error?: unknown };
-  const sub = (any.data as { subscription?: { unsubscribe?: unknown } } | undefined)?.subscription;
+  const sub = (any.data as { subscription?: { unsubscribe?: unknown } } | undefined)
+    ?.subscription;
   return typeof any.error === "object" && !!sub && typeof sub.unsubscribe === "function";
 };
 
@@ -57,61 +68,70 @@ const isSubscriptionResult = (x: unknown): x is SubscriptionResult => {
 const useCustomScripts = () => {
   const [customHeaderCode, setCustomHeaderCode] = useState<string>("");
   const [customFooterCode, setCustomFooterCode] = useState<string>("");
-  const [loading, setLoading] = useState(true);
 
-  const fetchCustomScripts = useCallback(async (): Promise<void> => {
-    try {
-      const { data, error } = await metahub
-        .from<SiteSettingRow>("site_settings")
-        .select("key, value")
-        .in("key", ["custom_header_code", "custom_footer_code"]);
+  // RTK'dan site_settings okuma
+  const {
+    data: headerSetting,
+    isLoading: headerLoading,
+    refetch: refetchHeader,
+  } = useGetSiteSettingByKeyQuery("custom_header_code");
 
-      if (error) throw error;
+  const {
+    data: footerSetting,
+    isLoading: footerLoading,
+    refetch: refetchFooter,
+  } = useGetSiteSettingByKeyQuery("custom_footer_code");
 
-      let header = "";
-      let footer = "";
-      for (const item of data ?? []) {
-        if (item.key === "custom_header_code") header = String(item.value ?? "");
-        else if (item.key === "custom_footer_code") footer = String(item.value ?? "");
-      }
-      setCustomHeaderCode(header);
-      setCustomFooterCode(footer);
-    } catch (err) {
-      console.error("Error fetching custom scripts:", err);
-      setCustomHeaderCode("");
-      setCustomFooterCode("");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // RTK verisini local string state’e çevir
+  useEffect(() => {
+    const val = headerSetting?.value;
+    setCustomHeaderCode(
+      typeof val === "string" ? val : val == null ? "" : String(val)
+    );
+  }, [headerSetting]);
 
   useEffect(() => {
-    fetchCustomScripts();
+    const val = footerSetting?.value;
+    setCustomFooterCode(
+      typeof val === "string" ? val : val == null ? "" : String(val)
+    );
+  }, [footerSetting]);
 
-    // Sadece subscribe() dönüşünü sakla → cleanup’ta removeChannel’a bunu ver
+  // Realtime: değişiklikte RTK refetch
+  useEffect(() => {
+    if (!isRealtimeClientLike(metahub)) return;
+
     let subscription: SubscriptionResult | Promise<SubscriptionResult> | null = null;
 
-    if (isRealtimeClientLike(metahub)) {
-      const ch = metahub
-        .channel("custom-scripts-changes")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "site_settings" },
-          (payload: unknown) => {
-            const change = asRowChange<SiteSettingRow>(payload);
-            const key = change?.new?.key ?? change?.old?.key ?? null;
-            if (key === "custom_header_code" || key === "custom_footer_code") {
-              fetchCustomScripts();
-            }
-          }
-        );
+    const ch = metahub
+      .channel("custom-scripts-changes")
+      .on<RowChange<SiteSettingRow>>(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "site_settings",
+          // key filtresi (PostgREST syntax)
+          filter: "key=in.(custom_header_code,custom_footer_code)",
+        },
+        (payload: unknown) => {
+          const change = asRowChange<SiteSettingRow>(payload);
+          const key = change?.new?.key ?? change?.old?.key ?? null;
+          if (!key) return;
 
-      const ret = ch.subscribe();
-      if (isPromise<SubscriptionResult>(ret)) {
-        subscription = ret;
-      } else if (isSubscriptionResult(ret)) {
-        subscription = ret;
-      }
+          if (key === "custom_header_code") {
+            void refetchHeader();
+          } else if (key === "custom_footer_code") {
+            void refetchFooter();
+          }
+        }
+      );
+
+    const ret = ch.subscribe();
+    if (isPromise<SubscriptionResult>(ret)) {
+      subscription = ret;
+    } else if (isSubscriptionResult(ret)) {
+      subscription = ret;
     }
 
     return () => {
@@ -123,15 +143,20 @@ const useCustomScripts = () => {
         }
       }
     };
-  }, [fetchCustomScripts]);
+  }, [refetchHeader, refetchFooter]);
 
-  return { customHeaderCode, customFooterCode, loading };
+  return {
+    customHeaderCode,
+    customFooterCode,
+    loading: headerLoading || footerLoading,
+  };
 };
 
 /* ---------- Component (TEK export) ---------- */
 export const CustomScriptsRenderer = () => {
   const { customHeaderCode, customFooterCode } = useCustomScripts();
 
+  // Footer’daki script’leri body’ye enjekte et
   useEffect(() => {
     if (!customFooterCode) return;
 
@@ -141,7 +166,9 @@ export const CustomScriptsRenderer = () => {
     const appended: HTMLScriptElement[] = [];
     for (const script of Array.from(tmp.getElementsByTagName("script"))) {
       const s = document.createElement("script");
-      for (const attr of Array.from(script.attributes)) s.setAttribute(attr.name, attr.value);
+      for (const attr of Array.from(script.attributes)) {
+        s.setAttribute(attr.name, attr.value);
+      }
       if (script.src) s.src = script.src;
       else s.textContent = script.textContent ?? "";
       document.body.appendChild(s);
@@ -150,13 +177,18 @@ export const CustomScriptsRenderer = () => {
 
     return () => {
       for (const s of appended) {
-        try { s.remove(); } catch { /* no-op */ }
+        try {
+          s.remove();
+        } catch {
+          /* no-op */
+        }
       }
     };
   }, [customFooterCode]);
 
   if (!customHeaderCode) return null;
 
+  // Header tarafı için meta / link / script (src) parse
   return (
     <Helmet>
       <meta charSet="utf-8" />
@@ -168,18 +200,27 @@ export const CustomScriptsRenderer = () => {
           const name = t.match(/name="([^"]+)"/)?.[1];
           const content = t.match(/content="([^"]+)"/)?.[1];
           const property = t.match(/property="([^"]+)"/)?.[1];
-          if (name && content) return <meta key={`m-n-${idx}`} name={name} content={content} />;
-          if (property && content) return <meta key={`m-p-${idx}`} property={property} content={content} />;
+          if (name && content) {
+            return <meta key={`m-n-${idx}`} name={name} content={content} />;
+          }
+          if (property && content) {
+            return <meta key={`m-p-${idx}`} property={property} content={content} />;
+          }
         }
+
         if (t.startsWith("<script")) {
           const src = t.match(/src="([^"]+)"/)?.[1];
           if (src) return <script key={`s-${idx}`} src={src} />;
         }
+
         if (t.startsWith("<link")) {
           const href = t.match(/href="([^"]+)"/)?.[1];
           const rel = t.match(/rel="([^"]+)"/)?.[1];
-          if (href && rel) return <link key={`l-${idx}`} rel={rel} href={href} />;
+          if (href && rel) {
+            return <link key={`l-${idx}`} rel={rel} href={href} />;
+          }
         }
+
         return null;
       })}
     </Helmet>
