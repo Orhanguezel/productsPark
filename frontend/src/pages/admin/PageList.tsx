@@ -40,14 +40,62 @@ import {
 import {
   useListCustomPagesAdminQuery,
   useDeleteCustomPageAdminMutation,
+  useGetCustomPageAdminByIdQuery,
 } from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
 import type { CustomPageView } from "@/integrations/metahub/db/types/customPages";
+
+/* ---------- Kapak Thumb: nokta atışı görsel seç ---------- */
+function PageCoverThumb(props: {
+  id: string;
+  featured_image?: string | null;
+  featured_image_alt?: string | null;
+  title?: string | null;
+}) {
+  const hasImg = !!props.featured_image;
+
+  const { data: detail } = useGetCustomPageAdminByIdQuery(props.id, {
+    skip: hasImg,
+  });
+
+  const src =
+    props.featured_image ??
+    (detail as any)?.featured_image ??
+    (detail as any)?.image_url ??
+    null;
+
+  const alt =
+    props.featured_image_alt ??
+    (detail as any)?.featured_image_alt ??
+    (detail as any)?.image_alt ??
+    props.title ??
+    "Kapak";
+
+  if (!src) {
+    return (
+      <div className="h-10 w-16 rounded bg-muted/50 border flex items-center justify-center text-[10px] text-muted-foreground">
+        Yok
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt || "Kapak"}
+      className="h-10 w-16 object-cover rounded border"
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).style.display = "none";
+      }}
+    />
+  );
+}
 
 export default function PageList() {
   const navigate = useNavigate();
 
   const { data: list = [], isLoading } = useListCustomPagesAdminQuery();
-  const [deletePage, { isLoading: deleting }] = useDeleteCustomPageAdminMutation();
+  const [deletePage, { isLoading: deleting }] =
+    useDeleteCustomPageAdminMutation();
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -56,7 +104,10 @@ export default function PageList() {
 
   const totalPages = Math.ceil(pages.length / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPages = pages.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedPages = pages.slice(
+    startIndex,
+    startIndex + itemsPerPage,
+  );
 
   const handleDelete = async (id: string) => {
     try {
@@ -118,37 +169,37 @@ export default function PageList() {
                   paginatedPages.map((page) => (
                     <TableRow key={page.id}>
                       <TableCell className="py-2">
-                        {page.featured_image ? (
-                          <img
-                            src={page.featured_image}
-                            alt={page.featured_image_alt || page.title}
-                            className="h-10 w-16 object-cover rounded border"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <div className="h-10 w-16 rounded bg-muted/50 border flex items-center justify-center text-[10px] text-muted-foreground">
-                            Yok
-                          </div>
-                        )}
+                        <PageCoverThumb
+                          id={page.id}
+                          featured_image={page.featured_image}
+                          featured_image_alt={page.featured_image_alt}
+                          title={page.title}
+                        />
                       </TableCell>
 
-                      <TableCell className="font-medium">{page.title}</TableCell>
+                      <TableCell className="font-medium">
+                        {page.title}
+                      </TableCell>
 
                       <TableCell>
                         <code className="text-xs">/{page.slug}</code>
                       </TableCell>
 
                       <TableCell>
-                        <Badge variant={page.is_published ? "default" : "secondary"}>
+                        <Badge
+                          variant={
+                            page.is_published ? "default" : "secondary"
+                          }
+                        >
                           {page.is_published ? "Yayında" : "Taslak"}
                         </Badge>
                       </TableCell>
 
                       <TableCell>
                         {page.created_at
-                          ? new Date(page.created_at).toLocaleDateString("tr-TR")
+                          ? new Date(
+                              page.created_at,
+                            ).toLocaleDateString("tr-TR")
                           : "-"}
                       </TableCell>
 
@@ -158,7 +209,12 @@ export default function PageList() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => window.open(`/${page.slug}`, "_blank")}
+                              onClick={() =>
+                                window.open(
+                                  `/${page.slug}`,
+                                  "_blank",
+                                )
+                              }
                               title="Sayfayı görüntüle"
                             >
                               <ExternalLink className="w-4 h-4" />
@@ -167,7 +223,11 @@ export default function PageList() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigate(`/admin/pages/edit/${page.id}`)}
+                            onClick={() =>
+                              navigate(
+                                `/admin/pages/edit/${page.id}`,
+                              )
+                            }
                             title="Düzenle"
                           >
                             <Pencil className="w-4 h-4" />
@@ -175,20 +235,34 @@ export default function PageList() {
 
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" disabled={deleting} title="Sil">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={deleting}
+                                title="Sil"
+                              >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
+                                <AlertDialogTitle>
+                                  Emin misiniz?
+                                </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Bu sayfayı kalıcı olarak silmek üzeresiniz.
+                                  Bu sayfayı kalıcı olarak silmek
+                                  üzeresiniz.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>İptal</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(page.id)}>
+                                <AlertDialogCancel>
+                                  İptal
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    handleDelete(page.id)
+                                  }
+                                >
                                   Sil
                                 </AlertDialogAction>
                               </AlertDialogFooter>
@@ -216,7 +290,10 @@ export default function PageList() {
                   }}
                 />
               </PaginationItem>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              {Array.from(
+                { length: totalPages },
+                (_, i) => i + 1,
+              ).map((page) => (
                 <PaginationItem key={page}>
                   <PaginationLink
                     href="#"
@@ -235,7 +312,9 @@ export default function PageList() {
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    setCurrentPage((p) => Math.min(totalPages, p + 1));
+                    setCurrentPage((p) =>
+                      Math.min(totalPages, p + 1),
+                    );
                   }}
                 />
               </PaginationItem>

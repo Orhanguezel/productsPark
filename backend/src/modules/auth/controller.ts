@@ -24,6 +24,15 @@ import { OAuth2Client, type TokenPayload } from 'google-auth-library';
 import { profiles } from '@/modules/profiles/schema';
 import { requireAuth } from '@/common/middleware/auth';
 import { requireAdmin } from '@/common/middleware/roles';
+import {
+  sendWelcomeMail,
+  sendPasswordChangedMail,
+} from "@/modules/mail/service";
+import {
+  notifications,
+  type NotificationInsert,
+} from "@/modules/notifications/schema";
+
 
 type Role = 'admin' | 'moderator' | 'user';
 
@@ -220,6 +229,8 @@ export function makeAuthController(app: FastifyInstance) {
   return {
     /* ------------------------------ SIGNUP ------------------------------ */
     // POST /auth/v1/signup
+        /* ------------------------------ SIGNUP ------------------------------ */
+    // POST /auth/v1/signup
     signup: async (req: FastifyRequest, reply: FastifyReply) => {
       const parsed = signupBody.safeParse(req.body);
       if (!parsed.success) return reply.status(400).send({ error: { message: 'invalid_body' } });
@@ -230,8 +241,13 @@ export function makeAuthController(app: FastifyInstance) {
       const topFull = parsed.data.full_name;
       const topPhone = parsed.data.phone;
       const meta = (parsed.data.options?.data ?? {}) as Record<string, unknown>;
-      const full_name = (topFull ?? (typeof meta['full_name'] === 'string' ? (meta['full_name'] as string) : undefined)) || undefined;
-      const phone = (topPhone ?? (typeof meta['phone'] === 'string' ? (meta['phone'] as string) : undefined)) || undefined;
+      const full_name =
+        (topFull ??
+          (typeof meta['full_name'] === 'string' ? (meta['full_name'] as string) : undefined)) ||
+        undefined;
+      const phone =
+        (topPhone ?? (typeof meta['phone'] === 'string' ? (meta['phone'] as string) : undefined)) ||
+        undefined;
 
       const exists = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
       if (exists.length > 0) return reply.status(409).send({ error: { message: 'user_exists' } });
@@ -259,6 +275,17 @@ export function makeAuthController(app: FastifyInstance) {
 
       await ensureProfileRow(id, { full_name: full_name ?? null, phone: phone ?? null });
 
+      // ✅ Welcome mail (async, hata kritik değil)
+      const userNameForMail = full_name || email.split("@")[0];
+      void sendWelcomeMail({
+        to: email,
+        user_name: userNameForMail,
+        user_email: email,
+        site_name: "Dijital Market",
+      }).catch((err) => {
+        req.log?.error?.(err, "welcome_mail_failed");
+      });
+
       const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0]!;
       const role: Role = isAdmin ? 'admin' : 'user';
       const { access, refresh } = await issueTokens(app, u, role);
@@ -280,6 +307,7 @@ export function makeAuthController(app: FastifyInstance) {
         },
       });
     },
+
 
     /* ------------------------------ TOKEN ------------------------------ */
     // POST /auth/v1/token (password grant)
@@ -505,7 +533,7 @@ export function makeAuthController(app: FastifyInstance) {
       }
     },
 
-    update: async (req: FastifyRequest, reply: FastifyReply) => {
+        update: async (req: FastifyRequest, reply: FastifyReply) => {
       const token = bearerFrom(req);
       if (!token) return reply.status(401).send({ error: { message: 'no_token' } });
 
@@ -521,18 +549,62 @@ export function makeAuthController(app: FastifyInstance) {
 
       const { email, password } = parsed.data as { email?: string; password?: string };
 
+      let passwordChanged = false;
+
       if (email) {
-        await db.update(users).set({ email, updated_at: new Date() }).where(eq(users.id, p.sub));
+        await db
+          .update(users)
+          .set({ email, updated_at: new Date() })
+          .where(eq(users.id, p.sub));
         p.email = email;
       }
+
       if (password) {
         const password_hash = await argonHash(password);
-        await db.update(users).set({ password_hash, updated_at: new Date() }).where(eq(users.id, p.sub));
+        await db
+          .update(users)
+          .set({ password_hash, updated_at: new Date() })
+          .where(eq(users.id, p.sub));
+        passwordChanged = true;
+      }
+
+      // ✅ Şifre değiştiyse notification + mail
+      if (passwordChanged) {
+        // Notification
+        try {
+          const notif: NotificationInsert = {
+            id: randomUUID(),
+            user_id: p.sub,
+            title: "Şifreniz güncellendi",
+            message:
+              "Hesap şifreniz başarıyla değiştirildi. Bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.",
+            type: "password_changed", // notifications.type enum'una bunu eklemen gerekebilir
+            is_read: false,
+            created_at: new Date(),
+          };
+          await db.insert(notifications).values(notif);
+        } catch (err) {
+          req.log.error({ err }, "password_change_notification_failed");
+        }
+
+        // Mail
+        const targetEmail = email ?? p.email;
+        if (targetEmail) {
+          const nameFromEmail = targetEmail.split("@")[0];
+          void sendPasswordChangedMail({
+            to: targetEmail,
+            user_name: nameFromEmail,
+            site_name: "Dijital Market",
+          }).catch((err) => {
+            req.log.error({ err }, "password_change_mail_failed");
+          });
+        }
       }
 
       const role = await getPrimaryRole(p.sub);
       return reply.send({ user: { id: p.sub, email: p.email ?? null, role } });
     },
+
 
     logout: async (_req: FastifyRequest, reply: FastifyReply) => {
       const raw = ((reply.request?.cookies as Record<string, string | undefined> | undefined)?.refresh_token ?? '').trim();

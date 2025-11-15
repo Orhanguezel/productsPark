@@ -1,7 +1,13 @@
+// src/integrations/metahub/realtime/channel.ts
+
 const BASE_URL = (import.meta.env.VITE_API_URL as string) ?? "/api";
 const POLL_MS = Number(import.meta.env.VITE_METAHUB_REALTIME_POLL_MS ?? 0); // 0 => kapalı
 
-export type ChannelStatus = "SUBSCRIBED" | "TIMED_OUT" | "CLOSED" | "CHANNEL_ERROR";
+export type ChannelStatus =
+  | "SUBSCRIBED"
+  | "TIMED_OUT"
+  | "CLOSED"
+  | "CHANNEL_ERROR";
 
 /** Generic payload handler */
 type Handler<T = unknown> = (payload: T) => void;
@@ -31,21 +37,42 @@ class Channel {
 
   // Supabase benzeri overload'lar (+ generic payload)
   on<T = unknown>(event: string, cb: Handler<T>): this;
-  on<T = unknown>(event: string, filter: Record<string, unknown>, cb: Handler<T>): this;
-  on<T = unknown>(event: string, a: Handler<T> | Record<string, unknown>, b?: Handler<T>): this {
+  on<T = unknown>(
+    event: string,
+    filter: Record<string, unknown>,
+    cb: Handler<T>
+  ): this;
+  on<T = unknown>(
+    event: string,
+    a: Handler<T> | Record<string, unknown>,
+    b?: Handler<T>
+  ): this {
     const hasFilter = typeof a === "object" && a !== null;
     const cb: Handler<T> = hasFilter ? (b as Handler<T>) : (a as Handler<T>);
     const filter = hasFilter ? (a as Record<string, unknown>) : undefined;
 
     // listener'ı tekilleştir
-    if (!this.listeners.some(l => l.event === event && l.cb === cb && shallowEqual(l.filter, filter))) {
-      this.listeners.push({ event, filter, cb: cb as Handler<unknown> });
+    if (
+      !this.listeners.some(
+        (l) =>
+          l.event === event &&
+          l.cb === cb &&
+          shallowEqual(l.filter, filter)
+      )
+    ) {
+      this.listeners.push({
+        event,
+        filter,
+        cb: cb as Handler<unknown>,
+      });
     }
     return this;
   }
 
   off<T = unknown>(event: string, cb: Handler<T>): this {
-    this.listeners = this.listeners.filter(l => !(l.event === event && l.cb === cb));
+    this.listeners = this.listeners.filter(
+      (l) => !(l.event === event && l.cb === cb)
+    );
     return this;
   }
 
@@ -60,17 +87,23 @@ class Channel {
   async subscribe(cb?: (s: ChannelStatus) => void): Promise<SubscriptionResult> {
     cb?.("SUBSCRIBED");
 
-    // Polling fallback (opsiyonel)
-    if (POLL_MS > 0) {
+    // Polling fallback (opsiyonel) – sadece browser'da
+    if (POLL_MS > 0 && typeof window !== "undefined") {
       let since = Date.now();
       this.timer = window.setInterval(async () => {
         try {
           const res = await fetch(
-            `${BASE_URL}/realtime/${encodeURIComponent(this.name)}?since=${since}`,
+            `${BASE_URL}/realtime/${encodeURIComponent(
+              this.name
+            )}?since=${since}`,
             { method: "GET", credentials: "include" }
           );
           if (res.ok) {
-            const items = (await res.json()) as Array<{ event: string; payload: unknown; ts?: number }>;
+            const items = (await res.json()) as Array<{
+              event: string;
+              payload: unknown;
+              ts?: number;
+            }>;
             items.forEach((it) => this.emit(it.event, it.payload));
             since = Date.now();
           }
@@ -95,7 +128,10 @@ class Channel {
   }
 }
 
-function shallowEqual(a?: Record<string, unknown>, b?: Record<string, unknown>): boolean {
+function shallowEqual(
+  a?: Record<string, unknown>,
+  b?: Record<string, unknown>
+): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   const ak = Object.keys(a);
@@ -114,23 +150,34 @@ export function channel(name: string) {
   return active.get(name)!;
 }
 
-/** Eski kullanım uyumluluğu: Channel | SubscriptionResult | Promise<SubscriptionResult> */
-export function removeChannel(
-  ch: Channel | SubscriptionResult | Promise<SubscriptionResult>
-) {
+/**
+ * Eski kullanım uyumluluğu:
+ *  - Channel
+ *  - SubscriptionResult
+ *  - Promise<SubscriptionResult>
+ *  - veya herhangi bir şey (unknown)
+ */
+export function removeChannel(ch: unknown) {
+  // Direkt Channel instance geldiyse
   if (ch instanceof Channel) {
     ch.unsubscribe();
-    for (const [k, v] of active) if (v === ch) active.delete(k);
+    for (const [k, v] of active) {
+      if (v === ch) active.delete(k);
+    }
     return;
   }
 
+  // Promise<SubscriptionResult> geldiyse
   if (typeof (ch as Promise<SubscriptionResult>)?.then === "function") {
     (ch as Promise<SubscriptionResult>)
-      .then((res) => { res?.data?.subscription?.unsubscribe?.(); })
+      .then((res) => {
+        res?.data?.subscription?.unsubscribe?.();
+      })
       .catch(() => {});
     return;
   }
 
+  // SubscriptionResult benzeri bir şey geldiyse
   try {
     (ch as SubscriptionResult)?.data?.subscription?.unsubscribe?.();
   } catch {

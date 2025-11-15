@@ -18,9 +18,9 @@ import {
   useCreateCategoryAdminMutation,
   useUpdateCategoryAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
-import {
-  useUploadStorageAssetAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+
+// 🔹 STORAGE: tekli create hook
+import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 
 import type { UpsertCategoryBody } from "@/integrations/metahub/db/types/categories";
 
@@ -32,8 +32,10 @@ const slugify = (v: string) =>
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "");
 
-const stripHtml = (s: string) => s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
+const stripHtml = (s: string) =>
+  s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+const clamp = (n: number, min: number, max: number) =>
+  Math.min(Math.max(n, min), max);
 
 type FormState = {
   name: string;
@@ -41,9 +43,9 @@ type FormState = {
   description: string;
 
   // Kapak görseli
-  image_url: string;          // public url (legacy fallback)
-  image_asset_id: string;     // storage id (yeni)
-  image_alt: string;          // alt text
+  image_url: string; // public url (legacy fallback)
+  image_asset_id: string; // storage id (yeni)
+  image_alt: string; // alt text
 
   icon: string;
   parent_id: string | null;
@@ -64,11 +66,19 @@ export default function CategoryForm() {
   const navigate = useNavigate();
 
   const { data: allCats = [] } = useListCategoriesAdminQuery();
-  const { data: cat, isFetching } = useGetCategoryAdminByIdQuery(id as string, { skip: !isEdit });
+  const { data: cat, isFetching } = useGetCategoryAdminByIdQuery(
+    id as string,
+    { skip: !isEdit }
+  );
 
-  const [createCat, { isLoading: creating }] = useCreateCategoryAdminMutation();
-  const [updateCat, { isLoading: updating }] = useUpdateCategoryAdminMutation();
-  const [uploadAsset, { isLoading: uploading }] = useUploadStorageAssetAdminMutation();
+  const [createCat, { isLoading: creating }] =
+    useCreateCategoryAdminMutation();
+  const [updateCat, { isLoading: updating }] =
+    useUpdateCategoryAdminMutation();
+
+  // 🔹 STORAGE: tekli create
+  const [uploadAsset, { isLoading: uploading }] =
+    useCreateAssetAdminMutation();
 
   const slugTouchedRef = useRef(false);
   const quillRef = useRef<ReactQuill | null>(null);
@@ -131,7 +141,7 @@ export default function CategoryForm() {
     [allCats, id]
   );
 
-  const loading = isFetching || creating || updating;
+  const loading = isFetching || creating || updating || uploading;
 
   const toUpsertBody = (s: FormState): UpsertCategoryBody => ({
     name: s.name.trim(),
@@ -139,8 +149,8 @@ export default function CategoryForm() {
     description: s.description.trim() || null,
 
     // kapak görseli
-    image_url: s.image_url || null,             // legacy fallback
-    image_asset_id: s.image_asset_id || null,   // storage id
+    image_url: s.image_url || null, // legacy fallback
+    image_asset_id: s.image_asset_id || null, // storage id
     image_alt: s.image_alt || null,
 
     icon: s.icon || null,
@@ -158,7 +168,28 @@ export default function CategoryForm() {
   // Kapak görseli upload
   const handleCoverUpload = async (file: File) => {
     try {
-      const folderSafe = (formData.slug || slugify(formData.name) || "categories").replace(/[^a-z0-9/_-]/g, "");
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Geçersiz dosya",
+          description: "Lütfen bir görsel dosyası seçin.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "Dosya çok büyük",
+          description: "Maksimum 5MB olabilir.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const folderSafe = (
+        formData.slug ||
+        slugify(formData.name) ||
+        "categories"
+      ).replace(/[^a-z0-9/_-]/g, "");
       const folder = `categories/${folderSafe}/cover`;
 
       const asset = await uploadAsset({
@@ -170,14 +201,21 @@ export default function CategoryForm() {
 
       setFormData((s) => ({
         ...s,
-        image_url: asset.url ?? s.image_url,
-        image_asset_id: asset.id ?? s.image_asset_id,
+        image_url: (asset as any).url ?? s.image_url,
+        image_asset_id: (asset as any).id ?? s.image_asset_id,
       }));
 
-      toast({ title: "Başarılı", description: "Kapak görseli yüklendi." });
+      toast({
+        title: "Başarılı",
+        description: "Kapak görseli yüklendi.",
+      });
     } catch (err: any) {
       console.error(err);
-      toast({ title: "Hata", description: "Kapak görseli yüklenirken hata oluştu.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Kapak görseli yüklenirken hata oluştu.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -187,12 +225,27 @@ export default function CategoryForm() {
     contentImageInputRef.current.click();
   };
 
-  const onPickContentImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickContentImage = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // aynı dosyayı tekrar seçebilmek için temizle
     if (!file) return;
     try {
-      const folderSafe = (formData.slug || slugify(formData.name) || "categories").replace(/[^a-z0-9/_-]/g, "");
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Geçersiz dosya",
+          description: "Lütfen bir görsel dosyası seçin.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const folderSafe = (
+        formData.slug ||
+        slugify(formData.name) ||
+        "categories"
+      ).replace(/[^a-z0-9/_-]/g, "");
       const folder = `categories/${folderSafe}/content`;
 
       const asset = await uploadAsset({
@@ -202,17 +255,29 @@ export default function CategoryForm() {
         metadata: { module: "categories", type: "content-image" },
       }).unwrap();
 
+      const url = (asset as any).url;
+      if (!url) {
+        throw new Error("Asset url yok");
+      }
+
       const quill = quillRef.current?.getEditor?.();
       if (!quill) return;
       const range = quill.getSelection(true);
       const index = range ? range.index : quill.getLength();
-      quill.insertEmbed(index, "image", asset.url, "user");
+      quill.insertEmbed(index, "image", url, "user");
       quill.setSelection(index + 1, 0, "user");
 
-      toast({ title: "Görsel eklendi", description: "İçerik alanına görsel yerleştirildi." });
+      toast({
+        title: "Görsel eklendi",
+        description: "İçerik alanına görsel yerleştirildi.",
+      });
     } catch (err) {
       console.error(err);
-      toast({ title: "Hata", description: "İçerik görseli yüklenemedi.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "İçerik görseli yüklenemedi.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -220,7 +285,11 @@ export default function CategoryForm() {
     e.preventDefault();
     const body = toUpsertBody(formData);
     if (!body.slug) {
-      toast({ title: "Hata", description: "Slug üretilemedi. İsim veya slug giriniz.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Slug üretilemedi. İsim veya slug giriniz.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -235,21 +304,34 @@ export default function CategoryForm() {
       navigate("/admin/categories");
     } catch (err) {
       console.error(err);
-      toast({ title: "Hata", description: "Kategori kaydedilirken bir sorun oluştu.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Kategori kaydedilirken bir sorun oluştu.",
+        variant: "destructive",
+      });
     }
   };
 
   // SEO önizleme
   const seoTitle = (formData.seo_title || formData.name || "").trim();
-  const rawDesc = (formData.seo_description || stripHtml(formData.article_content) || formData.description).trim();
+  const rawDesc = (
+    formData.seo_description ||
+    stripHtml(formData.article_content) ||
+    formData.description
+  ).trim();
   const seoDesc = rawDesc.slice(0, 160);
-  const previewUrl = "/" + (formData.slug || slugify(formData.name) || "kategori");
+  const previewUrl =
+    "/" + (formData.slug || slugify(formData.name) || "kategori");
 
   return (
     <AdminLayout title={isEdit ? "Kategoriyi Düzenle" : "Yeni Kategori"}>
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/categories")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/admin/categories")}
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Geri
           </Button>
@@ -271,7 +353,9 @@ export default function CategoryForm() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -282,12 +366,17 @@ export default function CategoryForm() {
                       value={formData.slug}
                       onChange={(e) => {
                         slugTouchedRef.current = true;
-                        setFormData({ ...formData, slug: e.target.value });
+                        setFormData({
+                          ...formData,
+                          slug: e.target.value,
+                        });
                       }}
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      {(typeof window !== "undefined" ? window.location.origin : "site.com")}{previewUrl}
+                      {(typeof window !== "undefined"
+                        ? window.location.origin
+                        : "site.com") + previewUrl}
                     </p>
                   </div>
                 </div>
@@ -302,7 +391,8 @@ export default function CategoryForm() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        parent_id: e.target.value === "none" ? null : e.target.value,
+                        parent_id:
+                          e.target.value === "none" ? null : e.target.value,
                       })
                     }
                   >
@@ -321,7 +411,12 @@ export default function CategoryForm() {
                   <Textarea
                     id="description"
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        description: e.target.value,
+                      })
+                    }
                     rows={3}
                   />
                 </div>
@@ -345,7 +440,7 @@ export default function CategoryForm() {
                       <img
                         src={formData.image_url}
                         alt={formData.image_alt || "Kapak"}
-                        className="mt-2 w-full max-w-md rounded border"
+                        className="mt-2 w-full max-w-md rounded border object-cover"
                       />
                     )}
                   </div>
@@ -354,11 +449,18 @@ export default function CategoryForm() {
                     <Input
                       id="image_alt"
                       value={formData.image_alt}
-                      onChange={(e) => setFormData({ ...formData, image_alt: e.target.value })}
-                      placeholder="Örn: “Kategori temsili görsel”"
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          image_alt: e.target.value,
+                        })
+                      }
+                      placeholder='Örn: "Kategori temsili görsel"'
                     />
                     {formData.image_asset_id && (
-                      <p className="text-xs text-muted-foreground">Asset ID: {formData.image_asset_id}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Asset ID: {formData.image_asset_id}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -369,7 +471,9 @@ export default function CategoryForm() {
                     <Switch
                       id="is_active"
                       checked={formData.is_active}
-                      onCheckedChange={(v) => setFormData({ ...formData, is_active: v })}
+                      onCheckedChange={(v) =>
+                        setFormData({ ...formData, is_active: v })
+                      }
                     />
                     <Label htmlFor="is_active">Aktif</Label>
                   </div>
@@ -377,7 +481,9 @@ export default function CategoryForm() {
                     <Switch
                       id="is_featured"
                       checked={formData.is_featured}
-                      onCheckedChange={(v) => setFormData({ ...formData, is_featured: v })}
+                      onCheckedChange={(v) =>
+                        setFormData({ ...formData, is_featured: v })
+                      }
                     />
                     <Label htmlFor="is_featured">Öne Çıkan</Label>
                   </div>
@@ -389,7 +495,10 @@ export default function CategoryForm() {
                       min={0}
                       value={formData.display_order}
                       onChange={(e) =>
-                        setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })
+                        setFormData({
+                          ...formData,
+                          display_order: parseInt(e.target.value) || 0,
+                        })
                       }
                     />
                   </div>
@@ -402,10 +511,20 @@ export default function CategoryForm() {
                     <Input
                       id="seo_title"
                       value={formData.seo_title}
-                      onChange={(e) => setFormData({ ...formData, seo_title: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          seo_title: e.target.value,
+                        })
+                      }
                     />
                     <p className="text-xs text-muted-foreground">
-                      {clamp((formData.seo_title || formData.name || "").length, 0, 60)} / 60
+                      {clamp(
+                        (formData.seo_title || formData.name || "").length,
+                        0,
+                        60
+                      )}{" "}
+                      / 60
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -414,10 +533,20 @@ export default function CategoryForm() {
                       id="seo_description"
                       rows={2}
                       value={formData.seo_description}
-                      onChange={(e) => setFormData({ ...formData, seo_description: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          seo_description: e.target.value,
+                        })
+                      }
                     />
                     <p className="text-xs text-muted-foreground">
-                      {clamp((formData.seo_description || "").length, 0, 160)} / 160
+                      {clamp(
+                        (formData.seo_description || "").length,
+                        0,
+                        160
+                      )}{" "}
+                      / 160
                     </p>
                   </div>
                 </div>
@@ -428,9 +557,16 @@ export default function CategoryForm() {
                     <Switch
                       id="article_enabled"
                       checked={formData.article_enabled}
-                      onCheckedChange={(v) => setFormData({ ...formData, article_enabled: v })}
+                      onCheckedChange={(v) =>
+                        setFormData({
+                          ...formData,
+                          article_enabled: v,
+                        })
+                      }
                     />
-                    <Label htmlFor="article_enabled">Kategori Makale İçeriği</Label>
+                    <Label htmlFor="article_enabled">
+                      Kategori Makale İçeriği
+                    </Label>
                   </div>
 
                   {formData.article_enabled && (
@@ -461,15 +597,37 @@ export default function CategoryForm() {
                           ref={quillRef as any}
                           theme="snow"
                           value={formData.article_content}
-                          onChange={(value) => setFormData({ ...formData, article_content: value })}
+                          onChange={(value) =>
+                            setFormData({
+                              ...formData,
+                              article_content: value,
+                            })
+                          }
                           className="bg-background"
                           modules={{
                             toolbar: [
-                              [{ header: [1, 2, 3, 4, 5, 6, false] }],
-                              ["bold", "italic", "underline", "strike"],
-                              [{ list: "ordered" }, { list: "bullet" }],
-                              [{ color: [] }, { background: [] }],
-                              ["link", "image"], // image butonu var ama handler olarak üstteki butonu kullanıyoruz
+                              [
+                                {
+                                  header: [
+                                    1, 2, 3, 4, 5, 6, false,
+                                  ],
+                                },
+                              ],
+                              [
+                                "bold",
+                                "italic",
+                                "underline",
+                                "strike",
+                              ],
+                              [
+                                { list: "ordered" },
+                                { list: "bullet" },
+                              ],
+                              [
+                                { color: [] },
+                                { background: [] },
+                              ],
+                              ["link", "image"],
                               ["clean"],
                             ],
                           }}
@@ -480,11 +638,23 @@ export default function CategoryForm() {
                 </div>
 
                 <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => navigate("/admin/categories")}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/admin/categories")}
+                  >
                     İptal
                   </Button>
-                  <Button type="submit" className="gradient-primary" disabled={loading}>
-                    {loading ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
+                  <Button
+                    type="submit"
+                    className="gradient-primary"
+                    disabled={loading}
+                  >
+                    {loading
+                      ? "Kaydediliyor..."
+                      : isEdit
+                      ? "Güncelle"
+                      : "Oluştur"}
                   </Button>
                 </div>
               </form>
@@ -500,24 +670,31 @@ export default function CategoryForm() {
               {/* SEO snippet */}
               <div className="rounded-lg border p-4">
                 <div className="text-xs text-muted-foreground">
-                  {(typeof window !== "undefined" ? window.location.origin : "site.com")}{previewUrl}
+                  {(typeof window !== "undefined"
+                    ? window.location.origin
+                    : "site.com") + previewUrl}
                 </div>
                 <div className="mt-1 text-base font-semibold leading-snug">
                   {seoTitle || "Kategori başlığı (örnek)"}
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {seoDesc || "Meta açıklama veya içerik özeti burada görünecek."}
+                  {seoDesc ||
+                    "Meta açıklama veya içerik özeti burada görünecek."}
                 </div>
               </div>
 
               {/* İçerik canlı önizleme */}
               {formData.article_enabled && (
                 <div className="rounded-lg border">
-                  <div className="border-b p-3 text-sm font-medium">İçerik Önizleme</div>
+                  <div className="border-b p-3 text-sm font-medium">
+                    İçerik Önizleme
+                  </div>
                   <div className="prose max-w-none p-4">
                     <article
                       dangerouslySetInnerHTML={{
-                        __html: formData.article_content || "<p>Önizleme yok.</p>",
+                        __html:
+                          formData.article_content ||
+                          "<p>Önizleme yok.</p>",
                       }}
                     />
                   </div>
@@ -526,16 +703,20 @@ export default function CategoryForm() {
 
               {/* Kapak görseli önizleme */}
               <div className="rounded-lg border">
-                <div className="border-b p-3 text-sm font-medium">Kapak Görseli</div>
+                <div className="border-b p-3 text-sm font-medium">
+                  Kapak Görseli
+                </div>
                 <div className="p-4">
                   {formData.image_url ? (
                     <img
                       src={formData.image_url}
                       alt={formData.image_alt || "Kapak"}
-                      className="w-full max-w-lg rounded border"
+                      className="w-full max-w-lg rounded border object-cover"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">Görsel seçilmedi.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Görsel seçilmedi.
+                    </p>
                   )}
                 </div>
               </div>

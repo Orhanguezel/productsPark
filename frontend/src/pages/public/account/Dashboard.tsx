@@ -1,13 +1,14 @@
 // =============================================================
-// FILE: src/pages/account/Dashboard.tsx  (WRAPPER - FIXED)
+// FILE: src/pages/account/Dashboard.tsx  (WRAPPER - UPDATED)
 // =============================================================
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 
 // RTK
 import { useListOrdersByUserQuery } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
@@ -16,7 +17,7 @@ import {
   useGetMyWalletBalanceQuery,
 } from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
 import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/db/types/wallet";
-import type { OrderView as Order } from "@/integrations/metahub/db/types";
+import type { OrderView as Order } from "@/integrations/metahub/db/types/orders";
 
 // Local tabs
 import { StatsCards } from "./components/StatsCards";
@@ -24,10 +25,14 @@ import { OrdersTab } from "./components/OrdersTab";
 import { WalletTab } from "./components/Wallet/WalletTab";
 import { ProfileTab } from "./components/ProfileTab";
 import { SupportTab } from "./components/Support/SupportTab";
+import { NotificationsTab } from "./components/NotificationsTab";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+
+  // Bildirim sayısı (sadece count; listeyi tab içinde çekeceğiz)
+  const { unreadCount } = useNotifications();
 
   // ---------- Guard: prevent infinite navigate loops ----------
   const navGuard = useRef(false);
@@ -38,13 +43,22 @@ const Dashboard = () => {
     }
   }, [authLoading, user, navigate]);
 
+  // ---------- Aktif tab kontrolü ----------
+  const [tabValue, setTabValue] = useState<
+    "orders" | "wallet" | "profile" | "support" | "notifications"
+  >("orders");
+
+  // Eğer unread varsa ilk açılışta Bildirimler’e geç
+  useEffect(() => {
+    if (unreadCount > 0) {
+      setTabValue("notifications");
+    }
+  }, [unreadCount]);
+
   // ---------- Queries ----------
   const ordersSkip = !user?.id;
-  const { data: orders = [], isLoading: ordersLoading } = useListOrdersByUserQuery(
-    user?.id ?? "",
-    // memo not required here, but keep the object trivial
-    { skip: ordersSkip }
-  );
+  const { data: orders = [], isLoading: ordersLoading } =
+    useListOrdersByUserQuery(user?.id ?? "", { skip: ordersSkip });
 
   // keep args stable so RTKQ doesn't think arg changed each render
   const walletArgs = useMemo(() => ({ order: "desc" as const }), []);
@@ -58,10 +72,8 @@ const Dashboard = () => {
     }),
     [user?.id]
   );
-  const { data: walletTxns = [], isLoading: txLoading } = useListMyWalletTransactionsQuery(
-    walletArgs,
-    walletOpts
-  );
+  const { data: walletTxns = [], isLoading: txLoading } =
+    useListMyWalletTransactionsQuery(walletArgs, walletOpts);
 
   const balanceOpts = useMemo(
     () => ({
@@ -74,26 +86,35 @@ const Dashboard = () => {
     [user?.id]
   );
   // Authoritative balance from backend (reflects admin approvals)
-  const { data: myBalance = 0 } = useGetMyWalletBalanceQuery(undefined, balanceOpts);
+  const { data: myBalance = 0 } = useGetMyWalletBalanceQuery(
+    undefined,
+    balanceOpts
+  );
 
   // ---------- Derived ----------
   const totalSpent = useMemo(
     () =>
       orders
         .filter((o) => o.status === "completed")
-        .reduce((sum, o) => sum + Number(o.final_amount ?? 0), 0),
+        .reduce((sum, o) => sum + Number((o as any).final_amount ?? 0), 0),
     [orders]
   );
 
   // Fallback balance from txns (in case BE balance lags briefly)
   const computedFromTxns = useMemo(
-    () => (walletTxns as WalletTxn[]).reduce((sum, t) => sum + Number(t.amount || 0), 0),
+    () =>
+      (walletTxns as WalletTxn[]).reduce(
+        (sum, t) => sum + Number(t.amount || 0),
+        0
+      ),
     [walletTxns]
   );
 
   // If there is a noticeable mismatch, show txn-sum as a temporary fallback
   const displayBalance =
-    Math.abs((myBalance ?? 0) - computedFromTxns) > 0.009 ? computedFromTxns : (myBalance ?? 0);
+    Math.abs((myBalance ?? 0) - computedFromTxns) > 0.009
+      ? computedFromTxns
+      : (myBalance ?? 0);
 
   const loading = authLoading || ordersLoading || txLoading;
 
@@ -125,12 +146,27 @@ const Dashboard = () => {
               <CardTitle>Hesap Yönetimi</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="orders">
-                <TabsList className="grid w-full grid-cols-4">
+              <Tabs
+                value={tabValue}
+                onValueChange={(v) =>
+                  setTabValue(
+                    v as "orders" | "wallet" | "profile" | "support" | "notifications"
+                  )
+                }
+              >
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="orders">Siparişlerim</TabsTrigger>
                   <TabsTrigger value="wallet">Cüzdan</TabsTrigger>
                   <TabsTrigger value="profile">Profil</TabsTrigger>
                   <TabsTrigger value="support">Destek</TabsTrigger>
+                  <TabsTrigger value="notifications">
+                    Bildirimler
+                    {unreadCount > 0 && (
+                      <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground px-1">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="orders" className="space-y-4 mt-6">
@@ -138,7 +174,10 @@ const Dashboard = () => {
                 </TabsContent>
 
                 <TabsContent value="wallet" className="space-y-4 mt-6">
-                  <WalletTab txns={walletTxns as WalletTxn[]} txLoading={txLoading} />
+                  <WalletTab
+                    txns={walletTxns as WalletTxn[]}
+                    txLoading={txLoading}
+                  />
                 </TabsContent>
 
                 <TabsContent value="profile" className="space-y-4 mt-6">
@@ -147,6 +186,10 @@ const Dashboard = () => {
 
                 <TabsContent value="support" className="space-y-4 mt-6">
                   <SupportTab />
+                </TabsContent>
+
+                <TabsContent value="notifications" className="space-y-4 mt-6">
+                  <NotificationsTab />
                 </TabsContent>
               </Tabs>
             </CardContent>

@@ -1,4 +1,7 @@
-import { useState, useEffect } from "react";
+// =============================================================
+// FILE: src/components/.../CartDrawer.tsx
+// =============================================================
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Sheet,
@@ -9,13 +12,16 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ShoppingCart, ArrowRight, X } from "lucide-react";
-import { metahub } from "@/integrations/metahub/client";
+import { ShoppingCart, ArrowRight } from "lucide-react";
+
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/hooks/useCart";
 
-interface CartItem {
+import { useListProductsQuery } from "@/integrations/metahub/rtk/endpoints/products.endpoints";
+import { useListCartItemsQuery } from "@/integrations/metahub/rtk/endpoints/cart_items.endpoints";
+
+type UICartItem = {
   id: string;
   quantity: number;
   products: {
@@ -24,105 +30,164 @@ interface CartItem {
     slug: string;
     price: number;
     image_url: string | null;
-    delivery_type?: string;
-    quantity_options?: { quantity: number, price: number }[] | null;
+    delivery_type?: string | null;
+    quantity_options?: { quantity: number; price: number }[] | null;
   };
-}
+};
+
+type GuestCartRawItem = {
+  productId: string;
+  quantity: number;
+  selected_options?: Record<string, unknown> | null;
+};
+
+const readGuestCart = (): GuestCartRawItem[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("guestCart");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as GuestCartRawItem[];
+  } catch {
+    return [];
+  }
+};
 
 export const CartDrawer = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { refetch } = useCart();
-  const [open, setOpen] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(false);
 
+  const [open, setOpen] = useState(false);
+  const [guestCart, setGuestCart] = useState<GuestCartRawItem[]>(() =>
+    readGuestCart()
+  );
+
+  // cartItemAdded event → çekme + drawer aç
   useEffect(() => {
     const handleCartAdded = () => {
       setOpen(true);
-      fetchCartItems();
+
+      // Global cart hook’u da tetikle (varsa)
+      if (typeof refetch === "function") {
+        void refetch();
+      }
+
+      // Guest ise localStorage'dan tekrar oku
+      if (!user) {
+        setGuestCart(readGuestCart());
+      }
     };
 
     window.addEventListener("cartItemAdded", handleCartAdded);
     return () => window.removeEventListener("cartItemAdded", handleCartAdded);
-  }, [user]);
+  }, [user, refetch]);
 
-  const fetchCartItems = async () => {
-    setLoading(true);
-    try {
-      if (!user) {
-        // Load guest cart
-        const guestCartData = localStorage.getItem('guestCart');
-        if (!guestCartData) {
-          setCartItems([]);
-          return;
-        }
-
-        const guestCart = JSON.parse(guestCartData);
-        const productIds = guestCart.map((item: any) => item.productId);
-
-        const { data: products, error } = await metahub
-          .from("products")
-          .select("id, name, slug, price, image_url, delivery_type, quantity_options")
-          .in("id", productIds);
-
-        if (error) throw error;
-
-        const items: CartItem[] = guestCart.map((guestItem: any) => {
-          const product = products?.find(p => p.id === guestItem.productId);
-          if (!product) return null;
-
-          return {
-            id: guestItem.productId,
-            quantity: guestItem.quantity,
-            products: product as any
-          };
-        }).filter(Boolean);
-
-        setCartItems(items);
-      } else {
-        // Load user cart
-        const { data, error } = await metahub
-          .from("cart_items")
-          .select(`
-            id,
-            quantity,
-            products:product_id (
-              id,
-              name,
-              slug,
-              price,
-              image_url,
-              delivery_type,
-              quantity_options
-            )
-          `)
-          .eq("user_id", user.id)
-          .limit(5);
-
-        if (error) throw error;
-        setCartItems((data || []) as unknown as CartItem[]);
-      }
-    } catch (error) {
-      console.error("Error fetching cart items:", error);
-    } finally {
-      setLoading(false);
+  // ----------------- RTK: USER CART -----------------
+  const {
+    data: userCartItems,
+    isLoading: userCartLoading,
+  } = useListCartItemsQuery(
+    {
+      user_id: user?.id,
+      with: "products",
+      limit: 5,
+      sort: "created_at",
+      order: "desc",
+    },
+    {
+      skip: !user,
     }
-  };
+  );
 
-  const getItemPrice = (item: CartItem) => {
-    if (item.products.quantity_options && Array.isArray(item.products.quantity_options)) {
-      const matchingOption = item.products.quantity_options.find(
-        opt => opt.quantity === item.quantity
-      );
-      if (matchingOption) {
-        return matchingOption.price;
-      }
+  // ----------------- RTK: GUEST CART (Products by ids) -----------------
+  const guestProductIds = useMemo(
+    () => guestCart.map((g) => g.productId),
+    [guestCart]
+  );
+
+  const shouldFetchGuestProducts = !user && guestProductIds.length > 0;
+
+  const {
+    data: guestProducts,
+    isLoading: guestProductsLoading,
+  } = useListProductsQuery(
+    shouldFetchGuestProducts ? { ids: guestProductIds } : undefined,
+    {
+      skip: !shouldFetchGuestProducts,
+    }
+  );
+
+  // ----------------- UI Cart Items (user vs guest) -----------------
+  const cartItems: UICartItem[] = useMemo(() => {
+    // Logged-in user → RTK cart_items
+    if (user) {
+      if (!userCartItems) return [];
+      return userCartItems
+        .filter((c) => c.products)
+        .map((c) => {
+          const p = c.products!;
+          return {
+            id: c.id,
+            quantity: c.quantity,
+            products: {
+              id: p.id,
+              name: p.name,
+              slug: p.slug,
+              price: p.price,
+              image_url: p.image_url ?? null,
+              delivery_type: p.delivery_type ?? null,
+              quantity_options: p.quantity_options ?? null,
+            },
+          };
+        });
+    }
+
+    // Guest → localStorage guestCart + RTK products
+    if (!guestCart.length || !guestProducts?.length) return [];
+
+    return guestCart
+      .map<UICartItem | null>((g) => {
+        const product = guestProducts.find((p) => p.id === g.productId);
+        if (!product) return null;
+        return {
+          id: g.productId,
+          quantity: g.quantity,
+          products: {
+            id: product.id,
+            name: product.name,
+            slug: product.slug,
+            price: product.price,
+            image_url: product.image_url ?? null,
+            delivery_type: product.delivery_type ?? null,
+            quantity_options: product.quantity_options ?? null,
+          },
+        };
+      })
+      .filter(Boolean) as UICartItem[];
+  }, [user, userCartItems, guestCart, guestProducts]);
+
+  // ----------------- Helpers -----------------
+  const getItemPrice = (item: UICartItem) => {
+    const opts = item.products.quantity_options;
+    if (opts && Array.isArray(opts)) {
+      const match = opts.find((o) => o.quantity === item.quantity);
+      if (match) return match.price;
     }
     return item.products.price * item.quantity;
   };
 
-  const subtotal = cartItems.reduce((sum, item) => sum + getItemPrice(item), 0);
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + getItemPrice(item),
+    0
+  );
+
+  const loading =
+    (user && userCartLoading) ||
+    (!user &&
+      shouldFetchGuestProducts &&
+      guestProductsLoading);
 
   const handleGoToCart = () => {
     setOpen(false);
@@ -158,9 +223,15 @@ export const CartDrawer = () => {
           ) : (
             <div className="space-y-4">
               {cartItems.map((item) => (
-                <div key={item.id} className="flex gap-3 p-3 rounded-lg border">
+                <div
+                  key={item.id}
+                  className="flex gap-3 p-3 rounded-lg border"
+                >
                   <img
-                    src={item.products.image_url || "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=80&h=80&fit=crop"}
+                    src={
+                      item.products.image_url ||
+                      "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=80&h=80&fit=crop"
+                    }
                     alt={item.products.name}
                     className="w-20 h-20 object-cover rounded"
                   />

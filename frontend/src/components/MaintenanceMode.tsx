@@ -1,45 +1,28 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/components/.../MaintenanceMode.tsx
+// =============================================================
 import { Wrench, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  useGetSiteSettingByKeyQuery,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+
+const DEFAULT_MAINTENANCE_MESSAGE =
+  "Sitemiz şu anda bakımda. Lütfen daha sonra tekrar deneyin.";
+const DEFAULT_SITE_TITLE = "Site Bakımda";
 
 export const MaintenanceMode = () => {
-  const [settings, setSettings] = useState<{
-    maintenance_message: string;
-    site_title: string;
-  }>({
-    maintenance_message: "Sitemiz şu anda bakımda. Lütfen daha sonra tekrar deneyin.",
-    site_title: "Site Bakımda"
-  });
+  // RTK'dan ayarları çek
+  const { data: maintenanceSetting } =
+    useGetSiteSettingByKeyQuery("maintenance_message");
+  const { data: siteTitleSetting } =
+    useGetSiteSettingByKeyQuery("site_title");
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  const maintenanceMessage =
+    (maintenanceSetting?.value as string) || DEFAULT_MAINTENANCE_MESSAGE;
 
-  const fetchSettings = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("site_settings")
-        .select("*")
-        .in("key", ["maintenance_message", "site_title"]);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const settingsObj = data.reduce((acc: any, item) => {
-          acc[item.key] = item.value;
-          return acc;
-        }, {});
-
-        setSettings({
-          maintenance_message: settingsObj.maintenance_message || settings.maintenance_message,
-          site_title: settingsObj.site_title || settings.site_title
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-    }
-  };
+  const siteTitle =
+    (siteTitleSetting?.value as string) || DEFAULT_SITE_TITLE;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
@@ -56,13 +39,13 @@ export const MaintenanceMode = () => {
 
           <div className="space-y-3">
             <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-              {settings.site_title}
+              {siteTitle}
             </h1>
             <div className="h-1 w-24 bg-primary mx-auto rounded-full" />
           </div>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-md mx-auto leading-relaxed">
-            {settings.maintenance_message}
+            {maintenanceMessage}
           </p>
 
           <div className="pt-6">

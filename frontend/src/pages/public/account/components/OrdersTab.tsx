@@ -14,34 +14,22 @@ import {
 } from "@/components/ui/pagination";
 
 import { useAuth } from "@/hooks/useAuth";
-import { useListOrdersByUserQuery } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
 import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
-import type { OrderView as Order } from "@/integrations/metahub/db/types";
+import type { OrderView as Order } from "@/integrations/metahub/db/types/orders";
 
 const itemsPerPage = 10;
 
-export function OrdersTab() {
+export interface OrdersTabProps {
+  orders: Order[];
+}
+
+export function OrdersTab({ orders }: OrdersTabProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [ordersPage, setOrdersPage] = useState(1);
 
-  const userId = user?.id ?? "";
-
-  // Siparişler (RTK)
-  const {
-    data: ordersData,
-    isLoading,
-    isError,
-  } = useListOrdersByUserQuery(userId, {
-    skip: !userId,
-  });
-
   // Müşteri bilgisi (RTK profil)
-  const { data: profile } = useGetMyProfileQuery(undefined, {
-    skip: !userId,
-  });
-
-  const orders: Order[] = ordersData ?? [];
+  const { data: profile } = useGetMyProfileQuery();
 
   const pagedOrders = useMemo(() => {
     const start = (ordersPage - 1) * itemsPerPage;
@@ -51,30 +39,6 @@ export function OrdersTab() {
   const handleOrderClick = (order: Order) => {
     navigate(`/siparis/${order.id}`);
   };
-
-  if (!userId) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        Siparişlerinizi görmek için lütfen giriş yapın.
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        Siparişleriniz yükleniyor…
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="text-center py-8 text-destructive">
-        Siparişler yüklenirken bir hata oluştu. Lütfen tekrar deneyin.
-      </div>
-    );
-  }
 
   if (!orders.length) {
     return (

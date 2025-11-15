@@ -10,12 +10,11 @@ import "@/styles/richtext.css";
 const root = createRoot(document.getElementById("root")!);
 
 root.render(
-  <React.StrictMode>
-    <Provider store={store}>
-      <App />
-    </Provider>
-  </React.StrictMode>
+  <Provider store={store}>
+    <App />
+  </Provider>
 );
+
 
 // (Varsa) prerender event’in kalsın
 if (typeof window !== "undefined") {

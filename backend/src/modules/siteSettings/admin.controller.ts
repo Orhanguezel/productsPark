@@ -130,6 +130,7 @@ export const adminUpdateSiteSetting: RouteHandler = async (req, reply) => {
 };
 
 /** POST /admin/site_settings/bulk-upsert  body: { items: [{ key, value }, ...] } */
+/** POST /admin/site_settings/bulk-upsert  body: { items: [{ key, value }, ...] } */
 export const adminBulkUpsertSiteSettings: RouteHandler = async (req, reply) => {
   try {
     const input = siteSettingBulkUpsertSchema.parse(req.body || {});
@@ -151,7 +152,11 @@ export const adminBulkUpsertSiteSettings: RouteHandler = async (req, reply) => {
     });
 
     const keys = input.items.map(i => i.key);
-    const rows = await db.select().from(siteSettings).where(inArray(siteSettings.key, keys));
+    const rows = await db
+      .select()
+      .from(siteSettings)
+      .where(inArray(siteSettings.key, keys));
+
     return reply.send(rows.map(rowToDto));
   } catch (e) {
     req.log.error(e);
