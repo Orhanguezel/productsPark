@@ -15,7 +15,10 @@ import { toNumber } from "../constants";
 
 type Props = {
   formData: Partial<ProductAdmin>;
-  setField: <K extends keyof ProductAdmin>(key: K, val: ProductAdmin[K] | any) => void;
+  setField: <K extends keyof ProductAdmin>(
+    key: K,
+    val: ProductAdmin[K] | any
+  ) => void;
   quantityOptions: { quantity: number; price: number }[];
   onUploadFeatured: (file: File) => Promise<void>;
   uploading?: boolean;
@@ -47,6 +50,23 @@ export default function BasicInfo({
     await onUploadFeatured(file);
   };
 
+  // ---- number input helper ----
+  const handleNumericChange = <K extends keyof ProductAdmin>(
+    key: K,
+    raw: string
+  ) => {
+    if (raw === "") {
+      // input tamamen boşsa state'te undefined tut
+      setField(key, undefined as any);
+    } else {
+      const n = Number(raw.replace(",", "."));
+      setField(key, (Number.isNaN(n) ? undefined : n) as any);
+    }
+  };
+
+  const numericValue = (val: unknown) =>
+    val === undefined || val === null ? "" : String(val);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
@@ -75,56 +95,88 @@ export default function BasicInfo({
         </div>
         <div className="space-y-2">
           <Label htmlFor="slug">Slug (URL) *</Label>
-          <Input id="slug" value={formData.slug ?? ""} onChange={(e) => setField("slug", e.target.value)} required />
+          <Input
+            id="slug"
+            value={formData.slug ?? ""}
+            onChange={(e) => setField("slug", e.target.value)}
+            required
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
+        {/* Fiyat */}
         <div className="space-y-2">
           <Label htmlFor="price">Fiyat *</Label>
           <Input
             id="price"
             inputMode="decimal"
-            value={String(formData.price ?? 0)}
-            onChange={(e) => setField("price", toNumber(e.target.value))}
+            value={numericValue(formData.price)}
+            onChange={(e) => handleNumericChange("price", e.target.value)}
             required
             disabled={(quantityOptions ?? []).length > 0}
           />
           {(quantityOptions ?? []).length > 0 && (
-            <p className="text-xs text-muted-foreground">Adet seçenekleri kullanılıyor</p>
+            <p className="text-xs text-muted-foreground">
+              Adet seçenekleri kullanılıyor
+            </p>
           )}
         </div>
+
+        {/* Eski Fiyat */}
         <div className="space-y-2">
           <Label htmlFor="original_price">Eski Fiyat</Label>
           <Input
             id="original_price"
             inputMode="decimal"
-            value={formData.original_price ?? ""}
-            onChange={(e) => setField("original_price", e.target.value === "" ? null : toNumber(e.target.value))}
+            value={numericValue(formData.original_price)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "") {
+                setField("original_price", null);
+              } else {
+                const n = toNumber(v);
+                setField(
+                  "original_price",
+                  n === undefined ? null : (n as any)
+                );
+              }
+            }}
           />
         </div>
+
+        {/* Stok */}
         <div className="space-y-2">
           <Label htmlFor="stock_quantity">Stok *</Label>
           <Input
             id="stock_quantity"
             inputMode="numeric"
-            value={String(formData.stock_quantity ?? 0)}
-            onChange={(e) => setField("stock_quantity", Number(e.target.value || 0))}
+            value={numericValue(formData.stock_quantity)}
+            onChange={(e) =>
+              handleNumericChange("stock_quantity", e.target.value)
+            }
             required
             disabled={(formData.delivery_type ?? "manual") === "auto_stock"}
           />
           {(formData.delivery_type ?? "manual") === "auto_stock" && (
-            <p className="text-xs text-muted-foreground">Otomatik stokta miktar satır sayısından hesaplanır</p>
+            <p className="text-xs text-muted-foreground">
+              Otomatik stokta miktar satır sayısından hesaplanır
+            </p>
           )}
         </div>
+
+        {/* Satış Sayısı */}
         <div className="space-y-2">
           <Label htmlFor="review_count">Satış Sayısı</Label>
           <Input
             id="review_count"
             inputMode="numeric"
-            value={String(formData.review_count ?? 0)}
-            onChange={(e) => setField("review_count", Number(e.target.value || 0))}
+            value={numericValue(formData.review_count)}
+            onChange={(e) =>
+              handleNumericChange("review_count", e.target.value)
+            }
             placeholder="Örn: 150"
+            disabled// 👈 gerçek satıştan geliyor
           />
         </div>
       </div>
@@ -132,7 +184,9 @@ export default function BasicInfo({
       {/* Featured image upload */}
       <div className="space-y-2">
         <Label htmlFor="image_upload">Ürün Görseli</Label>
-        <p className="text-xs text-muted-foreground mb-2">Önerilen boyut: 800x600 (4:3)</p>
+        <p className="text-xs text-muted-foreground mb-2">
+          Önerilen boyut: 800x600 (4:3)
+        </p>
 
         <input
           ref={imageInputRef}
@@ -154,11 +208,15 @@ export default function BasicInfo({
           />
           {(formData.featured_image || formData.image_url) && (
             <img
-              src={(formData.featured_image as string) ?? (formData.image_url as string)}
+              src={
+                (formData.featured_image as string) ??
+                (formData.image_url as string)
+              }
               alt={String(formData.featured_image_alt ?? "Önizleme")}
               className="w-16 h-16 object-cover rounded border"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = "https://placehold.co/128x128?text=Image";
+                (e.currentTarget as HTMLImageElement).src =
+                  "https://placehold.co/128x128?text=Image";
               }}
             />
           )}
@@ -196,7 +254,11 @@ export default function BasicInfo({
 
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
-          <Switch id="is_active" checked={!!formData.is_active} onCheckedChange={(v) => setField("is_active", v ? 1 : 0)} />
+          <Switch
+            id="is_active"
+            checked={!!formData.is_active}
+            onCheckedChange={(v) => setField("is_active", v ? 1 : 0)}
+          />
           <Label htmlFor="is_active">Aktif</Label>
         </div>
         <div className="flex items-center gap-2">
@@ -208,14 +270,20 @@ export default function BasicInfo({
           <Label htmlFor="show_on_homepage">Anasayfada Göster</Label>
         </div>
         <div className="flex items-center gap-2">
-          <Switch id="is_featured" checked={!!formData.is_featured} onCheckedChange={(v) => setField("is_featured", v ? 1 : 0)} />
+          <Switch
+            id="is_featured"
+            checked={!!formData.is_featured}
+            onCheckedChange={(v) => setField("is_featured", v ? 1 : 0)}
+          />
           <Label htmlFor="is_featured">Featured</Label>
         </div>
         <div className="flex items-center gap-2">
           <Switch
             id="requires_shipping"
             checked={!!formData.requires_shipping}
-            onCheckedChange={(v) => setField("requires_shipping", v ? 1 : 0)}
+            onCheckedChange={(v) =>
+              setField("requires_shipping", v ? 1 : 0)
+            }
           />
           <Label htmlFor="requires_shipping">Shipping Gerekli</Label>
         </div>

@@ -55,9 +55,17 @@ const PaymentInfo = () => {
     isLoading: bankLoading,
   } = useGetSiteSettingByKeyQuery("bank_account_info");
 
+  // --- RTK: yeni ödeme bildirimi telegram ayarı ---
+  const { data: paymentRequestTelegramSetting } =
+    useGetSiteSettingByKeyQuery("new_payment_request_telegram");
+
   const bankInfo = useMemo(
     () => (bankSetting ? toStringOrNull(bankSetting.value) : null),
     [bankSetting]
+  );
+
+  const isPaymentTelegramEnabled = truthy(
+    paymentRequestTelegramSetting?.value
   );
 
   // --- RTK: sipariş & payment_request oluşturma ---
@@ -116,15 +124,9 @@ const PaymentInfo = () => {
       payment_proof: null,
     }).unwrap();
 
-    // Telegram ayarını hala Supabase'ten okuyoruz (fonksiyon Supabase tarafında)
+    // Telegram ayarı artık RTK site_settings'ten
     try {
-      const { data: telegramSettings } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "new_payment_request_telegram")
-        .single();
-
-      if (truthy(telegramSettings?.value)) {
+      if (isPaymentTelegramEnabled) {
         await metahub.functions.invoke("send-telegram-notification", {
           body: { type: "new_payment_request", orderId: ord.id },
         });
@@ -207,15 +209,9 @@ const PaymentInfo = () => {
     sessionStorage.removeItem("havalepaymentData");
     localStorage.removeItem("guestCart");
 
-    // Telegram bildirimi (Supabase fonksiyon)
+    // Telegram bildirimi (RTK'dan gelen ayar ile kontrol)
     try {
-      const { data: telegramSettings } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "new_payment_request_telegram")
-        .single();
-
-      if (truthy(telegramSettings?.value)) {
+      if (isPaymentTelegramEnabled) {
         await metahub.functions.invoke("send-telegram-notification", {
           body: { type: "new_payment_request", orderId: createdOrder.id },
         });
@@ -260,7 +256,10 @@ const PaymentInfo = () => {
     );
   }
 
-  if ((hasExistingOrder && (orderError || !order)) || (!hasExistingOrder && !paymentData)) {
+  if (
+    (hasExistingOrder && (orderError || !order)) ||
+    (!hasExistingOrder && !paymentData)
+  ) {
     return (
       <>
         <Navbar />
@@ -294,8 +293,7 @@ const PaymentInfo = () => {
           <CardContent className="space-y-6">
             <div>
               <p className="text-muted-foreground mb-4">
-                Lütfen aşağıdaki hesap bilgilerine ödemenizi yapın ve
-                {" "}
+                Lütfen aşağıdaki hesap bilgilerine ödemenizi yapın ve{" "}
                 &quot;Ödemeyi Yaptım&quot; butonuna tıklayın.
               </p>
             </div>

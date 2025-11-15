@@ -68,3 +68,19 @@ export type StorageServerUploadArgs = {
   path?: string;      // "folder/name.ext" gibi
   upsert?: boolean;
 };
+
+
+export type StorageListQuery = {
+  q?: string;
+  bucket?: string;
+  folder?: string | null;
+  mime?: string;
+  limit?: number; offset?: number;
+  sort?: "created_at" | "name" | "size";
+  order?: "asc" | "desc";
+};
+export type StorageUpdateInput = {
+  name?: string;
+  folder?: string | null;
+  metadata?: Record<string, string> | null;
+};

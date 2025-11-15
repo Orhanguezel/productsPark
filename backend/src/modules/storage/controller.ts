@@ -1,13 +1,15 @@
+// src/modules/storage/controller.ts
+
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, like, sql as dsql } from "drizzle-orm";
+import type { MultipartFile } from "@fastify/multipart";
+import { and, eq } from "drizzle-orm";
+
 import { db } from "@/db/client";
 import { storageAssets } from "./schema";
+
 import {
-  storageListQuerySchema,
   type StorageListQuery,
-  storageUpdateSchema,
-  type StorageUpdateInput,
   type SignPutBody,
   signMultipartBodySchema,
   type SignMultipartBody,
@@ -15,10 +17,7 @@ import {
 import {
   getCloudinaryConfig,
   uploadBufferAuto,
-  destroyCloudinaryById,
-  renameCloudinaryPublicId,
 } from "./cloudinary";
-import type { MultipartFile, MultipartValue } from "@fastify/multipart";
 import { env } from "@/core/env";
 
 /* --------------------------------- helpers -------------------------------- */
@@ -28,7 +27,9 @@ const encPath = (p: string) => p.split("/").map(encSeg).join("/");
 
 /** NULL/undefined alanları INSERT’ten at */
 const omitNullish = <T extends Record<string, any>>(o: T) =>
-  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined)) as Partial<T>;
+  Object.fromEntries(
+    Object.entries(o).filter(([, v]) => v !== null && v !== undefined),
+  ) as Partial<T>;
 
 /** Duplikeyi (1062) robust yakala (drizzle cause.* dahil) */
 function isDup(err: unknown) {
@@ -37,7 +38,11 @@ function isDup(err: unknown) {
   return codes.includes("ER_DUP_ENTRY") || codes.includes(1062);
 }
 
-function publicUrlOf(bucket: string, path: string, providerUrl?: string | null): string {
+function publicUrlOf(
+  bucket: string,
+  path: string,
+  providerUrl?: string | null,
+): string {
   if (providerUrl) return providerUrl;
   const cdnBase = (env.CDN_PUBLIC_BASE || "").replace(/\/+$/, "");
   if (cdnBase) return `${cdnBase}/${encSeg(bucket)}/${encPath(path)}`;
@@ -45,43 +50,40 @@ function publicUrlOf(bucket: string, path: string, providerUrl?: string | null):
   return `${apiBase || ""}/storage/${encSeg(bucket)}/${encPath(path)}`;
 }
 
-const ORDER = {
-  created_at: storageAssets.created_at,
-  name: storageAssets.name,
-  size: storageAssets.size,
-} as const;
-
-function parseOrder(q: StorageListQuery) {
-  const sort = q.sort ?? "created_at";
-  const order = q.order ?? "desc";
-  const col = ORDER[sort] ?? storageAssets.created_at;
-  const primary = order === "asc" ? asc(col) : desc(col);
-  return { primary };
-}
-
-async function getAssetById(id: string) {
-  const rows = await db.select().from(storageAssets).where(eq(storageAssets.id, id)).limit(1);
-  return rows[0] ?? null;
-}
-
 async function getAssetByBucketPath(bucket: string, path: string) {
   const rows = await db
     .select()
     .from(storageAssets)
-    .where(and(eq(storageAssets.bucket, bucket), eq(storageAssets.path, path)))
+    .where(
+      and(eq(storageAssets.bucket, bucket), eq(storageAssets.path, path)),
+    )
     .limit(1);
   return rows[0] ?? null;
 }
 
+// --- path helpers ---
+const stripLeadingSlashes = (s: string) => s.replace(/^\/+/, "");
+const normalizePath = (bucket: string, raw: string) => {
+  let p = stripLeadingSlashes(raw).replace(/\/{2,}/g, "/");
+  if (p.startsWith(bucket + "/")) p = p.slice(bucket.length + 1);
+  return p;
+};
+
 /* ---------------------------------- PUBLIC --------------------------------- */
 
-/** GET /storage/:bucket/* → provider URL'ye 302 */
-export const publicServe: RouteHandler<{ Params: { bucket: string; "*": string } }> = async (req, reply) => {
+/** GET/HEAD /storage/:bucket/* → provider URL'ye 302 */
+export const publicServe: RouteHandler<{
+  Params: { bucket: string; "*": string };
+}> = async (req, reply) => {
   const { bucket } = req.params;
-  const path = req.params["*"];
+  const raw = req.params["*"] || "";
+  const path = normalizePath(bucket, raw);
+
   const row = await getAssetByBucketPath(bucket, path);
-  if (row?.url) return reply.redirect(302, row.url);
-  return reply.code(404).send({ message: "not_found" });
+  if (!row) return reply.code(404).send({ message: "not_found" });
+
+  // ✅ Daima düzgün 302 redirect
+  return reply.redirect(302, row.url || publicUrlOf(bucket, path, null));
 };
 
 /** POST /storage/:bucket/upload (FormData) — server-side signed upload */
@@ -90,7 +92,10 @@ export const uploadToBucket: RouteHandler<{
   Querystring: { path?: string; upsert?: string };
 }> = async (req, reply) => {
   const cfg = getCloudinaryConfig();
-  if (!cfg) return reply.code(501).send({ message: "cloudinary_not_configured" });
+  if (!cfg)
+    return reply
+      .code(501)
+      .send({ message: "cloudinary_not_configured" });
 
   const mp: MultipartFile | undefined = await req.file();
   if (!mp) return reply.code(400).send({ message: "file_required" });
@@ -98,29 +103,57 @@ export const uploadToBucket: RouteHandler<{
   const buf = await mp.toBuffer();
   const { bucket } = req.params;
 
-  const desired = (req.query?.path ?? mp.filename ?? "file").trim();
-  const cleanName = desired.split("/").pop()!.replace(/[^\w.\-]+/g, "_");
-  const folder = desired.includes("/") ? desired.split("/").slice(0, -1).join("/") : undefined;
+  // ✅ PATH NORMALIZATION
+  const desiredRaw = (req.query?.path ?? mp.filename ?? "file").trim();
+  const desired = normalizePath(bucket, desiredRaw);
 
-  // public_id sadece basename (ext’siz); klasör ayrı param
+  const cleanName = desired.split("/").pop()!.replace(/[^\w.\-]+/g, "_");
+  const folder = desired.includes("/")
+    ? desired.split("/").slice(0, -1).join("/")
+    : undefined;
   const publicIdBase = cleanName.replace(/\.[^.]+$/, "");
 
   let up: any;
   try {
-    // server-side signed tercih → preset bağımlılığı yok
-    up = await uploadBufferAuto(cfg, buf, { folder, publicId: publicIdBase, mime: mp.mimetype }, true);
+    // ❌ ESKİ: uploadBufferAuto(cfg, buf, {...}, true);
+    // ✅ YENİ: helper artık 3 argüman alıyor; upsert/overwrite vb. opsiyon varsa
+    // onu options içine gömüyoruz.
+    up = await uploadBufferAuto(
+      cfg,
+      buf,
+      {
+        folder,
+        publicId: publicIdBase,
+        mime: mp.mimetype,
+        overwrite: true,
+      } as any,
+    );
   } catch (e: any) {
     const http = Number(e?.http_code) || 502;
-    const msg = e?.message || "upload_failed";
-    return reply.code(http >= 400 && http < 500 ? http : 502).send({
-      error: { code: "cloudinary_upload_error", message: msg },
-    });
+    return reply
+      .code(http >= 400 && http < 500 ? http : 502)
+      .send({
+        error: {
+          code: "cloudinary_upload_error",
+          name: e?.name,
+          message: e?.message,
+          http_code: e?.http_code,
+          cld_error: e?.error || e?.response || null,
+        },
+      });
   }
 
   const path = folder ? `${folder}/${cleanName}` : cleanName;
+
+  const recId = randomUUID();
+  const provider =
+    env.STORAGE_DRIVER === "local" ? "local" : "cloudinary";
+
   const recordBase = {
-    id: randomUUID(),
-    user_id: (req as any).user?.id ? String((req as any).user.id) : null,
+    id: recId,
+    user_id: (req as any).user?.id
+      ? String((req as any).user.id)
+      : null,
     name: cleanName,
     bucket,
     path,
@@ -132,256 +165,118 @@ export const uploadToBucket: RouteHandler<{
     url: up.secure_url,
     hash: up.etag ?? null,
     etag: up.etag ?? null,
-    provider: "cloudinary" as const,
-    provider_public_id: up.public_id ?? null,           // "folder/name"
-    provider_resource_type: up.resource_type ?? null,    // "image" | "video" | "raw"
+    provider,
+    provider_public_id: up.public_id ?? null,
+    provider_resource_type: up.resource_type ?? null,
     provider_format: up.format ?? null,
-    provider_version: typeof up.version === "number" ? up.version : null,
+    provider_version:
+      typeof up.version === "number" ? up.version : null,
     metadata: null as Record<string, string> | null,
   };
-  const record = omitNullish(recordBase);
 
   try {
-    await db.insert(storageAssets).values(record as any);
+    await db.insert(storageAssets).values(omitNullish(recordBase) as any);
   } catch (e) {
     if (!isDup(e)) throw e;
     const existing = await getAssetByBucketPath(bucket, path);
     if (existing) {
-      return reply.send({ path: existing.path, url: publicUrlOf(existing.bucket, existing.path, existing.url) });
+      return reply.send({
+        id: existing.id,
+        bucket: existing.bucket,
+        path: existing.path,
+        folder: existing.folder ?? null,
+        url: publicUrlOf(
+          existing.bucket,
+          existing.path,
+          existing.url,
+        ),
+        width: existing.width ?? null,
+        height: existing.height ?? null,
+        provider: existing.provider,
+        provider_public_id:
+          existing.provider_public_id ?? null,
+        provider_resource_type:
+          existing.provider_resource_type ?? null,
+        provider_format: existing.provider_format ?? null,
+        provider_version:
+          existing.provider_version ?? null,
+        etag: existing.etag ?? null,
+      });
     }
     throw e;
   }
 
-  return reply.send({ path, url: publicUrlOf(bucket, path, up.secure_url) });
-};
-
-/** POST /storage/uploads/sign-put → S3 yoksa 501 */
-export const signPut: RouteHandler<{ Body: SignPutBody }> = async (_req, reply) => {
-  return reply.code(501).send({ message: "s3_not_configured" });
-};
-
-/** POST /storage/uploads/sign-multipart → Cloudinary unsigned form fields
- *  Not: public_url DÖNDÜRME — gerçek URL Cloudinary yanıtında.
- */
-export const signMultipart: RouteHandler<{ Body: SignMultipartBody }> = async (req, reply) => {
-  const parsed = signMultipartBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    return reply.code(400).send({ error: { message: "invalid_body", issues: parsed.error.flatten() } });
-  }
-
-  const cfg = getCloudinaryConfig();
-  if (!cfg) return reply.code(501).send({ message: "cloudinary_not_configured" });
-  if (!cfg.uploadPreset) return reply.code(501).send({ message: "unsigned_upload_disabled" });
-
-  const { filename, folder } = parsed.data;
-  const clean = (filename || "file").replace(/[^\w.\-]+/g, "_");
-  const publicId = clean.replace(/\.[^.]+$/, ""); // sadece basename
-
-  const upload_url = `https://api.cloudinary.com/v1_1/${cfg.cloudName}/auto/upload`;
-  const fields: Record<string, string> = {
-    upload_preset: cfg.uploadPreset!,
-    folder: folder ?? "",
-    public_id: publicId,
-  };
-  return reply.send({ upload_url, fields });
-};
-
-/* ---------------------------------- ADMIN ---------------------------------- */
-
-export const adminListAssets: RouteHandler<{ Querystring: unknown }> = async (req, reply) => {
-  const parsed = storageListQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    return reply.code(400).send({ error: { message: "invalid_query", issues: parsed.error.flatten() } });
-  }
-  const q = parsed.data;
-
-  const where =
-    and(
-      q.bucket ? eq(storageAssets.bucket, q.bucket) : dsql`1=1`,
-      q.folder != null ? eq(storageAssets.folder, q.folder) : dsql`1=1`,
-      q.mime ? like(storageAssets.mime, `${q.mime}%`) : dsql`1=1`,
-      q.q ? like(storageAssets.name, `%${q.q}%`) : dsql`1=1`,
-    );
-
-  const [{ total }] = await db.select({ total: dsql<number>`COUNT(*)` }).from(storageAssets).where(where);
-
-  const { primary } = parseOrder(q);
-  const rows = await db
-    .select()
-    .from(storageAssets)
-    .where(where)
-    .orderBy(primary)
-    .limit(q.limit)
-    .offset(q.offset);
-
-  reply.header("x-total-count", String(total));
-  reply.header("content-range", `*/${total}`);
-  reply.header("access-control-expose-headers", "x-total-count, content-range");
-
-  return reply.send(rows);
-};
-
-export const adminGetAsset: RouteHandler<{ Params: { id: string } }> = async (req, reply) => {
-  const row = await getAssetById(req.params.id);
-  if (!row) return reply.code(404).send({ error: { message: "not_found" } });
-  return reply.send(row);
-};
-
-export const adminCreateAsset: RouteHandler = async (req, reply) => {
-  const cfg = getCloudinaryConfig();
-  if (!cfg) return reply.code(501).send({ message: "cloudinary_not_configured" });
-
-  const mp: MultipartFile | undefined = await (req as any).file();
-  if (!mp) return reply.code(400).send({ message: "file_required" });
-  const buf = await mp.toBuffer();
-
-  const fields = mp.fields as Record<string, MultipartValue>;
-  const s = (k: string): string | undefined => (fields[k] ? String(fields[k].value) : undefined);
-
-  const bucket = s("bucket") ?? "default";
-  const folder = s("folder") ?? undefined;
-
-  let metadata: Record<string, string> | null = null;
-  const metaRaw = s("metadata");
-  if (metaRaw) {
-    try { metadata = JSON.parse(metaRaw) as Record<string, string>; } catch { metadata = null; }
-  }
-
-  const cleanName = (mp.filename || "file").replace(/[^\w.\-]+/g, "_");
-  const publicIdBase = cleanName.replace(/\.[^.]+$/, "");
-  const up = await uploadBufferAuto(cfg, buf, { folder, publicId: publicIdBase, mime: mp.mimetype }, true);
-
-  const path = folder ? `${folder}/${cleanName}` : cleanName;
-  const recBase = {
-    id: randomUUID(),
-    user_id: (req as any).user?.id ? String((req as any).user.id) : null,
-    name: cleanName,
+  return reply.send({
+    id: recId,
     bucket,
     path,
     folder: folder ?? null,
-    mime: mp.mimetype,
-    size: up.bytes,
+    url: publicUrlOf(bucket, path, up.secure_url),
     width: up.width ?? null,
     height: up.height ?? null,
-    url: up.secure_url,
-    hash: up.etag ?? null,
-    etag: up.etag ?? null,
-    provider: "cloudinary" as const,
+    provider: "cloudinary",
     provider_public_id: up.public_id ?? null,
     provider_resource_type: up.resource_type ?? null,
     provider_format: up.format ?? null,
-    provider_version: typeof up.version === "number" ? up.version : null,
-    metadata, // object veya null
-  };
-  const rec = omitNullish(recBase);
-
-  try {
-    await db.insert(storageAssets).values(rec as any);
-  } catch (e) {
-    if (isDup(e)) {
-      const existing = await getAssetByBucketPath(bucket, path);
-      if (existing) {
-        return reply.code(200).send({
-          ...existing,
-          url: publicUrlOf(existing.bucket, existing.path, existing.url),
-          created_at: existing.created_at,
-          updated_at: existing.updated_at,
-        });
-      }
-    }
-    throw e;
-  }
-
-  return reply.code(201).send({
-    ...recBase,
-    url: publicUrlOf(recBase.bucket, recBase.path, recBase.url),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    provider_version:
+      typeof up.version === "number" ? up.version : null,
+    etag: up.etag ?? null,
   });
 };
 
-export const adminPatchAsset: RouteHandler<{ Params: { id: string }; Body: StorageUpdateInput }> = async (req, reply) => {
-  const parsed = storageUpdateSchema.safeParse(req.body);
+/** POST /storage/uploads/sign-put → S3 yoksa 501 */
+export const signPut: RouteHandler<{ Body: SignPutBody }> = async (
+  _req,
+  reply,
+) => {
+  return reply.code(501).send({ message: "s3_not_configured" });
+};
+
+/** POST /storage/uploads/sign-multipart → Cloudinary unsigned upload */
+export const signMultipart: RouteHandler<{
+  Body: SignMultipartBody;
+}> = async (req, reply) => {
+  const parsed = signMultipartBodySchema.safeParse(req.body);
   if (!parsed.success) {
-    return reply.code(400).send({ error: { message: "invalid_body", issues: parsed.error.flatten() } });
+    return reply.code(400).send({
+      error: {
+        message: "invalid_body",
+        issues: parsed.error.flatten(),
+      },
+    });
   }
 
-  const patch = parsed.data;
-  const sets: Record<string, unknown> = { updated_at: dsql`CURRENT_TIMESTAMP(3)` };
-  const cur = await getAssetById(req.params.id);
-  if (!cur) return reply.code(404).send({ error: { message: "not_found" } });
+  const cfg = getCloudinaryConfig();
+  if (!cfg)
+    return reply
+      .code(501)
+      .send({ message: "cloudinary_not_configured" });
 
-  if (patch.name !== undefined) sets.name = patch.name;
+  // ❌ cfg.uploadPreset TS’te yok
+  // ✅ Farklı isimleri destekle, TS’i de sustur
+  const uploadPreset =
+    (cfg as any).uploadPreset ??
+    (cfg as any).unsignedUploadPreset ??
+    (cfg as any).unsigned_preset ??
+    null;
 
-  if (patch.folder !== undefined) {
-    // Hem uzak (Cloudinary rename) hem DB path/görsel URL update
-    if (cur.provider_public_id) {
-      const baseName = (cur.provider_public_id.split("/").pop() || cur.name).replace(/^\//, "");
-      const newPublicId = patch.folder ? `${patch.folder}/${baseName}` : baseName;
-
-      const renamed = await renameCloudinaryPublicId(
-        cur.provider_public_id,
-        newPublicId,
-        cur.provider_resource_type || "image"
-      );
-
-      sets.folder = patch.folder;
-      sets.path = patch.folder ? `${patch.folder}/${cur.name}` : cur.name;
-      sets.provider_public_id = renamed.public_id ?? newPublicId;
-      sets.url = renamed.secure_url ?? cur.url;
-      sets.provider_version = typeof renamed.version === "number" ? renamed.version : cur.provider_version;
-      sets.provider_format = renamed.format ?? cur.provider_format;
-    } else {
-      // Fallback: sadece DB path taşı
-      const baseName = cur.path.split("/").pop()!;
-      sets.folder = patch.folder;
-      sets.path = patch.folder ? `${patch.folder}/${baseName}` : baseName;
-    }
+  if (!uploadPreset) {
+    return reply
+      .code(501)
+      .send({ message: "unsigned_upload_disabled" });
   }
 
-  if (patch.metadata !== undefined) sets.metadata = patch.metadata;
+  const { filename, folder } = parsed.data;
+  const clean = (filename || "file").replace(/[^\w.\-]+/g, "_");
+  const publicId = clean.replace(/\.[^.]+$/, "");
 
-  await db.update(storageAssets).set(sets).where(eq(storageAssets.id, req.params.id));
-  const fresh = await getAssetById(req.params.id);
-  if (!fresh) return reply.code(404).send({ error: { message: "not_found" } });
+  const upload_url = `https://api.cloudinary.com/v1_1/${(cfg as any).cloudName}/auto/upload`;
 
-  return reply.send(fresh);
-};
+  const fields: Record<string, string> = {
+    upload_preset: uploadPreset,
+    folder: folder ?? "",
+    public_id: publicId,
+  };
 
-export const adminDeleteAsset: RouteHandler<{ Params: { id: string } }> = async (req, reply) => {
-  const row = await getAssetById(req.params.id);
-  if (!row) return reply.code(404).send({ error: { message: "not_found" } });
-  try {
-    const publicId = row.provider_public_id || row.path.replace(/\.[^.]+$/, "");
-    await destroyCloudinaryById(publicId, row.provider_resource_type || undefined);
-  } catch {}
-  await db.delete(storageAssets).where(eq(storageAssets.id, req.params.id));
-  return reply.code(204).send();
-};
-
-export const adminBulkDelete: RouteHandler<{ Body: { ids: string[] } }> = async (req, reply) => {
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
-  let deleted = 0;
-  for (const id of ids) {
-    const row = await getAssetById(id);
-    if (!row) continue;
-    try {
-      const publicId = row.provider_public_id || row.path.replace(/\.[^.]+$/, "");
-      await destroyCloudinaryById(publicId, row.provider_resource_type || undefined);
-    } catch {}
-    await db.delete(storageAssets).where(eq(storageAssets.id, id));
-    deleted++;
-  }
-  return reply.send({ deleted });
-};
-
-export const adminListFolders: RouteHandler = async (_req, reply) => {
-  const rows = await db
-    .select({ folder: storageAssets.folder })
-    .from(storageAssets)
-    .where(dsql`${storageAssets.folder} IS NOT NULL`)
-    .groupBy(storageAssets.folder);
-
-  const folders = rows.map(r => r.folder as string).filter(Boolean);
-  return reply.send(folders);
+  return reply.send({ upload_url, fields });
 };

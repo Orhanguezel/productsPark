@@ -39,7 +39,7 @@ const Dashboard = lazy(() => import("./pages/public/account/Dashboard"));
 const Support = lazy(() => import("./pages/public/Support"));
 const CouponDetailPage = lazy(() => import("./pages/public/CouponDetailPage"));
 const NotFound = lazy(() => import("./pages/public/NotFound"));
-const HomeSettings = lazy(() => import("./pages/admin/HomeSettings"));
+const HomeSettings = lazy(() => import("./pages/admin/home-settings/HomeSettings"));
 const ProductList = lazy(() => import("./pages/admin/product/ProductList"));
 const ProductForm = lazy(() => import("./pages/admin/product/ProductForm"));
 const CategoryList = lazy(() => import("./pages/admin/CategoryList"));

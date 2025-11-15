@@ -6,7 +6,10 @@ import type { Session, User } from "./types";
 export type { Session, User } from "./types";
 
 import type { FromFn } from "../db/from";
-import type { ChannelStatus } from "../realtime/channel";
+import type {
+  ChannelStatus,
+  SubscriptionResult,
+} from "../realtime/channel";
 
 /* ========================= Auth Facade ========================= */
 
@@ -43,13 +46,18 @@ export type AuthFacade = {
   getSession(): Promise<{ data: { session: Session | null } }>;
 
   onAuthStateChange(
-    cb: (event: "SIGNED_IN" | "SIGNED_OUT" | "TOKEN_REFRESHED", session: Session | null) => void
+    cb: (
+      event: "SIGNED_IN" | "SIGNED_OUT" | "TOKEN_REFRESHED",
+      session: Session | null
+    ) => void
   ): { data: { subscription: { unsubscribe(): void } } };
 
   signOut(): Promise<void>;
 
   getUser(): Promise<{ data: { user: User | null } }>;
-  getStatus(): Promise<{ data: { authenticated: boolean; is_admin: boolean } }>;
+  getStatus(): Promise<{
+    data: { authenticated: boolean; is_admin: boolean };
+  }>;
 
   resetPasswordForEmail(
     email: string,
@@ -58,7 +66,10 @@ export type AuthFacade = {
 
   updateUser(
     body: Partial<User> & { password?: string }
-  ): Promise<{ data?: { user: User | null }; error: { message: string } | null }>;
+  ): Promise<{
+    data?: { user: User | null };
+    error: { message: string } | null;
+  }>;
 };
 
 /* ========================= Functions Facade ========================= */
@@ -112,26 +123,45 @@ export interface FunctionsFacade {
     args?: Readonly<{ body?: unknown }>
   ): InvokeResult<TestSmtpResult>;
 
- 
-
-invoke(
+  invoke(
     name: "turkpin-balance",
     args?: Readonly<{ body?: unknown }>
   ): InvokeResult<BalanceResult>;
 
   invoke(
     name: "turkpin-game-list",
-    args?: Readonly<{ body?: { providerId: string; listType: "epin" | "topup" } }>
-  ): InvokeResult<{ success: boolean; games?: { id: string; name: string }[]; error?: string }>;
+    args?: Readonly<{
+      body?: { providerId: string; listType: "epin" | "topup" };
+    }>
+  ): InvokeResult<{
+    success: boolean;
+    games?: { id: string; name: string }[];
+    error?: string;
+  }>;
 
   invoke(
     name: "turkpin-product-list",
-    args?: Readonly<{ body?: { providerId: string; gameId: string; listType: "epin" | "topup" } }>
+    args?: Readonly<{
+      body?: {
+        providerId: string;
+        gameId: string;
+        listType: "epin" | "topup";
+      };
+    }>
   ): InvokeResult<{
     success: boolean;
     products?: {
-      id: string; name: string; price: number; stock: number; min_order: number; max_order: number;
-      tax_type: number; pre_order: boolean; min_barem?: number; max_barem?: number; barem_step?: number;
+      id: string;
+      name: string;
+      price: number;
+      stock: number;
+      min_order: number;
+      max_order: number;
+      tax_type: number;
+      pre_order: boolean;
+      min_barem?: number;
+      max_barem?: number;
+      barem_step?: number;
     }[];
     error?: string;
   }>;
@@ -141,18 +171,33 @@ invoke(
     args?: Readonly<{ body?: unknown }>
   ): InvokeResult<BalanceResult>;
 
-   // ✅ Backup fonksiyonu (opsiyonel overload – sadece DX için)
+  // ✅ Backup fonksiyonu (opsiyonel overload – sadece DX için)
   invoke(
     name: "backup-database",
     args?: Readonly<{ body?: { format: "json" | "sql" } }>
   ): InvokeResult<string>;
 
-
-
- // fallback generic
-  invoke<T = unknown>(name: string, args?: Readonly<{ body?: unknown }>): InvokeResult<T>;
-
+  // fallback generic
+  invoke<T = unknown>(
+    name: string,
+    args?: Readonly<{ body?: unknown }>
+  ): InvokeResult<T>;
 }
+
+/* ========================= Realtime Channel tipi ========================= */
+
+export type ChannelLike = {
+  on<T = unknown>(event: string, cb: (payload: T) => void): ChannelLike;
+  on<T = unknown>(
+    event: string,
+    filter: Record<string, unknown>,
+    cb: (payload: T) => void
+  ): ChannelLike;
+
+  subscribe(
+    cb?: (s: ChannelStatus) => void
+  ): Promise<SubscriptionResult>;
+};
 
 /* ========================= Metahub kök tipi ========================= */
 
@@ -166,15 +211,9 @@ export type Metahub = {
   // Projedeki from() imzası
   from: FromFn;
 
-  channel: (
-    name: string
-  ) => {
-    on(event: string, cb: (payload: unknown) => void): unknown;
-    subscribe(
-      cb?: (s: ChannelStatus) => void
-    ): Promise<{ data: { subscription: { unsubscribe(): void } }; error: null }>;
-  };
+  channel: (name: string) => ChannelLike;
 
+  // Runtime'de bizim realtime.removeChannel ile eşleşecek (parametreyi geniş bırakıyoruz)
   removeChannel: (ch: unknown) => void;
   removeAllChannels: () => void;
 };

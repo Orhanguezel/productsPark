@@ -3,6 +3,24 @@
 // =============================================================
 import { z } from "zod";
 
+const toNullIfEmpty = (v: unknown) => {
+  if (typeof v === "string" && v.trim() === "") return null;
+  return v;
+};
+
+const nullableUuid = () =>
+  z.preprocess(
+    toNullIfEmpty,
+    z.string().uuid().optional().nullable()
+  );
+
+const nullableUrl = () =>
+  z.preprocess(
+    toNullIfEmpty,
+    z.string().url().max(500).optional().nullable()
+  );
+
+/** products */
 /** products */
 export const productCreateSchema = z.object({
   id: z.string().uuid().optional(),
@@ -20,16 +38,14 @@ export const productCreateSchema = z.object({
   cost: z.coerce.number().optional().nullable(),
 
   // Legacy URL (korunuyor)
-  image_url: z.string().url().max(500).optional().nullable(),
+  image_url: nullableUrl(),
 
   // Yeni storage alanları
-  featured_image: z.string().url().max(500).optional().nullable(),
-  // Cloudinary/S3 public_id gibi UUID olmayan değerleri destekle
+  featured_image: nullableUrl(),
   featured_image_asset_id: z.string().min(1).max(200).optional().nullable(),
   featured_image_alt: z.string().max(255).optional().nullable(),
 
   gallery_urls: z.array(z.string().url()).optional().nullable(),
-  // Provider public_id’leri UUID olmayabilir
   gallery_asset_ids: z.array(z.string().min(1)).optional().nullable(),
 
   features: z.array(z.string()).optional().nullable(),
@@ -38,7 +54,10 @@ export const productCreateSchema = z.object({
   review_count: z.coerce.number().int().min(0).optional(),
 
   product_type: z.string().max(50).optional().nullable(),
-  delivery_type: z.enum(["manual", "auto_stock", "file", "api"]).optional().nullable(),
+  delivery_type: z
+    .enum(["manual", "auto_stock", "file", "api"])
+    .optional()
+    .nullable(),
 
   custom_fields: z
     .array(
@@ -63,7 +82,8 @@ export const productCreateSchema = z.object({
     .optional()
     .nullable(),
 
-  api_provider_id: z.string().uuid().optional().nullable(),
+  // ✅ Boş bırakılırsa null say
+  api_provider_id: nullableUuid(),
   api_product_id: z.string().max(64).optional().nullable(),
   api_quantity: z.coerce.number().int().optional().nullable(),
 
@@ -73,7 +93,8 @@ export const productCreateSchema = z.object({
   article_content: z.string().optional().nullable(),
   article_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
 
-  demo_url: z.string().url().max(500).optional().nullable(),
+  // ✅ Boş bırakılırsa null say
+  demo_url: nullableUrl(),
   demo_embed_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
   demo_button_text: z.string().max(100).optional().nullable(),
 
@@ -96,7 +117,6 @@ export const productCreateSchema = z.object({
 
   requires_shipping: z.coerce.number().int().min(0).max(1).optional().default(1),
 
-  // opsiyoneller
   is_digital: z.coerce.number().int().min(0).max(1).optional().default(0),
   auto_delivery_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
   pre_order_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
@@ -107,7 +127,9 @@ export const productCreateSchema = z.object({
   barem_step: z.coerce.number().int().optional().nullable(),
   tax_type: z.coerce.number().int().optional().nullable(),
 });
+
 export const productUpdateSchema = productCreateSchema.partial();
+
 
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;

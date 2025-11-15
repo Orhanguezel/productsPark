@@ -39,13 +39,12 @@ import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoint
 import { useListApiProvidersQuery } from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
 
 // ---- RTK (Public read-only – listeleme) ----
-// yeni yapıya göre ayrı endpoint dosyalarından çekiyoruz
 import { useListProductFaqsQuery } from "@/integrations/metahub/rtk/endpoints/product_faqs.endpoints";
 import { useListProductReviewsQuery } from "@/integrations/metahub/rtk/endpoints/product_reviews.endpoints";
 import { useListProductStockQuery } from "@/integrations/metahub/rtk/endpoints/product_stock.endpoints";
 
 // ---- RTK (Storage - ADMIN) ----
-import { useUploadStorageAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 
 // ---- Types ----
 import type {
@@ -94,15 +93,22 @@ const escapeHtml = (s: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const safeFolder = (s: string) => (s || "").replace(/[^a-z0-9/_-]/g, "") || "products";
+const safeFolder = (s: string) =>
+  (s || "").replace(/[^a-z0-9/_-]/g, "") || "products";
 
 type QuillEditor = {
   getSelection: (focus?: boolean) => { index: number } | null;
   clipboard: { dangerouslyPasteHTML: (index: number, html: string) => void };
-  insertEmbed: (index: number, type: string, value: string, source?: string) => void;
+  insertEmbed: (
+    index: number,
+    type: string,
+    value: string,
+    source?: string
+  ) => void;
   getLength: () => number;
   setSelection: (index: number, length: number) => void;
 };
+
 const isQuillEditor = (x: unknown): x is QuillEditor =>
   !!x &&
   typeof (x as QuillEditor).getSelection === "function" &&
@@ -150,10 +156,8 @@ export default function ProductForm() {
   const contentImageInputRef = useRef<HTMLInputElement | null>(null);
 
   // ------------------ Queries ------------------
-  const { data: product, isFetching: fetchingProduct } = useGetProductAdminQuery(
-    idParam as string,
-    { skip: isCreate }
-  );
+  const { data: product, isFetching: fetchingProduct } =
+    useGetProductAdminQuery(idParam as string, { skip: isCreate });
   const { data: categories = [] } = useListCategoriesAdminQuery();
 
   // API Providers
@@ -183,10 +187,11 @@ export default function ProductForm() {
       .filter((x) => x.id && x.name);
   }, [apiProvidersRaw]);
 
-  const { data: faqsRead = [], isFetching: fetchingFaqs } = useListProductFaqsQuery(
-    { product_id: idParam as string, only_active: false },
-    { skip: isCreate }
-  );
+  const { data: faqsRead = [], isFetching: fetchingFaqs } =
+    useListProductFaqsQuery(
+      { product_id: idParam as string, only_active: false },
+      { skip: isCreate }
+    );
   const { data: reviewsRead = [], isFetching: fetchingReviews } =
     useListProductReviewsQuery(
       { product_id: idParam as string, only_active: false },
@@ -200,9 +205,7 @@ export default function ProductForm() {
 
   const { data: usedStock = [] } = useListUsedStockAdminQuery(
     idParam as string,
-    {
-      skip: isCreate,
-    }
+    { skip: isCreate }
   );
 
   // ------------------ Mutations ------------------
@@ -218,8 +221,7 @@ export default function ProductForm() {
   const [setProductStock, { isLoading: savingStock }] =
     useSetProductStockAdminMutation();
 
-  const [uploadAsset, { isLoading: uploading }] =
-    useUploadStorageAssetAdminMutation();
+  const [uploadAsset, { isLoading: uploading }] = useCreateAssetAdminMutation();
 
   // ------------------ Local UI State ------------------
   const [loading, setLoading] = useState(false);
@@ -251,12 +253,14 @@ export default function ProductForm() {
   >([]);
   const [stockList, setStockList] = useState("");
 
+  // ⭐ review_count alanına kullanıcı dokundu mu?
+  const [reviewCountDirty, setReviewCountDirty] = useState(false);
+
+  // ⭐ Önemli: price / stock_quantity / review_count burada TANIMSIZ;
+  // böylece input'lar boş + placeholder ile gelir.
   const [formData, setFormData] = useState<Partial<ProductAdmin>>({
     name: "",
     slug: "",
-    price: 0,
-    original_price: null,
-    stock_quantity: 0,
     category_id: "",
 
     image_url: "",
@@ -297,8 +301,6 @@ export default function ProductForm() {
     pre_order_enabled: 0,
     tax_type: 0,
 
-    review_count: 0,
-
     article_content: "",
     article_enabled: 0,
   });
@@ -328,11 +330,17 @@ export default function ProductForm() {
     setCustomFields(
       (product.custom_fields as unknown as CustomField[]) ?? []
     );
-    setQuantityOptions(product.quantity_options as { quantity: number; price: number }[] ?? []);
+    setQuantityOptions(
+      (product.quantity_options as { quantity: number; price: number }[]) ??
+        []
+    );
     setBadges((product.badges as Badge[]) ?? []);
+
+    // Edit moduna girince alan temiz: kullanıcı Satış Sayısı'na dokunmadı
+    setReviewCountDirty(false);
   }, [isCreate, product, categories]);
 
-  // name → slug
+  // name → slug (auto, kullanıcı slug'a dokunana kadar)
   const slugTouchedRef = useRef(false);
   useEffect(() => {
     if (!slugTouchedRef.current) {
@@ -373,12 +381,15 @@ export default function ProductForm() {
       review_date: (r.review_date || "").slice(0, 10),
       is_active: (r.is_active ? 1 : 0) as 0 | 1,
     }));
+
   const mapFaqsToInput = (rows: ProductFaqRow[]): FAQInput[] =>
     (rows ?? []).map((f, i) => ({
       id: f.id,
       question: f.question ?? "",
       answer: f.answer ?? "",
-      display_order: Number.isFinite(f.display_order) ? f.display_order : i,
+      display_order: Number.isFinite(f.display_order)
+        ? (f.display_order as number)
+        : i,
       is_active: (f.is_active ? 1 : 0) as 0 | 1,
     }));
 
@@ -448,7 +459,8 @@ export default function ProductForm() {
           data?: { message?: string; error?: { message?: string } };
         })?.data?.message ||
         (err as {
-          data?: { error?: { message?: string } };
+          data?: { error?: { message?: string };
+          };
         })?.data?.error?.message;
       toast({
         title: "Hata",
@@ -594,6 +606,11 @@ export default function ProductForm() {
     val: ProductAdmin[K] | unknown
   ) => {
     setFormData((f) => ({ ...f, [key]: val as ProductAdmin[K] }));
+
+    // Kullanıcı Satış Sayısı alanını değiştirirse işaretle
+    if (key === "review_count") {
+      setReviewCountDirty(true);
+    }
   };
 
   const handleCopyProduct = () => {
@@ -620,7 +637,33 @@ export default function ProductForm() {
       (selectedParentId ? selectedParentId : null);
     const extra = formData as Partial<ExtraProductFields>;
 
-    const basePayload: UpsertProductBody & PatchProductBody = {
+    // ---------- Satış sayısı FE → BE mantığı ----------
+    const rawReview: any = formData.review_count;
+
+    let reviewCountForCreate: number = 0;
+    let reviewCountForUpdate: number | undefined = undefined;
+
+    if (isCreate || isCopyMode) {
+      // Yeni ürün: her zaman body'de olsun
+      reviewCountForCreate =
+        rawReview === undefined ||
+        rawReview === null ||
+        rawReview === ""
+          ? 0
+          : Number(rawReview) || 0;
+    } else if (reviewCountDirty) {
+      // Update: kullanıcı alanı değiştirdiyse patch ile gönder
+      reviewCountForUpdate =
+        rawReview === undefined ||
+        rawReview === null ||
+        rawReview === ""
+          ? 0
+          : Number(rawReview) || 0;
+    }
+    // reviewCountDirty = false ise update body'de review_count hiç olmayacak
+    // → backend mevcut değeri korur.
+
+    const commonPayload: Omit<UpsertProductBody, "review_count"> = {
       name: String(formData.name ?? "").trim(),
       slug: String(formData.slug ?? "").trim(),
 
@@ -640,10 +683,15 @@ export default function ProductForm() {
       featured_image: (formData.featured_image ?? null) as string | null,
       featured_image_asset_id: (formData.featured_image_asset_id ??
         null) as string | null,
-      featured_image_alt: (formData.featured_image_alt ?? null) as string | null,
+      featured_image_alt: (formData.featured_image_alt ??
+        null) as string | null,
       gallery_urls: (formData.gallery_urls ?? null) as string[] | null,
       gallery_asset_ids: (formData.gallery_asset_ids ??
         null) as string[] | null,
+
+      // SEO alanları
+      meta_title: (formData as any).meta_title ?? null,
+      meta_description: (formData as any).meta_description ?? null,
 
       is_active: !!formData.is_active,
       show_on_homepage: !!formData.show_on_homepage,
@@ -663,10 +711,12 @@ export default function ProductForm() {
       article_enabled: !!formData.article_enabled,
       demo_url: (formData.demo_url ?? null) as string | null,
       demo_embed_enabled: !!formData.demo_embed_enabled,
-      demo_button_text: (formData.demo_button_text ?? null) as string | null,
+      demo_button_text: (formData.demo_button_text ??
+        null) as string | null,
 
       badges: (badges ?? null) as UpsertProductBody["badges"],
-      custom_fields: (customFields ?? null) as UpsertProductBody["custom_fields"],
+      custom_fields: (customFields ??
+        null) as UpsertProductBody["custom_fields"],
       quantity_options: (quantityOptions ??
         null) as UpsertProductBody["quantity_options"],
 
@@ -682,8 +732,6 @@ export default function ProductForm() {
       epin_product_id: (formData.epin_product_id ?? null) as string | null,
       auto_delivery_enabled: !!formData.auto_delivery_enabled,
       pre_order_enabled: !!formData.pre_order_enabled,
-
-      review_count: Number(formData.review_count ?? 0),
 
       // ---- Extra fields
       brand_id: extra.brand_id ?? null,
@@ -701,14 +749,22 @@ export default function ProductForm() {
       let productId = idParam as string | undefined;
 
       if (isCreate || isCopyMode) {
-        const created = await createProduct(
-          basePayload as UpsertProductBody
-        ).unwrap();
+        const createPayload: UpsertProductBody = {
+          ...commonPayload,
+          review_count: reviewCountForCreate,
+        };
+        const created = await createProduct(createPayload).unwrap();
         productId = created.id;
       } else {
+        const updatePayload: PatchProductBody = {
+          ...commonPayload,
+          ...(reviewCountForUpdate !== undefined
+            ? { review_count: reviewCountForUpdate }
+            : {}),
+        };
         await updateProduct({
           id: idParam as string,
-          body: basePayload as PatchProductBody,
+          body: updatePayload,
         }).unwrap();
         productId = idParam as string;
       }
@@ -745,11 +801,10 @@ export default function ProductForm() {
           updated_at: undefined,
         }));
 
-        // NOTE:
-        // Şu an hala replace uçlarını kullanıyoruz.
-        // Section’lara admin CRUD eklediğinde, bu kısım sadeleşebilir
-        // (ya da sadece yeni eklenen/değişenler için kullanılabilir).
-        await replaceReviews({ id: productId, reviews: reviewsPayload }).unwrap();
+        await replaceReviews({
+          id: productId,
+          reviews: reviewsPayload,
+        }).unwrap();
         await replaceFaqs({ id: productId, faqs: faqsPayload }).unwrap();
       }
 
@@ -867,10 +922,18 @@ export default function ProductForm() {
                   <TabsTrigger value="customization">
                     Ürün Özelleştirme
                   </TabsTrigger>
-                  <TabsTrigger value="demo">Demo & Önizleme</TabsTrigger>
-                  <TabsTrigger value="faq">Sıkça Sorulan Sorular</TabsTrigger>
-                  <TabsTrigger value="reviews">Müşteri Yorumları</TabsTrigger>
-                  <TabsTrigger value="delivery">Teslimat Ayarları</TabsTrigger>
+                  <TabsTrigger value="demo">
+                    Demo & Önizleme
+                  </TabsTrigger>
+                  <TabsTrigger value="faq">
+                    Sıkça Sorulan Sorular
+                  </TabsTrigger>
+                  <TabsTrigger value="reviews">
+                    Müşteri Yorumları
+                  </TabsTrigger>
+                  <TabsTrigger value="delivery">
+                    Teslimat Ayarları
+                  </TabsTrigger>
                   <TabsTrigger value="turkpin">EPIN</TabsTrigger>
                   <TabsTrigger value="article">Makale Ayarı</TabsTrigger>
                 </TabsList>
@@ -895,7 +958,10 @@ export default function ProductForm() {
                 </TabsContent>
 
                 <TabsContent value="reviews" className="space-y-4 mt-6">
-                  <ReviewsSection reviews={reviews} setReviews={setReviews} />
+                  <ReviewsSection
+                    reviews={reviews}
+                    setReviews={setReviews}
+                  />
                 </TabsContent>
 
                 <TabsContent value="delivery" className="space-y-6 mt-6">
@@ -944,11 +1010,13 @@ export default function ProductForm() {
                           file: f,
                           bucket: STORAGE_BUCKET,
                           folder,
-                          metadata: { module: "products", type: "file" },
+                          metadata: {
+                            module: "products",
+                            type: "file",
+                          },
                         }).unwrap();
 
-                        const url =
-                          (asset as UploadedAssetLike)?.url || "";
+                        const url = (asset as UploadedAssetLike)?.url || "";
                         if (!url)
                           throw new Error("Yükleme başarısız (url yok)");
                         setFormData((fd) => ({

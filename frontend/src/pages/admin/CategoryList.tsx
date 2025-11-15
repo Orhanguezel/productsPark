@@ -5,18 +5,30 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { toast } from "@/hooks/use-toast";
 import {
   useListCategoriesAdminQuery,
+  useGetCategoryAdminByIdQuery,
   useDeleteCategoryAdminMutation,
   useToggleActiveCategoryAdminMutation,
   useToggleFeaturedCategoryAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
-import {
-  useGetStorageAssetAdminQuery,
-} from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 import type { Category } from "@/integrations/metahub/db/types/categories";
 import { Switch } from "@/components/ui/switch";
 
@@ -26,28 +38,36 @@ type FilterTab = "all" | "main" | "sub";
 const slugify = (v: string): string =>
   (v || "")
     .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ç/g, "c")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-/** Küçük thumb bileşeni: url yoksa asset_id → storage’tan url getirir */
+/** Thumbnail – nokta atışı: önce list’ten gelen url, yoksa tekil kategoriden url */
 type AssetThumbProps = {
+  categoryId: string;
   imageUrl: string | null;
-  imageAssetId?: string | null;
   alt: string;
   className?: string;
 };
-function AssetThumb({ imageUrl, imageAssetId, alt, className }: AssetThumbProps) {
-  // url varsa sorgu atma; yoksa asset id ile tek kayıt getir
-  const skip = Boolean(imageUrl === null || imageUrl === undefined ? !imageAssetId : true);
-  const { data: asset } = useGetStorageAssetAdminQuery(imageAssetId as string, {
-    skip, // imageUrl varsa ya da assetId yoksa sorgu atma
+
+function AssetThumb({ categoryId, imageUrl, alt, className }: AssetThumbProps) {
+  // list response image_url boşsa, tekil endpoint’ten tam satırı çek
+  const { data: catDetail } = useGetCategoryAdminByIdQuery(categoryId, {
+    skip: !!imageUrl, // imageUrl varsa ekstra istek atma
   });
 
-  const src = imageUrl ?? asset?.url ?? null;
+  const src = imageUrl ?? catDetail?.image_url ?? null;
 
-  if (!src) return <div className="h-8 w-8 rounded border bg-muted" />;
+  if (!src) {
+    return <div className="h-8 w-8 rounded border bg-muted" />;
+  }
 
   return (
     <img
@@ -56,7 +76,7 @@ function AssetThumb({ imageUrl, imageAssetId, alt, className }: AssetThumbProps)
       className={className}
       onError={(e) => {
         const el = e.currentTarget;
-        el.onerror = null; // sonsuz döngüyü engelle
+        el.onerror = null;
         el.src = "https://placehold.co/64x64?text=IMG";
       }}
     />
@@ -66,14 +86,14 @@ function AssetThumb({ imageUrl, imageAssetId, alt, className }: AssetThumbProps)
 export default function CategoryList() {
   const navigate = useNavigate();
 
-  const { data = [], isLoading, isFetching, refetch } = useListCategoriesAdminQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
-  });
+  const { data = [], isLoading, isFetching, refetch } =
+    useListCategoriesAdminQuery(undefined, {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    });
 
   useEffect(() => {
-    // mount’ta network’ten çek
     refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -86,17 +106,19 @@ export default function CategoryList() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // UI güvenli kopya: slug & booleans & img fallback
+  // UI güvenli kopya: slug & booleans & img alanı
   const rows: Category[] = useMemo(
     () =>
-      data.map((c) => ({
+      (data as Category[]).map((c) => ({
         ...c,
         slug: c.slug && c.slug.trim() ? c.slug : slugify(c.name),
         is_active: c.is_active ?? true,
         is_featured: c.is_featured ?? false,
         image_url: c.image_url ?? null,
+        image_asset_id: c.image_asset_id ?? null,
+        image_alt: c.image_alt ?? null,
       })),
-    [data],
+    [data]
   );
 
   const parentName = useMemo(() => {
@@ -112,34 +134,59 @@ export default function CategoryList() {
   }, [rows, filter]);
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
-  const pageItems = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const pageItems = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   useEffect(() => setCurrentPage(1), [filter]);
 
   const onDelete = async (id: string) => {
-    if (!confirm("Bu kategoriyi silmek istediğinizden emin misiniz?")) return;
+    if (!confirm("Bu kategoriyi silmek istediğinizden emin misiniz?"))
+      return;
     try {
       await delCat(id).unwrap();
-      toast({ title: "Başarılı", description: "Kategori silindi." });
+      toast({
+        title: "Başarılı",
+        description: "Kategori silindi.",
+      });
     } catch (e) {
       console.error(e);
-      toast({ title: "Hata", description: "Kategori silinemedi.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Kategori silinemedi.",
+        variant: "destructive",
+      });
     }
   };
 
   const onToggleActive = async (c: Category) => {
     try {
-      await toggleActive({ id: c.id, is_active: !c.is_active }).unwrap();
+      await toggleActive({
+        id: c.id,
+        is_active: !c.is_active,
+      }).unwrap();
     } catch {
-      toast({ title: "Hata", description: "Aktif/Pasif işlemi başarısız.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Aktif/Pasif işlemi başarısız.",
+        variant: "destructive",
+      });
     }
   };
 
   const onToggleFeatured = async (c: Category) => {
     try {
-      await toggleFeatured({ id: c.id, is_featured: !c.is_featured }).unwrap();
+      await toggleFeatured({
+        id: c.id,
+        is_featured: !c.is_featured,
+      }).unwrap();
     } catch {
-      toast({ title: "Hata", description: "Öne çıkarma işlemi başarısız.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Öne çıkarma işlemi başarısız.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -153,11 +200,22 @@ export default function CategoryList() {
           </Button>
         </div>
 
-        <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterTab)}>
+        <Tabs
+          value={filter}
+          onValueChange={(v) => setFilter(v as FilterTab)}
+        >
           <TabsList>
-            <TabsTrigger value="all">Tümü ({rows.length})</TabsTrigger>
-            <TabsTrigger value="main">Ana Kategoriler ({rows.filter(c => c.parent_id === null).length})</TabsTrigger>
-            <TabsTrigger value="sub">Alt Kategoriler ({rows.filter(c => c.parent_id !== null).length})</TabsTrigger>
+            <TabsTrigger value="all">
+              Tümü ({rows.length})
+            </TabsTrigger>
+            <TabsTrigger value="main">
+              Ana Kategoriler (
+              {rows.filter((c) => c.parent_id === null).length})
+            </TabsTrigger>
+            <TabsTrigger value="sub">
+              Alt Kategoriler (
+              {rows.filter((c) => c.parent_id !== null).length})
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -182,26 +240,54 @@ export default function CategoryList() {
                   <TableRow key={c.id}>
                     <TableCell>
                       <AssetThumb
+                        categoryId={c.id}
                         imageUrl={c.image_url}
-                        imageAssetId={c.image_asset_id}
                         alt={c.image_alt || c.name}
                         className="h-8 w-8 rounded object-cover border"
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell>{c.parent_id ? parentName.get(c.parent_id) || "—" : "—"}</TableCell>
-                    <TableCell>{c.slug && c.slug.trim() ? c.slug : "—"}</TableCell>
-                    <TableCell>
-                      <Switch checked={!!c.is_active} onCheckedChange={() => onToggleActive(c)} />
+                    <TableCell className="font-medium">
+                      {c.name}
                     </TableCell>
                     <TableCell>
-                      <Switch checked={!!c.is_featured} onCheckedChange={() => onToggleFeatured(c)} />
+                      {c.parent_id
+                        ? parentName.get(c.parent_id) || "—"
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {c.slug && c.slug.trim() ? c.slug : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={!!c.is_active}
+                        onCheckedChange={() => onToggleActive(c)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={!!c.is_featured}
+                        onCheckedChange={() =>
+                          onToggleFeatured(c)
+                        }
+                      />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/categories/edit/${c.id}`)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/admin/categories/edit/${c.id}`
+                          )
+                        }
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => onDelete(c.id)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDelete(c.id)}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
@@ -222,7 +308,10 @@ export default function CategoryList() {
                       }}
                     />
                   </PaginationItem>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  {Array.from(
+                    { length: totalPages },
+                    (_, i) => i + 1
+                  ).map((p) => (
                     <PaginationItem key={p}>
                       <PaginationLink
                         href="#"
@@ -241,7 +330,9 @@ export default function CategoryList() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        setCurrentPage((p) => Math.min(totalPages, p + 1));
+                        setCurrentPage((p) =>
+                          Math.min(totalPages, p + 1)
+                        );
                       }}
                     />
                   </PaginationItem>

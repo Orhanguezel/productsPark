@@ -230,9 +230,20 @@ export const adminGetProduct: RouteHandler = async (req, reply) => {
   return reply.send(normalizeProduct(rows[0]));
 };
 
+/* ========================================================= */
+/* CREATE: review_count ham body'den manuel inject           */
+/* ========================================================= */
 export const adminCreateProduct: RouteHandler = async (req, reply) => {
   try {
-    const input = productCreateSchema.parse(req.body ?? {});
+    const raw = (req.body ?? {}) as any;
+    const input = productCreateSchema.parse(raw);
+
+    // ham body'den satış sayısını al
+    const rcRaw = raw.review_count;
+    const reviewCount =
+      rcRaw === undefined || rcRaw === null || rcRaw === ""
+        ? 0
+        : Number(rcRaw) || 0;
 
     // FK guard (category)
     if (input.category_id) {
@@ -257,6 +268,8 @@ export const adminCreateProduct: RouteHandler = async (req, reply) => {
     const id = input.id ?? randomUUID();
     await (db.insert(products) as any).values({
       ...input,
+      // Schema'dan gelen varsayılan review_count'u ez
+      review_count: reviewCount,
       ...hydrated,
       id,
       created_at: now(),
@@ -293,11 +306,22 @@ export const adminCreateProduct: RouteHandler = async (req, reply) => {
   }
 };
 
+/* ========================================================= */
+/* UPDATE: review_count sadece body'de gelirse güncelle      */
+/* ========================================================= */
 export const adminUpdateProduct: RouteHandler = async (req, reply) => {
   const { id } = req.params as { id: string };
   try {
-    const patch = productUpdateSchema.parse(req.body ?? {});
+    const raw = (req.body ?? {}) as any;
 
+    // Zod parse
+    const parsed = productUpdateSchema.parse(raw);
+
+    // ⚠ patch içinden review_count'u tamamen söküyoruz
+    // Böylece schema default 0 getiriyorsa bile DB'ye yazmayacağız.
+    const { review_count: _ignoredReviewCount, ...patch } = parsed as any;
+
+    // kategori FK kontrolü
     if (patch.category_id) {
       const [cat] = await db
         .select({ id: categories.id })
@@ -315,10 +339,29 @@ export const adminUpdateProduct: RouteHandler = async (req, reply) => {
           });
     }
 
+    // ham body'den satış sayısını çek (opsiyonel)
+    let reviewPatch: number | undefined;
+    if (Object.prototype.hasOwnProperty.call(raw, "review_count")) {
+      const val = raw.review_count;
+      if (val === null || val === "") {
+        reviewPatch = 0;
+      } else {
+        const n = Number(val);
+        if (!Number.isNaN(n)) {
+          reviewPatch = n;
+        }
+      }
+    }
+
     const hydrated = await hydrateAssetsFromStorage(patch);
 
     await (db.update(products) as any)
-      .set({ ...patch, ...hydrated, updated_at: now() })
+      .set({
+        ...patch,
+        ...(reviewPatch !== undefined ? { review_count: reviewPatch } : {}),
+        ...hydrated,
+        updated_at: now(),
+      })
       .where(eq(products.id, id));
 
     const rows = await db

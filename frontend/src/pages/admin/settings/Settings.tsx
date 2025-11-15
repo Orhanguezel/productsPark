@@ -10,16 +10,16 @@ import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { metahub } from "@/integrations/metahub/client";
 
-import GeneralSettingsCard from "./GeneralSettingsCard";
-import SeoSettingsCard from "./SeoSettingsCard";
-import SmtpSettingsCard from "./SmtpSettingsCard";
-import EmailTemplatesManager from "./EmailTemplatesManager";
-import PaymentSettingsCard from "./PaymentSettingsCard";
-import TelegramSettingsCard from "./TelegramSettingsCard";
-import IntegrationsSettingsCard from "./IntegrationsSettingsCard";
+import GeneralSettingsCard from "./components/GeneralSettingsCard";
+import SeoSettingsCard from "./components/SeoSettingsCard";
+import SmtpSettingsCard from "./components/SmtpSettingsCard";
+import EmailTemplatesManager from "./components/EmailTemplatesManager";
+import PaymentSettingsCard from "./components/PaymentSettingsCard";
+import TelegramSettingsCard from "./components/TelegramSettingsCard";
+import IntegrationsSettingsCard from "./components/IntegrationsSettingsCard";
 import PopupManagement from "../PopupManagement";
-import TopbarManagement from "./TopbarManagement";
-import FooterSettingsCard from "./FooterSettingsCard";
+import TopbarManagement from "./components/TopbarManagement";
+import FooterSettingsCard from "./components/FooterSettingsCard";
 
 // PUBLIC (key ile provider çekmek için)
 import { useGetPaymentProviderByKeyQuery } from "@/integrations/metahub/rtk/endpoints/payment_providers.endpoints";

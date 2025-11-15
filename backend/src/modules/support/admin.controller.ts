@@ -1,3 +1,5 @@
+// src/modules/support/admin.controller.ts
+
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { db } from "@/db/client";
 import { SupportRepo } from "./repository";
@@ -9,6 +11,7 @@ import {
   adminCreateReplyBodySchema,
   adminActionSchema,
 } from "./validation";
+import { fireTicketRepliedEventsForTicket } from "./controller";
 
 export const SupportAdminController = {
   /** GET /admin/support_tickets */
@@ -88,7 +91,9 @@ export const SupportAdminController = {
       const { id, action } = req.params as { id: string; action: string };
       const act = adminActionSchema.parse(action);
       const status = act === "close" ? "closed" : "open";
-      const updated = await SupportRepo.updateTicket(id, { status: status as any });
+      const updated = await SupportRepo.updateTicket(id, {
+        status: status as any,
+      });
       if (!updated) {
         reply.code(404);
         return { message: "Kayıt bulunamadı." };
@@ -126,7 +131,20 @@ export const SupportAdminController = {
       });
 
       // ✅ Admin yanıtı → "in_progress"
-      await SupportRepo.updateTicket(body.ticket_id, { status: "in_progress" as any });
+      await SupportRepo.updateTicket(body.ticket_id, {
+        status: "in_progress" as any,
+      });
+
+      // 🔔 Admin yanıtı → notification + mail
+      try {
+        await fireTicketRepliedEventsForTicket({
+          req,
+          ticketId: body.ticket_id,
+          replyMessage: body.message,
+        });
+      } catch (err) {
+        req.log.error({ err }, "admin_ticket_replied_side_effects_failed");
+      }
 
       reply.code(201);
       return created;

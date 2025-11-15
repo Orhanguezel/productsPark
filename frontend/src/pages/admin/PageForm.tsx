@@ -21,7 +21,7 @@ import {
   useCreateCustomPageAdminMutation,
   useUpdateCustomPageAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
-import { useUploadStorageAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 import type { UpsertCustomPageBody } from "@/integrations/metahub/db/types/customPages";
 
 /* ---------------- helpers ---------------- */
@@ -32,12 +32,13 @@ const slugify = (v: string) =>
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "");
 
-const stripHtml = (s: string) => s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+const stripHtml = (s: string) =>
+  (s || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 
-const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
+const clamp = (n: number, min: number, max: number) =>
+  Math.min(Math.max(n, min), max);
 
 const pickUrlAndId = (res: any) => {
-  // Farklı backend cevapları için esnek alan seçimi
   const url =
     res?.url ||
     res?.public_url ||
@@ -78,14 +79,20 @@ export default function PageForm() {
   const isEdit = Boolean(id);
 
   // Detay + liste (slug çakışması kontrolü için)
-  const { data: pageData, isFetching } = useGetCustomPageAdminByIdQuery(id as string, { skip: !isEdit });
+  const { data: pageData, isFetching } = useGetCustomPageAdminByIdQuery(
+    id as string,
+    { skip: !isEdit },
+  );
   const { data: list = [] } = useListCustomPagesAdminQuery();
 
-  const [createPage, { isLoading: creating }] = useCreateCustomPageAdminMutation();
-  const [updatePage, { isLoading: updating }] = useUpdateCustomPageAdminMutation();
+  const [createPage, { isLoading: creating }] =
+    useCreateCustomPageAdminMutation();
+  const [updatePage, { isLoading: updating }] =
+    useUpdateCustomPageAdminMutation();
 
   // Storage upload
-  const [uploadAsset, { isLoading: uploadingAny }] = useUploadStorageAssetAdminMutation();
+  const [uploadAsset, { isLoading: uploadingAny }] =
+    useCreateAssetAdminMutation();
 
   // Kullanıcı slug’ı elle dokundu mu?
   const slugTouchedRef = useRef(false);
@@ -125,7 +132,8 @@ export default function PageForm() {
       meta_description: pageData.meta_description ?? "",
       is_published: !!pageData.is_published,
       featured_image: (pageData as any).featured_image ?? "",
-      featured_image_asset_id: (pageData as any).featured_image_asset_id ?? "",
+      featured_image_asset_id:
+        (pageData as any).featured_image_asset_id ?? "",
       featured_image_alt: (pageData as any).featured_image_alt ?? "",
     }));
     // edit ekranına ilk girişte otomatik slug güncellenmesin
@@ -158,9 +166,12 @@ export default function PageForm() {
 
   // SEO snippet veri seti
   const seoTitle = (formData.meta_title || formData.title || "").trim();
-  const rawDesc = (formData.meta_description || stripHtml(formData.content_html)).trim();
+  const rawDesc = (
+    formData.meta_description || stripHtml(formData.content_html)
+  ).trim();
   const seoDesc = rawDesc.slice(0, 160);
-  const previewUrl = "/" + (formData.slug || slugify(formData.title) || "sayfa-adi");
+  const previewUrl =
+    "/" + (formData.slug || slugify(formData.title) || "sayfa-adi");
 
   /* ---------------- Upload helpers ---------------- */
   const validateImageFile = (file: File) => {
@@ -175,14 +186,23 @@ export default function PageForm() {
     return true;
   };
 
- const uploadToStorage = async (file: File, folder = "custom_pages") => {
-  const res: any = await uploadAsset({ file, folder }).unwrap();
-  const { url, id } = pickUrlAndId(res) as { url: string | null; id: string | null };
-  if (!url) throw new Error("upload_failed_no_url");
-  return { url, id };
-};
+  // ✅ Artık component içinde, uploadAsset hook'unu kullanıyor
+  const uploadToStorage = async (
+    file: File,
+    folder: string,
+    kind: "cover" | "content",
+  ) => {
+    const res: any = await uploadAsset({
+      file,
+      bucket: "pages",
+      folder,
+      metadata: { module: "custom_page", kind },
+    }).unwrap();
 
-
+    const { url, id } = pickUrlAndId(res);
+    if (!url) throw new Error("upload_failed_no_url");
+    return { url, id };
+  };
 
   /* ---------------- Quill toolbar (image handler) ---------------- */
   const modules = useMemo(
@@ -210,7 +230,9 @@ export default function PageForm() {
   /* ---------------- Kapak görseli upload ---------------- */
   const [uploadingCover, setUploadingCover] = useState(false);
 
-  const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!validateImageFile(file)) {
@@ -219,7 +241,11 @@ export default function PageForm() {
     }
     setUploadingCover(true);
     try {
-      const { url, id } = await uploadToStorage(file, "custom_pages/covers");
+      const { url, id } = await uploadToStorage(
+        file,
+        "custom_pages/covers",
+        "cover",
+      );
       setFormData((s) => ({
         ...s,
         featured_image: url,
@@ -238,7 +264,9 @@ export default function PageForm() {
   /* ---------------- Quill içi görsel upload ---------------- */
   const [uploadingQuillImg, setUploadingQuillImg] = useState(false);
 
-  const handleQuillImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQuillImageFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!validateImageFile(file)) {
@@ -247,12 +275,17 @@ export default function PageForm() {
     }
     setUploadingQuillImg(true);
     try {
-      const { url } = await uploadToStorage(file, "custom_pages/content");
+      const { url } = await uploadToStorage(
+        file,
+        "custom_pages/content",
+        "content",
+      );
       const quill = quillRef.current?.getEditor();
       if (quill) {
         const range = quill.getSelection(true);
-        quill.insertEmbed(range ? range.index : 0, "image", url, "user");
-        quill.setSelection((range ? range.index : 0) + 1, 0);
+        const index = range ? range.index : 0;
+        quill.insertEmbed(index, "image", url, "user");
+        quill.setSelection(index + 1, 0);
       }
       toast.success("Görsel eklendi");
     } catch (err) {
@@ -267,7 +300,9 @@ export default function PageForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const normalizedSlug = formData.slug ? slugify(formData.slug) : slugify(formData.title);
+    const normalizedSlug = formData.slug
+      ? slugify(formData.slug)
+      : slugify(formData.title);
 
     if (!normalizedSlug) {
       toast.error("Slug üretilemedi. Başlık veya slug giriniz.");
@@ -281,13 +316,12 @@ export default function PageForm() {
     const body: UpsertCustomPageBody = {
       title: formData.title.trim(),
       slug: normalizedSlug,
-      content: formData.content_html, // BE toApiBody → {"html": "..."}
+      content: formData.content_html,
       meta_title: formData.meta_title.trim() || null,
       meta_description: formData.meta_description.trim() || null,
       is_published: !!formData.is_published,
       locale: null,
 
-      // Görsel alanları
       featured_image: formData.featured_image || null,
       featured_image_asset_id: formData.featured_image_asset_id || null,
       featured_image_alt: formData.featured_image_alt || null,
@@ -312,7 +346,11 @@ export default function PageForm() {
     <AdminLayout title={isEdit ? "Sayfayı Düzenle" : "Yeni Sayfa"}>
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/pages")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/admin/pages")}
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Geri
           </Button>
@@ -334,7 +372,9 @@ export default function PageForm() {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, title: e.target.value })
+                      }
                       required
                     />
                     <p className="text-xs text-muted-foreground">
@@ -348,16 +388,26 @@ export default function PageForm() {
                       value={formData.slug}
                       onChange={(e) => {
                         slugTouchedRef.current = true;
-                        setFormData({ ...formData, slug: e.target.value });
+                        setFormData({
+                          ...formData,
+                          slug: e.target.value,
+                        });
                       }}
                       placeholder="ornek-sayfa"
                       required
                     />
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-muted-foreground">
-                        site.com/{formData.slug || slugify(formData.title) || "sayfa-adi"}
+                        site.com/
+                        {formData.slug ||
+                          slugify(formData.title) ||
+                          "sayfa-adi"}
                       </p>
-                      {slugError && <p className="text-xs text-red-600">{slugError}</p>}
+                      {slugError && (
+                        <p className="text-xs text-red-600">
+                          {slugError}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -370,7 +420,10 @@ export default function PageForm() {
                       id="meta_title"
                       value={formData.meta_title}
                       onChange={(e) =>
-                        setFormData({ ...formData, meta_title: e.target.value })
+                        setFormData({
+                          ...formData,
+                          meta_title: e.target.value,
+                        })
                       }
                       placeholder="Google sonuçlarında görünecek başlık"
                     />
@@ -379,18 +432,28 @@ export default function PageForm() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="meta_description">Meta Açıklama</Label>
+                    <Label htmlFor="meta_description">
+                      Meta Açıklama
+                    </Label>
                     <Textarea
                       id="meta_description"
                       value={formData.meta_description}
                       onChange={(e) =>
-                        setFormData({ ...formData, meta_description: e.target.value })
+                        setFormData({
+                          ...formData,
+                          meta_description: e.target.value,
+                        })
                       }
                       rows={2}
                       placeholder="SEO için sayfa açıklaması (önerilen 140–160 karakter)"
                     />
                     <p className="text-xs text-muted-foreground">
-                      {clamp((formData.meta_description || "").length, 0, 160)} / 160
+                      {clamp(
+                        (formData.meta_description || "").length,
+                        0,
+                        160,
+                      )}{" "}
+                      / 160
                     </p>
                   </div>
                 </div>
@@ -406,7 +469,10 @@ export default function PageForm() {
                           placeholder="https://... (opsiyonel)"
                           value={formData.featured_image}
                           onChange={(e) =>
-                            setFormData((s) => ({ ...s, featured_image: e.target.value }))
+                            setFormData((s) => ({
+                              ...s,
+                              featured_image: e.target.value,
+                            }))
                           }
                         />
                         <p className="text-xs text-muted-foreground">
@@ -426,24 +492,35 @@ export default function PageForm() {
                           variant="outline"
                           className="w-full"
                           disabled={uploadingCover || uploadingAny}
-                          onClick={() => coverInputRef.current?.click()}
+                          onClick={() =>
+                            coverInputRef.current?.click()
+                          }
                         >
                           <Upload className="w-4 h-4 mr-2" />
-                          {uploadingCover || uploadingAny ? "Yükleniyor..." : "Dosyadan Yükle"}
+                          {uploadingCover || uploadingAny
+                            ? "Yükleniyor..."
+                            : "Dosyadan Yükle"}
                         </Button>
                         <div className="grid grid-cols-2 gap-2">
                           <Input
                             placeholder="Asset ID (opsiyonel)"
                             value={formData.featured_image_asset_id}
                             onChange={(e) =>
-                              setFormData((s) => ({ ...s, featured_image_asset_id: e.target.value }))
+                              setFormData((s) => ({
+                                ...s,
+                                featured_image_asset_id:
+                                  e.target.value,
+                              }))
                             }
                           />
                           <Input
                             placeholder="Alt metin (opsiyonel)"
                             value={formData.featured_image_alt}
                             onChange={(e) =>
-                              setFormData((s) => ({ ...s, featured_image_alt: e.target.value }))
+                              setFormData((s) => ({
+                                ...s,
+                                featured_image_alt: e.target.value,
+                              }))
                             }
                           />
                         </div>
@@ -454,7 +531,9 @@ export default function PageForm() {
                       <div className="relative border rounded-lg overflow-hidden">
                         <img
                           src={formData.featured_image}
-                          alt={formData.featured_image_alt || "Önizleme"}
+                          alt={
+                            formData.featured_image_alt || "Önizleme"
+                          }
                           className="w-full h-48 object-cover"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src =
@@ -483,14 +562,20 @@ export default function PageForm() {
                           placeholder="Asset ID (opsiyonel)"
                           value={formData.featured_image_asset_id}
                           onChange={(e) =>
-                            setFormData((s) => ({ ...s, featured_image_asset_id: e.target.value }))
+                            setFormData((s) => ({
+                              ...s,
+                              featured_image_asset_id: e.target.value,
+                            }))
                           }
                         />
                         <Input
                           placeholder="Alt metin (opsiyonel)"
                           value={formData.featured_image_alt}
                           onChange={(e) =>
-                            setFormData((s) => ({ ...s, featured_image_alt: e.target.value }))
+                            setFormData((s) => ({
+                              ...s,
+                              featured_image_alt: e.target.value,
+                            }))
                           }
                         />
                       </div>
@@ -515,12 +600,18 @@ export default function PageForm() {
                     ref={quillRef}
                     theme="snow"
                     value={formData.content_html}
-                    onChange={(value) => setFormData({ ...formData, content_html: value })}
+                    onChange={(value) =>
+                      setFormData({
+                        ...formData,
+                        content_html: value,
+                      })
+                    }
                     className="bg-background"
                     modules={modules}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Bağlantı ve görsel ekleyebilirsiniz. Görseller storage’a yüklenip URL olarak gömülür.
+                    Bağlantı ve görsel ekleyebilirsiniz. Görseller
+                    storage’a yüklenip URL olarak gömülür.
                     {uploadingQuillImg && " (Görsel yükleniyor…)"}
                   </p>
                 </div>
@@ -532,23 +623,42 @@ export default function PageForm() {
                       id="is_published"
                       checked={!!formData.is_published}
                       onCheckedChange={(checked) =>
-                        setFormData({ ...formData, is_published: checked })
+                        setFormData({
+                          ...formData,
+                          is_published: checked,
+                        })
                       }
                     />
                     <Label htmlFor="is_published">Yayınla</Label>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {stripHtml(formData.content_html).split(/\s+/).filter(Boolean).length} kelime
+                    {
+                      stripHtml(formData.content_html)
+                        .split(/\s+/)
+                        .filter(Boolean).length
+                    }{" "}
+                    kelime
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={() => navigate("/admin/pages")}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/admin/pages")}
+                  >
                     İptal
                   </Button>
-                  <Button type="submit" disabled={loading || !!slugError}>
-                    {loading ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
+                  <Button
+                    type="submit"
+                    disabled={loading || !!slugError}
+                  >
+                    {loading
+                      ? "Kaydediliyor..."
+                      : isEdit
+                      ? "Güncelle"
+                      : "Oluştur"}
                   </Button>
                 </div>
               </form>
@@ -564,13 +674,16 @@ export default function PageForm() {
               {/* Google benzeri snippet */}
               <div className="rounded-lg border p-4">
                 <div className="text-xs text-muted-foreground">
-                  {(typeof window !== "undefined" ? window.location.origin : "site.com")}{previewUrl}
+                  {(typeof window !== "undefined"
+                    ? window.location.origin
+                    : "site.com") + previewUrl}
                 </div>
                 <div className="mt-1 text-base font-semibold leading-snug">
                   {seoTitle || "Sayfa başlığı (örnek)"}
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {seoDesc || "Meta açıklama veya içerik özeti burada görünecek."}
+                  {seoDesc ||
+                    "Meta açıklama veya içerik özeti burada görünecek."}
                 </div>
               </div>
 
@@ -579,19 +692,25 @@ export default function PageForm() {
                 {formData.featured_image && (
                   <img
                     src={formData.featured_image}
-                    alt={formData.featured_image_alt || "Kapak"}
+                    alt={
+                      formData.featured_image_alt || "Kapak"
+                    }
                     className="w-full h-40 object-cover border-b"
                     onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                      (e.currentTarget as HTMLImageElement).style.display =
+                        "none";
                     }}
                   />
                 )}
-                <div className="border-b p-3 text-sm font-medium">İçerik</div>
+                <div className="border-b p-3 text-sm font-medium">
+                  İçerik
+                </div>
                 <div className="prose max-w-none p-4">
-                  {/* Admin panel: güvenli alan varsayımı. Gerekirse DOMPurify entegre edebilirsin. */}
                   <article
                     dangerouslySetInnerHTML={{
-                      __html: formData.content_html || "<p>Önizleme yok.</p>",
+                      __html:
+                        formData.content_html ||
+                        "<p>Önizleme yok.</p>",
                     }}
                   />
                 </div>

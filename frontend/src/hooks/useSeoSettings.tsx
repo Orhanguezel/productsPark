@@ -1,5 +1,10 @@
-import { useState, useEffect } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/hooks/useSeoSettings.ts
+// =============================================================
+import { useMemo } from "react";
+import {
+  useListSiteSettingsQuery,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 
 interface SeoSettings {
   site_title: string;
@@ -28,67 +33,34 @@ const defaultSettings: SeoSettings = {
 };
 
 export const useSeoSettings = () => {
-  const [settings, setSettings] = useState<SeoSettings>(defaultSettings);
-  const [loading, setLoading] = useState(true);
+  // Tüm site_settings’i RTK ile çekiyoruz
+  const { data, isLoading } = useListSiteSettingsQuery(undefined);
 
-  useEffect(() => {
-    fetchSettings();
-
-    // Subscribe to real-time updates
-    const channel = metahub
-      .channel('seo-settings-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'site_settings',
-        },
-        (payload) => {
-          console.log('SEO settings changed:', payload);
-          // Refetch all settings when any change occurs
-          fetchSettings();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      metahub.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("site_settings")
-        .select("key, value")
-        .in("key", [
-          "site_title",
-          "site_description",
-          "seo_products_title",
-          "seo_products_description",
-          "seo_categories_title",
-          "seo_categories_description",
-          "seo_blog_title",
-          "seo_blog_description",
-          "seo_contact_title",
-          "seo_contact_description",
-        ]);
-
-      if (error) throw error;
-
-      const settingsObj: Partial<SeoSettings> = {};
-      data?.forEach((item) => {
-        settingsObj[item.key as keyof SeoSettings] = item.value as string;
-      });
-
-      setSettings({ ...defaultSettings, ...settingsObj });
-    } catch (error) {
-      console.error("Error fetching SEO settings:", error);
-    } finally {
-      setLoading(false);
+  const settings = useMemo<SeoSettings>(() => {
+    if (!data || data.length === 0) {
+      return defaultSettings;
     }
-  };
 
-  return { settings, loading };
+    const merged: Partial<SeoSettings> = {};
+
+    for (const item of data) {
+      const key = item.key as keyof SeoSettings;
+
+      if (key in defaultSettings) {
+        const val = item.value;
+        if (typeof val === "string") {
+          merged[key] = val;
+        } else if (val != null) {
+          merged[key] = String(val) as SeoSettings[typeof key];
+        }
+      }
+    }
+
+    return {
+      ...defaultSettings,
+      ...merged,
+    };
+  }, [data]);
+
+  return { settings, loading: isLoading };
 };

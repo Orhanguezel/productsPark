@@ -7,9 +7,7 @@ import {
   useCreateBlogPostAdminMutation,
   useUpdateBlogPostAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/blog_admin.endpoints";
-import {
-  useUploadStorageAssetAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 import type { UpsertBlogBody } from "@/integrations/metahub/db/types/blog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -113,7 +111,7 @@ export default function BlogForm() {
   const [updatePost, { isLoading: updating }] =
     useUpdateBlogPostAdminMutation();
   const [uploadAsset, { isLoading: uploading }] =
-    useUploadStorageAssetAdminMutation();
+    useCreateAssetAdminMutation();
 
   // ---- helper: güvenli field update (state'i asla sıfırlama) ----
   const updateField = <K extends keyof FormState>(

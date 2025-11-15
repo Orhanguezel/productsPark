@@ -26,7 +26,7 @@ import {
   useDeletePopupAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/popups_admin.endpoints";
 
-import { useUploadStorageAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
+import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 import { useListProductsAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
 
 // ✅ Admin kupon listesi
@@ -113,7 +113,7 @@ export default function PopupForm() {
   const [updatePopup, { isLoading: isUpdating }] = useUpdatePopupAdminMutation();
   const [deletePopup, { isLoading: isDeleting }] = useDeletePopupAdminMutation();
 
-  const [uploadAsset, { isLoading: isUploading }] = useUploadStorageAssetAdminMutation();
+  const [uploadAsset, { isLoading: isUploading }] = useCreateAssetAdminMutation();
 
   const [formData, setFormData] = useState<FormState>(defaults);
   const saving = isCreating || isUpdating;

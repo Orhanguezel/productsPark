@@ -1,3 +1,5 @@
+// src/modules/support/controller.ts
+
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   listTicketsQuerySchema,
@@ -6,6 +8,107 @@ import {
   createReplyBodySchema,
 } from "./validation";
 import { SupportRepo } from "./repository";
+
+import { db } from "@/db/client";
+import { users } from "@/modules/auth/schema";
+import {
+  notifications,
+  type NotificationInsert,
+} from "@/modules/notifications/schema";
+import { randomUUID } from "crypto";
+import { sendTicketRepliedMail } from "@/modules/mail/service";
+import { eq } from "drizzle-orm";
+
+/* ========== ortak helpers (mail + notification için) ========== */
+
+const now = () => new Date();
+
+function getLocaleFromRequest(req: FastifyRequest | any): string | undefined {
+  const header =
+    (req.headers["x-locale"] as string | undefined) ||
+    (req.headers["accept-language"] as string | undefined);
+
+  if (!header) return undefined;
+  const first = header.split(",")[0]?.trim();
+  if (!first) return undefined;
+  // email-templates locale max 10 char olarak tanımlı
+  return first.slice(0, 10);
+}
+
+function buildDisplayNameFromUser(u: {
+  full_name?: string | null;
+  email?: string;
+}): string {
+  if (u.full_name && u.full_name.trim()) return u.full_name.trim();
+  if (u.email) return u.email.split("@")[0] ?? u.email;
+  return "Müşterimiz";
+}
+
+/**
+ * ticket_replied template’i + notification
+ *  - Hedef kullanıcı: ticket.userId
+ *  - Sadece admin yanıtı için çağrılacak
+ */
+export async function fireTicketRepliedEventsForTicket(args: {
+  req: FastifyRequest;
+  ticketId: string;
+  replyMessage: string;
+}) {
+  const { req, ticketId, replyMessage } = args;
+
+  // 1) Ticket bilgisi
+  const ticket = await SupportRepo.getById(ticketId);
+  if (!ticket) return;
+
+  // 2) Kullanıcı bilgisi
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, ticket.userId as any)) // 👈 BURAYI DÜZELTTİK
+    .limit(1);
+
+  if (!user || !user.email) return;
+
+  const userName = buildDisplayNameFromUser({
+    full_name: (user as any).full_name ?? null,
+    email: (user as any).email,
+  });
+
+  const locale = getLocaleFromRequest(req);
+
+  // 3) Notification kaydı
+  try {
+    const notif: NotificationInsert = {
+      id: randomUUID(),
+      user_id: user.id as any,
+      title: "Destek talebiniz yanıtlandı",
+      message: ticket.subject ?? "Destek talebiniz yanıtlandı.",
+      type: "ticket_replied" as any,
+      is_read: false,
+      created_at: now(),
+    };
+
+    await db.insert(notifications).values(notif);
+  } catch (err) {
+    req.log?.error?.(err, "ticket_reply_notification_failed");
+  }
+
+  // 4) Mail gönderimi
+  try {
+    await sendTicketRepliedMail({
+      to: (user as any).email,
+      user_name: userName,
+      ticket_id: ticket.id,
+      ticket_subject: ticket.subject ?? "",
+      reply_message: replyMessage,
+      ...(locale ? { locale } : {}),
+    });
+  } catch (err) {
+    req.log?.error?.(err, "ticket_reply_email_failed");
+  }
+}
+
+/* ========== Controller ========== */
 
 export const SupportController = {
   /** GET /support_tickets (public) */
@@ -123,6 +226,19 @@ export const SupportController = {
       // ✅ KURAL: admin yanıtı → in_progress, kullanıcı yanıtı → waiting_response
       const nextStatus = role === "admin" ? "in_progress" : "waiting_response";
       await SupportRepo.updateTicket(body.ticket_id, { status: nextStatus as any });
+
+      // 🔔 Admin yanıtı için notification + mail
+      if (role === "admin") {
+        try {
+          await fireTicketRepliedEventsForTicket({
+            req,
+            ticketId: body.ticket_id,
+            replyMessage: body.message,
+          });
+        } catch (err) {
+          req.log.error({ err }, "ticket_replied_side_effects_failed");
+        }
+      }
 
       reply.code(201);
       return created;

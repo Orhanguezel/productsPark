@@ -1,3 +1,5 @@
+// src/modules/support/repository.ts
+
 import { and, desc, asc, eq, like, count, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import { supportTickets, ticketReplies } from "./schema";

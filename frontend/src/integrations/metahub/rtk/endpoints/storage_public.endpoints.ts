@@ -1,54 +1,109 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/storage_public.endpoints.ts
+// Public Storage — tekli/çoklu dosya deterministik upload + sign-multipart
 // =============================================================
-import { baseApi } from "../baseApi";
-import type { FetchArgs } from "@reduxjs/toolkit/query";
+import { baseApi } from "@/integrations/metahub/rtk/baseApi";
 import type {
-  StoragePublicUploadResponse,
-  StorageSignMultipartResponse,
-  StorageSignMultipartBody,
   StorageServerUploadArgs,
-} from "../../db/types/storage";
+  StoragePublicUploadResponse,
+  StorageSignMultipartBody,
+  StorageSignMultipartResponse,
+} from "@/integrations/metahub/db/types/storage";
 
-// NOT: publicServe (GET /storage/:bucket/*) 302 redirect döndürür.
-// FE tarafında genelde direkt Cloudinary secure_url kullanacağımız için RTK
-// uçuna gerek duymuyoruz. Gerekirse sadece URL builder helper yaz.
+const sanitize = (name: string) => name.replace(/[^\w.\-]+/g, "_");
 
-const BASE = "/storage";
+type UploadManyResponse = { items: StoragePublicUploadResponse[] };
+
+/** File[]’a kesin daraltma: undefined/null/yanlış tipleri atar */
+function compactFiles(list: unknown[]): File[] {
+  const out: File[] = [];
+  for (const f of list) {
+    if (!f) continue;
+    if (typeof File !== "undefined" && f instanceof File) {
+      out.push(f);
+      continue;
+    }
+    if (typeof Blob !== "undefined" && f instanceof Blob) {
+      try {
+        const name = (f as any)?.name || "blob";
+        out.push(new File([f], name, { type: f.type || "application/octet-stream" }));
+      } catch {
+        out.push(f as unknown as File);
+      }
+    }
+  }
+  return out;
+}
 
 export const storagePublicApi = baseApi.injectEndpoints({
-  endpoints: (b) => ({
-    /** Client-side unsigned upload hazırlığı (Cloudinary form fields) */
-    signMultipart: b.mutation<StorageSignMultipartResponse, StorageSignMultipartBody>({
-      query: (body) =>
-        ({ url: `${BASE}/uploads/sign-multipart`, method: "POST", body } as FetchArgs),
+  endpoints: (builder) => ({
+    // Server-side upload: /storage/:bucket/upload
+    uploadToBucket: builder.mutation<
+      UploadManyResponse,
+      Omit<StorageServerUploadArgs, "file"> & { files: File | File[] }
+    >({
+      async queryFn(args, _api, _extra, baseQuery) {
+        try {
+          const rawList = Array.isArray(args.files) ? args.files : [args.files];
+          const files = compactFiles(rawList as unknown[]);
+          if (!files.length) {
+            return { error: { status: 400, data: { message: "no_files" } } as any };
+          }
+
+          const items: StoragePublicUploadResponse[] = [];
+
+          for (const [i, file] of files.entries()) {
+            const fd = new FormData();
+            const filename = sanitize(file.name || `file-${i}`);
+            fd.append("file", file, filename);
+
+            const qs = new URLSearchParams();
+            if (args.path) qs.set("path", args.path);
+            if (args.upsert) qs.set("upsert", "1");
+
+            const res = await baseQuery({
+              url: `/storage/${encodeURIComponent(args.bucket)}/upload${qs.toString() ? `?${qs}` : ""}`,
+              method: "POST",
+              body: fd,
+            });
+            if (res.error) return { error: res.error as any };
+
+            const data = res.data as any;
+            items.push({
+              path: data.path,
+              url: data.url,
+            } satisfies StoragePublicUploadResponse);
+          }
+
+          return { data: { items } };
+        } catch (e: any) {
+          return {
+            error: {
+              status: e?.status || 500,
+              data: e?.data || { message: e?.message || "upload_failed" },
+            } as any,
+          };
+        }
+      },
+      invalidatesTags: () => [{ type: "Storage", id: "LIST" }],
     }),
 
-    /** Server-side signed upload (dosyayı API'ye gönderir; DB kayıt oluşur) */
-    uploadToBucket: b.mutation<StoragePublicUploadResponse, StorageServerUploadArgs>({
-      query: ({ bucket, file, path, upsert }) => {
-        const form = new FormData();
-        form.append("file", file);
-        const usp = new URLSearchParams();
-        if (path) usp.set("path", path);
-        if (upsert != null) usp.set("upsert", upsert ? "1" : "0");
-        const fa: FetchArgs = {
-          url: `${BASE}/${encodeURIComponent(bucket)}/upload${usp.toString() ? `?${usp.toString()}` : ""}`,
-          method: "POST",
-          body: form,
-        };
-        return fa;
-      },
+    // Direct-to-Cloudinary (unsigned preset) için sign
+    signMultipart: builder.mutation<
+      StorageSignMultipartResponse,
+      StorageSignMultipartBody & { content_type?: string }
+    >({
+      query: ({ filename, folder, content_type }) => ({
+        url: "/storage/uploads/sign-multipart",
+        method: "POST",
+        body: {
+          filename,
+          folder,
+          ...(content_type ? { content_type } : {}),
+        },
+      }),
     }),
   }),
   overrideExisting: true,
 });
 
-export const {
-  useSignMultipartMutation,
-  useUploadToBucketMutation,
-} = storagePublicApi;
-
-/** İsteğe bağlı yardımcı: public-serve URL kurucu (redirect eder) */
-export const buildPublicServeUrl = (bucket: string, path: string) =>
-  `${BASE}/${encodeURIComponent(bucket)}/${path.split("/").map(encodeURIComponent).join("/")}`;
+export const { useUploadToBucketMutation, useSignMultipartMutation } = storagePublicApi;
