@@ -11,6 +11,12 @@ import type {
   SubscriptionResult,
 } from "../realtime/channel";
 
+// ✅ Turkpin tipleri
+import type {
+  TurkpinGameListResult,
+  TurkpinProductListResult,
+} from "../db/types/turkpin";
+
 /* ========================= Auth Facade ========================= */
 
 export type BalanceResult = {
@@ -128,17 +134,15 @@ export interface FunctionsFacade {
     args?: Readonly<{ body?: unknown }>
   ): InvokeResult<BalanceResult>;
 
+  // ✅ Turkpin oyun listesi
   invoke(
     name: "turkpin-game-list",
     args?: Readonly<{
       body?: { providerId: string; listType: "epin" | "topup" };
     }>
-  ): InvokeResult<{
-    success: boolean;
-    games?: { id: string; name: string }[];
-    error?: string;
-  }>;
+  ): InvokeResult<TurkpinGameListResult>;
 
+  // ✅ Turkpin ürün listesi
   invoke(
     name: "turkpin-product-list",
     args?: Readonly<{
@@ -148,23 +152,7 @@ export interface FunctionsFacade {
         listType: "epin" | "topup";
       };
     }>
-  ): InvokeResult<{
-    success: boolean;
-    products?: {
-      id: string;
-      name: string;
-      price: number;
-      stock: number;
-      min_order: number;
-      max_order: number;
-      tax_type: number;
-      pre_order: boolean;
-      min_barem?: number;
-      max_barem?: number;
-      barem_step?: number;
-    }[];
-    error?: string;
-  }>;
+  ): InvokeResult<TurkpinProductListResult>;
 
   invoke(
     name: "smm-api-balance",

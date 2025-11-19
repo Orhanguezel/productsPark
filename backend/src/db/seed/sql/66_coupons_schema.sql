@@ -15,17 +15,25 @@ CREATE TABLE IF NOT EXISTS `coupons` (
   `max_discount`   DECIMAL(10,2) DEFAULT NULL,
   `usage_limit`    INT           DEFAULT NULL,
   `used_count`     INT           NOT NULL DEFAULT 0,
-  `valid_from`     DATETIME(3)   DEFAULT NULL,
-  `valid_until`    DATETIME(3)   DEFAULT NULL,
-  `is_active`      TINYINT(1)    NOT NULL DEFAULT 1,
-  `created_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  `updated_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+  -- 🔥 Uygulama kapsamı + id listeleri
+  `applicable_to`  ENUM('all','category','product') NOT NULL DEFAULT 'all',
+  `category_ids`   TEXT         DEFAULT NULL,  -- JSON string ["cat1","cat2"]
+  `product_ids`    TEXT         DEFAULT NULL,  -- JSON string ["prod1","prod2"]
+
+  `valid_from`     DATETIME(3)  DEFAULT NULL,
+  `valid_until`    DATETIME(3)  DEFAULT NULL,
+  `is_active`      TINYINT(1)   NOT NULL DEFAULT 1,
+  `created_at`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `coupons_code_uq` (`code`),
   KEY `coupons_active_idx` (`is_active`),
   KEY `coupons_valid_from_idx` (`valid_from`),
-  KEY `coupons_valid_until_idx` (`valid_until`)
+  KEY `coupons_valid_until_idx` (`valid_until`),
+  KEY `coupons_applicable_idx` (`applicable_to`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- =============================================================
 -- COUPONS SEED
@@ -44,6 +52,9 @@ INSERT INTO `coupons`
  `max_discount`,
  `usage_limit`,
  `used_count`,
+ `applicable_to`,
+ `category_ids`,
+ `product_ids`,
  `valid_from`,
  `valid_until`,
  `is_active`,
@@ -61,6 +72,9 @@ VALUES
   NULL,
   NULL,
   3,
+  'all',   -- 🔥 tüm site için geçerli
+  NULL,    -- kategori listesi yok
+  NULL,    -- ürün listesi yok
   '2025-10-07 00:00:00',
   NULL,
   0,
@@ -76,7 +90,11 @@ ON DUPLICATE KEY UPDATE
   `max_discount`   = VALUES(`max_discount`),
   `usage_limit`    = VALUES(`usage_limit`),
   `used_count`     = VALUES(`used_count`),
+  `applicable_to`  = VALUES(`applicable_to`),
+  `category_ids`   = VALUES(`category_ids`),
+  `product_ids`    = VALUES(`product_ids`),
   `valid_from`     = VALUES(`valid_from`),
   `valid_until`    = VALUES(`valid_until`),
   `is_active`      = VALUES(`is_active`),
   `updated_at`     = VALUES(`updated_at`);
+

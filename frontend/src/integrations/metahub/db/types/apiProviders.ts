@@ -17,3 +17,14 @@ export type ApiProvider = {
   currency?: string | null;
   last_balance_check?: string | null;
 };
+
+// NEW: denge sorgu yanıtı
+export type ApiProviderBalanceResponse = {
+  success: boolean;
+  balance: number | null;
+  currency: string | null;
+  last_balance_check: string | null;
+  message?: string;
+  raw?: unknown;
+  error?: string;
+};

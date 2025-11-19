@@ -6,6 +6,7 @@ import {
   type ComponentType,
   type SVGProps,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ShoppingCart,
   User as UserIcon,
@@ -59,6 +60,7 @@ const Navbar = () => {
     "user_choice" | "dark_only" | "light_only"
   >("user_choice");
 
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { cartCount } = useCart();
@@ -142,7 +144,7 @@ const Navbar = () => {
 
   const handleSignOut = async () => {
     await signOut();
-    window.location.href = "/";
+    navigate("/");
   };
 
   return (
@@ -201,7 +203,7 @@ const Navbar = () => {
                 variant="ghost"
                 size="icon"
                 className="relative"
-                onClick={() => (window.location.href = "/sepet")}
+                onClick={() => navigate("/sepet")}
               >
                 <ShoppingCart className="h-5 w-5" />
                 {cartCount > 0 && (
@@ -217,8 +219,7 @@ const Navbar = () => {
                   variant="ghost"
                   size="icon"
                   className="relative"
-                  // 🔴 Bildirim ikonuna tıklayınca hesabım + tab=notifications
-                  onClick={() => (window.location.href = "/hesabim?tab=notifications")}
+                  onClick={() => navigate("/hesabim?tab=notifications")}
                 >
                   <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (
@@ -241,7 +242,6 @@ const Navbar = () => {
                     <DropdownMenuLabel>
                       <div className="flex flex-col">
                         <span className="font-medium">{displayName}</span>
-                        {/* E-posta zaten isim değilse altta küçük göster */}
                         {displayName !== user.email && (
                           <span className="text-xs text-muted-foreground">
                             {user.email}
@@ -250,20 +250,14 @@ const Navbar = () => {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => (window.location.href = "/hesabim")}
-                    >
+                    <DropdownMenuItem onClick={() => navigate("/hesabim")}>
                       Hesabım
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => (window.location.href = "/destek")}
-                    >
+                    <DropdownMenuItem onClick={() => navigate("/destek")}>
                       Destek
                     </DropdownMenuItem>
                     {isAdmin && (
-                      <DropdownMenuItem
-                        onClick={() => (window.location.href = "/admin")}
-                      >
+                      <DropdownMenuItem onClick={() => navigate("/admin")}>
                         Yönetim
                       </DropdownMenuItem>
                     )}
@@ -279,14 +273,14 @@ const Navbar = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => (window.location.href = "/giris")}
+                    onClick={() => navigate("/giris")}
                   >
                     <UserIcon className="h-5 w-5" />
                   </Button>
 
                   <Button
                     className="hidden md:flex gradient-primary text-white"
-                    onClick={() => (window.location.href = "/giris")}
+                    onClick={() => navigate("/giris")}
                   >
                     Giriş Yap
                   </Button>
@@ -316,14 +310,15 @@ const Navbar = () => {
                 {menuItems.map((item) => {
                   const IconComponent = getMenuIcon(item.icon as string | null);
                   return (
-                    <a
+                    <button
                       key={item.id}
-                      href={item.url}
-                      className="text-sm font-medium hover:text-primary transition-smooth flex items-center gap-2"
+                      type="button"
+                      onClick={() => navigate(item.url)}
+                      className="text-left text-sm font-medium hover:text-primary transition-smooth flex items-center gap-2"
                     >
                       {IconComponent && <IconComponent className="h-4 w-4" />}
                       {item.title}
-                    </a>
+                    </button>
                   );
                 })}
 
@@ -337,7 +332,7 @@ const Navbar = () => {
                 ) : (
                   <Button
                     className="gradient-primary text-white w-full"
-                    onClick={() => (window.location.href = "/giris")}
+                    onClick={() => navigate("/giris")}
                   >
                     Giriş Yap
                   </Button>

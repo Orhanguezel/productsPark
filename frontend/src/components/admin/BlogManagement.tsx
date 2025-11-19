@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/pages/admin/blog/BlogManagement.tsx
+// =============================================================
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,22 +25,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface BlogPost {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt: string;
-  content: string;
-  category: string;
-  author_name: string;
-  image_url: string;
-  read_time: string;
-  is_published: boolean;
-  is_featured: boolean;
-  created_at: string;
-}
-
-type BlogFormData = Omit<BlogPost, "id" | "created_at">;
+import type { BlogPost, UpsertBlogBody } from "@/integrations/metahub/db/types/blog";
+import {
+  useListBlogPostsAdminQuery,
+  useCreateBlogPostAdminMutation,
+  useUpdateBlogPostAdminMutation,
+  useDeleteBlogPostAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/blog_admin.endpoints";
 
 // basit TR destekli slugify
 const slugify = (value: string) =>
@@ -55,9 +48,68 @@ const slugify = (value: string) =>
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 
+// Form state tipi (FE tarafı)
+type BlogFormData = {
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  category: string;
+  author_name: string;
+  image_url: string;
+  read_time: string;
+  is_published: boolean;
+  is_featured: boolean;
+};
+
+// Tek alan güncelleyen helper
+const updateField =
+  (setFormData: React.Dispatch<React.SetStateAction<BlogFormData>>) =>
+  <K extends keyof BlogFormData>(key: K, value: BlogFormData[K]) => {
+    setFormData((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+// FE form datasını RTK body’ye map eden helper
+const toUpsertBody = (form: BlogFormData): UpsertBlogBody => ({
+  title: form.title,
+  slug: form.slug,
+  excerpt: form.excerpt || null,
+  content: form.content || null,
+
+  image_url: form.image_url || null,
+  image_asset_id: null,
+  image_alt: null,
+
+  author_name: form.author_name || null,
+  is_published: form.is_published,
+
+  // legacy alanlar
+  category: form.category || null,
+  is_featured: form.is_featured,
+  // display_order burada yok; ileride gerekirse eklenir
+});
+
 export const BlogManagement = () => {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Liste: RTK Query
+  const {
+    data: posts = [],
+    isLoading: listLoading,
+    isFetching: listFetching,
+  } = useListBlogPostsAdminQuery({
+    sort: "created_at",
+    order: "desc",
+  });
+
+  const [createPost, { isLoading: creating }] =
+    useCreateBlogPostAdminMutation();
+  const [updatePost, { isLoading: updating }] =
+    useUpdateBlogPostAdminMutation();
+  const [deletePost, { isLoading: deleting }] =
+    useDeleteBlogPostAdminMutation();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
 
@@ -77,112 +129,7 @@ export const BlogManagement = () => {
     is_featured: false,
   });
 
-  // Tek bir helper: diğer tüm alanlar korunarak günceller
-  const updateField = <K extends keyof BlogFormData>(
-    key: K,
-    value: BlogFormData[K],
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  useEffect(() => {
-    fetchPosts();
-  }, []);
-
-  const fetchPosts = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("blog_posts")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setPosts(data || []);
-    } catch (error) {
-      console.error("Error fetching blog posts:", error);
-      toast({
-        title: "Hata",
-        description: "Blog yazıları yüklenirken bir hata oluştu.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      if (editingPost) {
-        const { error } = await metahub
-          .from("blog_posts")
-          .update(formData)
-          .eq("id", editingPost.id);
-
-        if (error) throw error;
-        toast({ title: "Başarılı", description: "Blog yazısı güncellendi." });
-      } else {
-        const { error } = await metahub.from("blog_posts").insert([formData]);
-
-        if (error) throw error;
-        toast({ title: "Başarılı", description: "Blog yazısı oluşturuldu." });
-      }
-
-      setDialogOpen(false);
-      resetForm();
-      fetchPosts();
-    } catch (error) {
-      console.error("Error saving blog post:", error);
-      toast({
-        title: "Hata",
-        description: "Blog yazısı kaydedilirken bir hata oluştu.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Bu blog yazısını silmek istediğinizden emin misiniz?")) return;
-
-    try {
-      const { error } = await metahub.from("blog_posts").delete().eq("id", id);
-
-      if (error) throw error;
-      toast({ title: "Başarılı", description: "Blog yazısı silindi." });
-      fetchPosts();
-    } catch (error) {
-      console.error("Error deleting blog post:", error);
-      toast({
-        title: "Hata",
-        description: "Blog yazısı silinirken bir hata oluştu.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleEdit = (post: BlogPost) => {
-    setEditingPost(post);
-    setSlugTouched(false); // mevcut slug’ı yazıyla otomatik bozmayalım
-
-    setFormData({
-      title: post.title,
-      slug: post.slug,
-      excerpt: post.excerpt || "",
-      content: post.content,
-      category: post.category,
-      author_name: post.author_name,
-      image_url: post.image_url || "",
-      read_time: post.read_time || "",
-      is_published: post.is_published,
-      is_featured: post.is_featured,
-    });
-
-    setDialogOpen(true);
-  };
+  const setField = updateField(setFormData);
 
   const resetForm = () => {
     setEditingPost(null);
@@ -206,12 +153,83 @@ export const BlogManagement = () => {
     setDialogOpen(true);
   };
 
-  if (loading) {
+  const handleEdit = (post: BlogPost) => {
+    setEditingPost(post);
+    setSlugTouched(false); // mevcut slug’ı yazıyla otomatik bozmayalım
+
+    setFormData({
+      title: post.title,
+      slug: post.slug,
+      excerpt: post.excerpt || "",
+      content: post.content || "",
+      category: post.category || "",
+      author_name: post.author_name || "",
+      image_url: post.image_url || "",
+      read_time: post.read_time || "",
+      is_published: post.is_published,
+      is_featured: post.is_featured ?? false,
+    });
+
+    setDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Bu blog yazısını silmek istediğinizden emin misiniz?")) return;
+
+    try {
+      await deletePost(id).unwrap();
+      toast({ title: "Başarılı", description: "Blog yazısı silindi." });
+    } catch (error) {
+      console.error("Error deleting blog post:", error);
+      toast({
+        title: "Hata",
+        description: "Blog yazısı silinirken bir hata oluştu.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const body = toUpsertBody(formData);
+
+    try {
+      if (editingPost) {
+        await updatePost({ id: editingPost.id, body }).unwrap();
+        toast({
+          title: "Başarılı",
+          description: "Blog yazısı güncellendi.",
+        });
+      } else {
+        await createPost(body).unwrap();
+        toast({
+          title: "Başarılı",
+          description: "Blog yazısı oluşturuldu.",
+        });
+      }
+
+      setDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error saving blog post:", error);
+      toast({
+        title: "Hata",
+        description: "Blog yazısı kaydedilirken bir hata oluştu.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const globalLoading = listLoading || listFetching || creating || updating || deleting;
+
+  if (globalLoading && posts.length === 0) {
     return <div>Yükleniyor...</div>;
   }
 
   return (
     <div className="space-y-4">
+      {/* Header + Dialog trigger */}
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Blog Yazıları</h3>
 
@@ -242,7 +260,6 @@ export const BlogManagement = () => {
                     setFormData((prev) => ({
                       ...prev,
                       title: value,
-                      // kullanıcı sluga elle dokunmadıysa otomatik üret
                       slug:
                         prev.slug && (slugTouched || editingPost)
                           ? prev.slug
@@ -260,7 +277,7 @@ export const BlogManagement = () => {
                   value={formData.slug}
                   onChange={(e) => {
                     setSlugTouched(true);
-                    updateField("slug", e.target.value);
+                    setField("slug", e.target.value);
                   }}
                   required
                 />
@@ -272,22 +289,18 @@ export const BlogManagement = () => {
                 <Textarea
                   id="excerpt"
                   value={formData.excerpt}
-                  onChange={(e) => updateField("excerpt", e.target.value)}
+                  onChange={(e) => setField("excerpt", e.target.value)}
                   rows={2}
                 />
               </div>
 
-              {/* İçerik (HTML) - zengin editör burada */}
+              {/* İçerik (HTML) */}
               <div>
                 <Label htmlFor="content">İçerik (HTML)</Label>
-
-                {/* Şu an Textarea; sen burada kendi HtmlEditor bileşenini de kullanabilirsin.
-                   Önemli olan: KOŞULLU render etme; her zaman render olsun.
-                */}
                 <Textarea
                   id="content"
                   value={formData.content}
-                  onChange={(e) => updateField("content", e.target.value)}
+                  onChange={(e) => setField("content", e.target.value)}
                   rows={10}
                   required
                 />
@@ -300,8 +313,7 @@ export const BlogManagement = () => {
                   <Input
                     id="category"
                     value={formData.category}
-                    onChange={(e) => updateField("category", e.target.value)}
-                    required
+                    onChange={(e) => setField("category", e.target.value)}
                   />
                 </div>
                 <div>
@@ -309,7 +321,7 @@ export const BlogManagement = () => {
                   <Input
                     id="author_name"
                     value={formData.author_name}
-                    onChange={(e) => updateField("author_name", e.target.value)}
+                    onChange={(e) => setField("author_name", e.target.value)}
                     required
                   />
                 </div>
@@ -322,7 +334,7 @@ export const BlogManagement = () => {
                   <Input
                     id="image_url"
                     value={formData.image_url}
-                    onChange={(e) => updateField("image_url", e.target.value)}
+                    onChange={(e) => setField("image_url", e.target.value)}
                   />
                 </div>
                 <div>
@@ -330,7 +342,7 @@ export const BlogManagement = () => {
                   <Input
                     id="read_time"
                     value={formData.read_time}
-                    onChange={(e) => updateField("read_time", e.target.value)}
+                    onChange={(e) => setField("read_time", e.target.value)}
                     placeholder="5 dk"
                   />
                 </div>
@@ -343,7 +355,7 @@ export const BlogManagement = () => {
                     id="is_published"
                     checked={formData.is_published}
                     onCheckedChange={(checked) =>
-                      updateField("is_published", checked)
+                      setField("is_published", checked)
                     }
                   />
                   <Label htmlFor="is_published">Yayınla</Label>
@@ -353,7 +365,7 @@ export const BlogManagement = () => {
                     id="is_featured"
                     checked={formData.is_featured}
                     onCheckedChange={(checked) =>
-                      updateField("is_featured", checked)
+                      setField("is_featured", checked)
                     }
                   />
                   <Label htmlFor="is_featured">Öne Çıkan</Label>
@@ -371,7 +383,11 @@ export const BlogManagement = () => {
                 >
                   İptal
                 </Button>
-                <Button type="submit" className="gradient-primary">
+                <Button
+                  type="submit"
+                  className="gradient-primary"
+                  disabled={creating || updating}
+                >
                   {editingPost ? "Güncelle" : "Oluştur"}
                 </Button>
               </div>
@@ -396,8 +412,8 @@ export const BlogManagement = () => {
           {posts.map((post) => (
             <TableRow key={post.id}>
               <TableCell className="font-medium">{post.title}</TableCell>
-              <TableCell>{post.category}</TableCell>
-              <TableCell>{post.author_name}</TableCell>
+              <TableCell>{post.category ?? ""}</TableCell>
+              <TableCell>{post.author_name ?? ""}</TableCell>
               <TableCell>
                 {post.is_published ? (
                   <span className="text-green-600">Yayında</span>
@@ -409,7 +425,9 @@ export const BlogManagement = () => {
                 )}
               </TableCell>
               <TableCell>
-                {new Date(post.created_at).toLocaleDateString("tr-TR")}
+                {post.created_at
+                  ? new Date(post.created_at).toLocaleDateString("tr-TR")
+                  : "-"}
               </TableCell>
               <TableCell className="text-right">
                 <Button
@@ -429,6 +447,14 @@ export const BlogManagement = () => {
               </TableCell>
             </TableRow>
           ))}
+
+          {posts.length === 0 && !globalLoading && (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center text-sm py-6">
+                Henüz blog yazısı yok.
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
     </div>

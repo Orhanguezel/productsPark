@@ -3,7 +3,7 @@
 // =============================================================
 "use client";
 
-import { useSearchParams, Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Copy, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -11,9 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import {
-  useGetCouponByCodeQuery,
-} from "@/integrations/metahub/rtk/endpoints/coupons.endpoints";
+import { useGetCouponByCodeQuery } from "@/integrations/metahub/rtk/endpoints/coupons.endpoints";
 
 export default function CouponDetailPage() {
   const [searchParams] = useSearchParams();
@@ -147,9 +145,9 @@ export default function CouponDetailPage() {
                           Geçerlilik Başlangıcı
                         </div>
                         <div className="font-medium">
-                          {new Date(coupon.valid_from).toLocaleDateString(
-                            "tr-TR",
-                          )}
+                          {new Date(
+                            coupon.valid_from,
+                          ).toLocaleDateString("tr-TR")}
                         </div>
                       </div>
                     )}
@@ -160,9 +158,9 @@ export default function CouponDetailPage() {
                           Son Kullanma Tarihi
                         </div>
                         <div className="font-medium">
-                          {new Date(coupon.valid_until).toLocaleDateString(
-                            "tr-TR",
-                          )}
+                          {new Date(
+                            coupon.valid_until,
+                          ).toLocaleDateString("tr-TR")}
                         </div>
                       </div>
                     )}
@@ -172,7 +170,7 @@ export default function CouponDetailPage() {
                 {isLoading && (
                   <p className="text-sm text-muted-foreground">Yükleniyor…</p>
                 )}
-                {isError && (
+                {isError && !isLoading && (
                   <p className="text-sm text-destructive">
                     Kupon bilgileri alınamadı.
                   </p>

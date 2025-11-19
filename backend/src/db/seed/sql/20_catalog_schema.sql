@@ -1,5 +1,5 @@
 -- =============================================================
--- FILE: 61_categories_schema.sql
+-- FILE: 20_categories_schema.sql
 -- Idempotent schema aligned with storage-aware design
 -- =============================================================
 
@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS `categories` (
   `icon`            VARCHAR(100)  DEFAULT NULL,
   `parent_id`       CHAR(36)      DEFAULT NULL,
 
+  -- ✅ SEO alanları
+  `seo_title`       VARCHAR(255)  DEFAULT NULL,
+  `seo_description` VARCHAR(500)  DEFAULT NULL,
+
   -- İçerik alanları
   `article_content` LONGTEXT      DEFAULT NULL,
   `article_enabled` TINYINT(1)    NOT NULL DEFAULT 0,
@@ -34,11 +38,11 @@ CREATE TABLE IF NOT EXISTS `categories` (
 
   PRIMARY KEY (`id`),
 
-  UNIQUE KEY `categories_slug_uq` (`slug`),
-  KEY `categories_parent_id_idx` (`parent_id`),
-  KEY `categories_active_idx` (`is_active`),
-  KEY `categories_order_idx` (`display_order`),
-  KEY `categories_image_asset_idx` (`image_asset_id`),
+  UNIQUE KEY `categories_slug_uq`      (`slug`),
+  KEY `categories_parent_id_idx`       (`parent_id`),
+  KEY `categories_active_idx`          (`is_active`),
+  KEY `categories_order_idx`           (`display_order`),
+  KEY `categories_image_asset_idx`     (`image_asset_id`),
 
   CONSTRAINT `fk_categories_parent`
     FOREIGN KEY (`parent_id`) REFERENCES `categories`(`id`)
