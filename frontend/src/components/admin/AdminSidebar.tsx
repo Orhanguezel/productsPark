@@ -55,6 +55,7 @@ const menuGroups = [
       { title: "Menü", icon: Menu, value: "menu", path: "/admin/menu" },
       { title: "Popup'lar", icon: MessageSquare, value: "popups", path: "/admin/popups" },
       { title: "Sahte Bildirimler", icon: Bell, value: "fake-notifications", path: "/admin/fake-notifications" },
+      { title: "İletişim Formları", icon: MessageSquare, value: "contacts", path: "/admin/contacts" },
     ],
   },
   {

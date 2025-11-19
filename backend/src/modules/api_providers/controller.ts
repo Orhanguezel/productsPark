@@ -1,7 +1,18 @@
-// src/modules/api_providers/controller.ts
+// =============================================================
+// FILE: src/modules/api_providers/controller.ts
+// =============================================================
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { ListQuerySchema, IdParamSchema, CreateBodySchema, UpdateBodySchema } from "./validation";
+import {
+  ListQuerySchema,
+  IdParamSchema,
+  CreateBodySchema,
+  UpdateBodySchema,
+} from "./validation";
 import type { ApiProviderView, ApiProviderCredentials } from "./schema";
+
+// Node 18+ global fetch yoksa fallback
+import _fetch from "node-fetch";
+const fetchAny: typeof fetch = (globalThis as any).fetch || (_fetch as any);
 
 /** MySQL minimal yüzey */
 type MySQL = { query<T = any[]>(sql: string, params?: any[]): Promise<[T, any]> };
@@ -10,17 +21,26 @@ function getMysql(req: FastifyRequest): MySQL {
   const s = req.server as any;
   const r = req as any;
   const db = s.mysql ?? r.mysql ?? s.db ?? s.mariadb ?? null;
-  if (!db?.query) throw new Error("MySQL pool not found. Make sure fastify.mysql is registered.");
+  if (!db?.query)
+    throw new Error(
+      "MySQL pool not found. Make sure fastify.mysql is registered."
+    );
   return db as MySQL;
 }
 
-const truthy = (v: unknown) => v === true || v === "true" || v === 1 || v === "1";
-const toIso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v ?? ""));
+const truthy = (v: unknown) =>
+  v === true || v === "true" || v === 1 || v === "1";
+const toIso = (v: unknown) =>
+  v instanceof Date ? v.toISOString() : String(v ?? "");
 
 function parseOrder(raw: string | undefined, allow: string[], fallback = "name.asc") {
   if (!raw) raw = fallback;
   const s = raw.toLowerCase().trim();
-  if (s === "asc" || s === "desc") return { col: fallback.split(".")[0], dir: s === "desc" ? "DESC" : "ASC" };
+  if (s === "asc" || s === "desc")
+    return {
+      col: fallback.split(".")[0],
+      dir: s === "desc" ? "DESC" : "ASC",
+    };
   const [maybeCol, maybeDir] = s.split(".");
   const col = allow.includes(maybeCol) ? maybeCol : fallback.split(".")[0];
   const dir = maybeDir === "desc" ? "DESC" : "ASC";
@@ -39,8 +59,9 @@ type ApiProviderDbRow = {
 
 /* ---------------- helpers: credentials temizleme/sanitize ---------------- */
 
-function safeParseJson<T = unknown>(s: string): T | {} {
+function safeParseJson<T = unknown>(s: unknown): T | {} {
   try {
+    if (typeof s !== "string") return (s ?? {}) as T;
     return s ? (JSON.parse(s) as T) : {};
   } catch {
     return {};
@@ -48,10 +69,16 @@ function safeParseJson<T = unknown>(s: string): T | {} {
 }
 
 /** objeden null/undefined'ları at */
-function cleanObject<T extends Record<string, unknown>>(obj?: T): Partial<T> | undefined {
+function cleanObject<T extends Record<string, unknown>>(
+  obj?: T
+): Partial<T> | undefined {
   if (!obj) return undefined;
-  const entries = Object.entries(obj).filter(([, v]) => v !== null && v !== undefined);
-  return entries.length ? (Object.fromEntries(entries) as Partial<T>) : undefined;
+  const entries = Object.entries(obj).filter(
+    ([, v]) => v !== null && v !== undefined
+  );
+  return entries.length
+    ? (Object.fromEntries(entries) as Partial<T>)
+    : undefined;
 }
 
 /** raw → ApiProviderCredentials tipine güvenli daraltma */
@@ -61,7 +88,8 @@ function toCredentials(raw: any): ApiProviderCredentials {
   if (typeof raw?.api_key === "string") out.api_key = raw.api_key;
   if (typeof raw?.balance === "number") out.balance = raw.balance;
   if (typeof raw?.currency === "string") out.currency = raw.currency;
-  if (typeof raw?.last_balance_check === "string") out.last_balance_check = raw.last_balance_check;
+  if (typeof raw?.last_balance_check === "string")
+    out.last_balance_check = raw.last_balance_check;
   // kalan alanları da (tipini bozmayacak şekilde) merge edelim
   if (raw && typeof raw === "object") {
     for (const [k, v] of Object.entries(raw)) {
@@ -72,7 +100,10 @@ function toCredentials(raw: any): ApiProviderCredentials {
 }
 
 /** mevcut creds ile overlay'i birleştir (null/undefined yok say) */
-function mergeCreds(base: ApiProviderCredentials, overlay?: Record<string, unknown>): ApiProviderCredentials {
+function mergeCreds(
+  base: ApiProviderCredentials,
+  overlay?: Record<string, unknown>
+): ApiProviderCredentials {
   const cleaned = cleanObject(overlay) ?? {};
   const next: ApiProviderCredentials = { ...base };
   for (const [k, v] of Object.entries(cleaned)) {
@@ -81,7 +112,6 @@ function mergeCreds(base: ApiProviderCredentials, overlay?: Record<string, unkno
       if (typeof v === "string") next.currency = v;
       continue;
     }
-    // diğer alanlar özgür
     (next as any)[k] = v;
   }
   return next;
@@ -102,18 +132,29 @@ function rowToView(row: ApiProviderDbRow): ApiProviderView {
     is_active: row.is_active === 1,
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
-    credentials: creds, // burada currency hiçbir zaman null olmayacak (ya string ya undefined)
-    balance: typeof (raw as any).balance === "number" ? (raw as any).balance : null,
-    currency: typeof (raw as any).currency === "string" ? (raw as any).currency : null, // VIEW alanı null olabilir
+    credentials: creds,
+    balance:
+      typeof (raw as any).balance === "number"
+        ? (raw as any).balance
+        : null,
+    currency:
+      typeof (raw as any).currency === "string"
+        ? (raw as any).currency
+        : null,
     last_balance_check:
-      typeof (raw as any).last_balance_check === "string" ? (raw as any).last_balance_check : null,
+      typeof (raw as any).last_balance_check === "string"
+        ? (raw as any).last_balance_check
+        : null,
   };
 }
 
 /* ---------------- HANDLERS ---------------- */
 
 /** GET /admin/api-providers */
-export async function adminListApiProviders(req: FastifyRequest, reply: FastifyReply) {
+export async function adminListApiProviders(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
   const mysql = getMysql(req);
   const q = ListQuerySchema.parse(req.query);
 
@@ -125,7 +166,11 @@ export async function adminListApiProviders(req: FastifyRequest, reply: FastifyR
     params.push(truthy(q.is_active) ? 1 : 0);
   }
 
-  const { col, dir } = parseOrder(q.order, ["name", "created_at", "updated_at"], "name.asc");
+  const { col, dir } = parseOrder(
+    q.order,
+    ["name", "created_at", "updated_at"],
+    "name.asc"
+  );
   const where = conds.length ? ` WHERE ${conds.join(" AND ")}` : "";
   const sqlStr = `
     SELECT id, name, \`type\`, credentials, is_active, created_at, updated_at
@@ -139,7 +184,10 @@ export async function adminListApiProviders(req: FastifyRequest, reply: FastifyR
 }
 
 /** GET /admin/api-providers/:id */
-export async function adminGetApiProvider(req: FastifyRequest, reply: FastifyReply) {
+export async function adminGetApiProvider(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
   const mysql = getMysql(req);
   const { id } = IdParamSchema.parse(req.params);
 
@@ -153,14 +201,16 @@ export async function adminGetApiProvider(req: FastifyRequest, reply: FastifyRep
 }
 
 /** POST /admin/api-providers */
-export async function adminCreateApiProvider(req: FastifyRequest, reply: FastifyReply) {
+export async function adminCreateApiProvider(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
   const mysql = getMysql(req);
   const body = CreateBodySchema.parse(req.body);
 
   const [uuidRows] = await mysql.query<{ id: string }[]>(`SELECT UUID() AS id`);
   const newId = uuidRows[0].id;
 
-  // body.credentials içindeki null/undefined’ları temizle
   const base: ApiProviderCredentials = {
     api_url: body.api_url,
     api_key: body.api_key,
@@ -183,7 +233,10 @@ export async function adminCreateApiProvider(req: FastifyRequest, reply: Fastify
 }
 
 /** PUT /admin/api-providers/:id */
-export async function adminUpdateApiProvider(req: FastifyRequest, reply: FastifyReply) {
+export async function adminUpdateApiProvider(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
   const mysql = getMysql(req);
   const { id } = IdParamSchema.parse(req.params);
   const patch = UpdateBodySchema.parse(req.body);
@@ -193,7 +246,8 @@ export async function adminUpdateApiProvider(req: FastifyRequest, reply: Fastify
      FROM api_providers WHERE id = ? LIMIT 1`,
     [id]
   );
-  if (!existingRows?.length) return reply.code(404).send({ message: "not_found" });
+  if (!existingRows?.length)
+    return reply.code(404).send({ message: "not_found" });
 
   const oldRaw = safeParseJson(existingRows[0].credentials);
   const oldCreds = toCredentials(oldRaw);
@@ -212,15 +266,31 @@ export async function adminUpdateApiProvider(req: FastifyRequest, reply: Fastify
   const fields: string[] = ["updated_at = NOW(3)"];
   const params: any[] = [];
 
-  if (patch.name !== undefined)          { fields.push("name = ?");        params.push(patch.name); }
-  if (patch.provider_type !== undefined) { fields.push("`type` = ?");      params.push(patch.provider_type); }
-  if (newCreds !== undefined)            { fields.push("credentials = ?"); params.push(JSON.stringify(newCreds)); }
-  if (patch.is_active !== undefined)     { fields.push("is_active = ?");   params.push(patch.is_active ? 1 : 0); }
+  if (patch.name !== undefined) {
+    fields.push("name = ?");
+    params.push(patch.name);
+  }
+  if (patch.provider_type !== undefined) {
+    fields.push("`type` = ?");
+    params.push(patch.provider_type);
+  }
+  if (newCreds !== undefined) {
+    fields.push("credentials = ?");
+    params.push(JSON.stringify(newCreds));
+  }
+  if (patch.is_active !== undefined) {
+    fields.push("is_active = ?");
+    params.push(patch.is_active ? 1 : 0);
+  }
 
-  if (fields.length === 1) return reply.code(400).send({ message: "empty_body" });
+  if (fields.length === 1)
+    return reply.code(400).send({ message: "empty_body" });
 
   params.push(id);
-  await mysql.query(`UPDATE api_providers SET ${fields.join(", ")} WHERE id = ?`, params);
+  await mysql.query(
+    `UPDATE api_providers SET ${fields.join(", ")} WHERE id = ?`,
+    params
+  );
 
   const [rows] = await mysql.query<ApiProviderDbRow[]>(
     `SELECT id, name, \`type\`, credentials, is_active, created_at, updated_at
@@ -232,7 +302,10 @@ export async function adminUpdateApiProvider(req: FastifyRequest, reply: Fastify
 }
 
 /** DELETE /admin/api-providers/:id */
-export async function adminDeleteApiProvider(req: FastifyRequest, reply: FastifyReply) {
+export async function adminDeleteApiProvider(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
   const mysql = getMysql(req);
   const { id } = IdParamSchema.parse(req.params);
   await mysql.query(`DELETE FROM api_providers WHERE id = ?`, [id]);
@@ -240,7 +313,10 @@ export async function adminDeleteApiProvider(req: FastifyRequest, reply: Fastify
 }
 
 /** POST /admin/api-providers/:id/check-balance */
-export async function adminCheckApiProviderBalance(req: FastifyRequest, reply: FastifyReply) {
+export async function adminCheckApiProviderBalance(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
   const mysql = getMysql(req);
   const { id } = IdParamSchema.parse(req.params);
 
@@ -258,20 +334,24 @@ export async function adminCheckApiProviderBalance(req: FastifyRequest, reply: F
   const apiUrl = typeof creds.api_url === "string" ? creds.api_url : "";
   const apiKey = typeof creds.api_key === "string" ? creds.api_key : "";
 
-  if (!apiUrl || !apiKey) return reply.code(400).send({ message: "missing_credentials" });
-  if (row.type !== "smm") return reply.code(400).send({ message: "unsupported_provider_type" });
+  if (!apiUrl || !apiKey)
+    return reply.code(400).send({ message: "missing_credentials" });
+  if (row.type !== "smm")
+    return reply.code(400).send({ message: "unsupported_provider_type" });
 
-  // PerfectPanel standardı: key + action=balance (+ format=json önerilir)
-  const body = new URLSearchParams({ key: apiKey, action: "balance", format: "json" }).toString();
+  const body = new URLSearchParams({
+    key: apiKey,
+    action: "balance",
+    format: "json",
+  }).toString();
 
   let rawText = "";
   try {
-    const res = await fetch(apiUrl, {
+    const res = await fetchAny(apiUrl, {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
         accept: "application/json, text/plain, */*",
-        "user-agent": "Mozilla/5.0 (compatible; ProductsParkBot/1.0; +https://productspark.local)",
       },
       body,
     });
@@ -280,20 +360,28 @@ export async function adminCheckApiProviderBalance(req: FastifyRequest, reply: F
 
     // 1) JSON parse dene
     let j: any;
-    try { j = JSON.parse(rawText); } catch {}
+    try {
+      j = JSON.parse(rawText);
+    } catch {
+      j = null;
+    }
 
     let balance: number | null = null;
     let currency: string | null = null;
 
     if (j && typeof j === "object") {
       if (j.error) {
+        // Örn: key hatalı vs.
         return reply.code(502).send({
           message: "provider_error",
-          raw: String(j.error).slice(0, 160),
+          raw: String(j.error).slice(0, 200),
         });
       }
       if (j.balance !== undefined) {
         balance = Number(j.balance);
+        currency = typeof j.currency === "string" ? j.currency : null;
+      } else if (j.funds !== undefined) {
+        balance = Number(j.funds);
         currency = typeof j.currency === "string" ? j.currency : null;
       }
     }
@@ -307,7 +395,7 @@ export async function adminCheckApiProviderBalance(req: FastifyRequest, reply: F
       }
     }
 
-    // 3) hâlâ yoksa: hata
+    // 3) hâlâ yoksa: provider cevabı bozuk
     if (balance === null || Number.isNaN(balance)) {
       return reply.code(502).send({
         message: "bad_provider_response",
@@ -317,7 +405,6 @@ export async function adminCheckApiProviderBalance(req: FastifyRequest, reply: F
 
     const nowIso = new Date().toISOString();
 
-    // credentials.currency'e null yazmayacağız → sadece string ise yaz
     const resolvedCurrency =
       typeof currency === "string"
         ? currency
@@ -339,11 +426,14 @@ export async function adminCheckApiProviderBalance(req: FastifyRequest, reply: F
     return reply.send({
       success: true,
       balance,
-      currency: resolvedCurrency ?? null, // VIEW katmanı için null dönebilir
+      currency: resolvedCurrency ?? null,
       last_balance_check: nowIso,
     });
   } catch (e: any) {
-    req.log.error({ err: e, raw: rawText.slice(0, 160) }, "balance_check_failed");
+    req.log.error(
+      { err: e, raw: rawText.slice(0, 160) },
+      "balance_check_failed"
+    );
     return reply.code(502).send({
       message: "provider_unreachable",
       error: e?.message ?? String(e),

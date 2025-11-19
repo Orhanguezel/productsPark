@@ -24,7 +24,7 @@ function mapRow(r: CouponRow) {
   return {
     id: r.id,
     code: r.code,
-    // 🆕 Başlık ve içerik
+    // Başlık ve içerik
     title: r.title ?? null,
     content_html: r.content_html ?? null,
 
@@ -37,9 +37,12 @@ function mapRow(r: CouponRow) {
     used_count: r.used_count == null ? null : toNum(r.used_count),
     valid_from: iso(r.valid_from),
     valid_until: iso(r.valid_until),
-    applicable_to: "all" as const,
-    category_ids: null,
-    product_ids: null,
+
+    // 🔥 ARTIK DB'DEKİ KAPSAM ALANLARI GÖNDERİLİYOR
+    applicable_to: (r.applicable_to as any) ?? "all",
+    category_ids: r.category_ids ?? null, // JSON string veya null
+    product_ids: r.product_ids ?? null,   // JSON string veya null
+
     created_at: iso(r.created_at),
     updated_at: iso(r.updated_at),
   };

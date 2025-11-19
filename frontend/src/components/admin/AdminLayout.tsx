@@ -27,6 +27,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     if (path.includes("/orders")) return "orders";
     if (path.includes("/categories")) return "categories";
     if (path.includes("/blog")) return "blog";
+    if (path.includes("/contacts")) return "contacts";
     if (path.includes("/coupons")) return "coupons";
     if (path.includes("/api-providers")) return "api-providers";
     if (path.includes("/turkpin-settings")) return "turkpin-settings";

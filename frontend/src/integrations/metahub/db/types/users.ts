@@ -3,6 +3,19 @@
 // =============================================================
 
 export type UserRoleName = "admin" | "moderator" | "user";
+export type UserRole = {
+  id: string;
+  name: UserRoleName;
+  description?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type UserMetadata = {
+  full_name?: string | null;
+  name?: string | null;
+  [k: string]: unknown;
+} | null;
 
 export type ProfileRow = {
   id: string;
@@ -49,4 +62,20 @@ export type AdminUserView = {
   full_name: string | null;
   created_at: string | null;
   roles: UserRoleName[]; // her zaman dizi
+};
+
+export type User = {
+  id: string;
+  email: string;
+  full_name?: string | null;
+  phone?: string | null;
+  is_active?: 0 | 1;
+  email_verified?: 0 | 1;
+  wallet_balance?: string; // backend decimal as string
+  last_sign_in_at?: string | null; // ISO
+  created_at?: string;
+  updated_at?: string;
+  role?: UserRole;
+  [key: string]: unknown;
+  user_metadata?: UserMetadata;
 };

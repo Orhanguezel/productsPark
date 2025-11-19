@@ -1,5 +1,9 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// =============================================================
+// FILE: src/components/admin/AdminPanel/CategoryManagement.tsx
+// (RTK tabanlı, kısa açıklama ön izlemeli)
+// =============================================================
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,73 +27,108 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface Category {
-  id: string;
+import {
+  useListCategoriesAdminQuery,
+  useCreateCategoryAdminMutation,
+  useUpdateCategoryAdminMutation,
+  useDeleteCategoryAdminMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
+
+import type {
+  Category as CategoryModel,
+  UpsertCategoryBody,
+} from "@/integrations/metahub/db/types/categories";
+
+type FormState = {
   name: string;
   slug: string;
-  description: string | null;
-  icon: string | null;
-  image_url: string | null;
-  product_count: number;
-  created_at: string;
-}
+  description: string;
+  image_url: string;
+  is_featured: boolean;
+  display_order: number;
+};
+
+const defaultForm: FormState = {
+  name: "",
+  slug: "",
+  description: "",
+  image_url: "",
+  is_featured: false,
+  display_order: 0,
+};
 
 export const CategoryManagement = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: categories = [],
+    isLoading,
+    refetch,
+  } = useListCategoriesAdminQuery();
+
+  const [createCategory, { isLoading: creating }] =
+    useCreateCategoryAdminMutation();
+  const [updateCategory, { isLoading: updating }] =
+    useUpdateCategoryAdminMutation();
+  const [deleteCategory, { isLoading: deleting }] =
+    useDeleteCategoryAdminMutation();
+
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    slug: "",
-    description: "",
-    image_url: "",
-    is_featured: false,
-    display_order: 0,
-  });
+  const [editingCategory, setEditingCategory] =
+    useState<CategoryModel | null>(null);
+  const [formData, setFormData] = useState<FormState>(defaultForm);
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
+  const saving = creating || updating;
 
-  const fetchCategories = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("categories")
-        .select("*")
-        .order("name");
+  const resetForm = () => {
+    setEditingCategory(null);
+    setFormData(defaultForm);
+  };
 
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    } finally {
-      setLoading(false);
-    }
+  const handleEdit = (category: CategoryModel) => {
+    setEditingCategory(category);
+    setFormData({
+      name: category.name,
+      slug: category.slug,
+      description: category.description || "",
+      image_url: category.image_url || "",
+      is_featured: category.is_featured ?? false,
+      display_order: category.display_order ?? 0,
+    });
+    setDialogOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const payload: UpsertCategoryBody = {
+      name: formData.name.trim(),
+      slug: formData.slug.trim(),
+      description: formData.description.trim() || null,
+      image_url: formData.image_url.trim() || null,
+      is_featured: formData.is_featured,
+      display_order: formData.display_order,
+    };
+
     try {
       if (editingCategory) {
-        const { error } = await metahub
-          .from("categories")
-          .update(formData)
-          .eq("id", editingCategory.id);
-
-        if (error) throw error;
-        toast({ title: "Başarılı", description: "Kategori güncellendi." });
+        await updateCategory({
+          id: editingCategory.id,
+          body: payload,
+        }).unwrap();
+        toast({
+          title: "Başarılı",
+          description: "Kategori güncellendi.",
+        });
       } else {
-        const { error } = await metahub.from("categories").insert([formData]);
-
-        if (error) throw error;
-        toast({ title: "Başarılı", description: "Kategori oluşturuldu." });
+        await createCategory(payload).unwrap();
+        toast({
+          title: "Başarılı",
+          description: "Kategori oluşturuldu.",
+        });
       }
 
       setDialogOpen(false);
       resetForm();
-      fetchCategories();
+      refetch();
     } catch (error) {
       console.error("Error saving category:", error);
       toast({
@@ -104,11 +143,12 @@ export const CategoryManagement = () => {
     if (!confirm("Bu kategoriyi silmek istediğinizden emin misiniz?")) return;
 
     try {
-      const { error } = await metahub.from("categories").delete().eq("id", id);
-
-      if (error) throw error;
-      toast({ title: "Başarılı", description: "Kategori silindi." });
-      fetchCategories();
+      await deleteCategory(id).unwrap();
+      toast({
+        title: "Başarılı",
+        description: "Kategori silindi.",
+      });
+      refetch();
     } catch (error) {
       console.error("Error deleting category:", error);
       toast({
@@ -119,40 +159,22 @@ export const CategoryManagement = () => {
     }
   };
 
-  const handleEdit = (category: Category) => {
-    setEditingCategory(category);
-    setFormData({
-      name: category.name,
-      slug: category.slug,
-      description: category.description || "",
-      image_url: category.image_url || "",
-      is_featured: (category as any).is_featured || false,
-      display_order: (category as any).display_order || 0,
-    });
-    setDialogOpen(true);
-  };
-
-  const resetForm = () => {
-    setEditingCategory(null);
-    setFormData({
-      name: "",
-      slug: "",
-      description: "",
-      image_url: "",
-      is_featured: false,
-      display_order: 0,
-    });
-  };
-
-  if (loading) return <div>Yükleniyor...</div>;
+  if (isLoading) return <div>Yükleniyor...</div>;
 
   return (
     <div className="space-y-4">
+      {/* Üst bar */}
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Kategori Yönetimi</h3>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm} className="gradient-primary">
+            <Button
+              onClick={() => {
+                resetForm();
+                setDialogOpen(true);
+              }}
+              className="gradient-primary"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Yeni Kategori Ekle
             </Button>
@@ -163,6 +185,8 @@ export const CategoryManagement = () => {
                 {editingCategory ? "Kategoriyi Düzenle" : "Yeni Kategori Ekle"}
               </DialogTitle>
             </DialogHeader>
+
+            {/* FORM */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="name">Kategori Adı</Label>
@@ -175,6 +199,7 @@ export const CategoryManagement = () => {
                   required
                 />
               </div>
+
               <div>
                 <Label htmlFor="slug">Slug (URL)</Label>
                 <Input
@@ -186,17 +211,22 @@ export const CategoryManagement = () => {
                   required
                 />
               </div>
+
               <div>
-                <Label htmlFor="description">Açıklama</Label>
+                <Label htmlFor="description">Kısa Açıklama</Label>
                 <Textarea
                   id="description"
                   value={formData.description}
                   onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                    setFormData({
+                      ...formData,
+                      description: e.target.value,
+                    })
                   }
                   rows={3}
                 />
               </div>
+
               <div>
                 <Label htmlFor="image_url">Görsel URL</Label>
                 <Input
@@ -207,15 +237,21 @@ export const CategoryManagement = () => {
                   }
                 />
               </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
                   id="is_featured"
                   checked={formData.is_featured}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, is_featured: checked })
+                    setFormData({
+                      ...formData,
+                      is_featured: checked,
+                    })
                   }
                 />
-                <Label htmlFor="is_featured">Anasayfada Öne Çıkan Kategori</Label>
+                <Label htmlFor="is_featured">
+                  Anasayfada Öne Çıkan Kategori
+                </Label>
               </div>
 
               {formData.is_featured && (
@@ -229,17 +265,20 @@ export const CategoryManagement = () => {
                   <Input
                     id="display_order"
                     type="number"
-                    min="0"
+                    min={0}
                     value={formData.display_order}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      display_order: parseInt(e.target.value) || 0
-                    })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        display_order: parseInt(e.target.value) || 0,
+                      })
+                    }
                     placeholder="Örn: 1"
                     className="max-w-xs"
                   />
                 </div>
               )}
+
               <div className="flex gap-2 justify-end">
                 <Button
                   type="button"
@@ -251,7 +290,11 @@ export const CategoryManagement = () => {
                 >
                   İptal
                 </Button>
-                <Button type="submit" className="gradient-primary">
+                <Button
+                  type="submit"
+                  className="gradient-primary"
+                  disabled={saving}
+                >
                   {editingCategory ? "Güncelle" : "Oluştur"}
                 </Button>
               </div>
@@ -260,37 +303,54 @@ export const CategoryManagement = () => {
         </Dialog>
       </div>
 
+      {/* TABLO */}
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Kategori</TableHead>
+            <TableHead>Kısa Açıklama</TableHead>
             <TableHead>Ürün Sayısı</TableHead>
             <TableHead className="text-right">İşlemler</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {categories.map((category) => (
-            <TableRow key={category.id}>
-              <TableCell className="font-medium">{category.name}</TableCell>
-              <TableCell>{category.product_count}</TableCell>
-              <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleEdit(category)}
-                >
-                  <Pencil className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(category.id)}
-                >
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+          {categories.map((category) => {
+            const shortDesc =
+              (category.description || "").length > 80
+                ? `${category.description?.slice(0, 80)}…`
+                : category.description || "—";
+
+            const productCount = (category as any).product_count ?? 0;
+
+            return (
+              <TableRow key={category.id}>
+                <TableCell className="font-medium">
+                  {category.name}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {shortDesc}
+                </TableCell>
+                <TableCell>{productCount}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleEdit(category)}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(category.id)}
+                    disabled={deleting}
+                  >
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

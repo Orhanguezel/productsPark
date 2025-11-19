@@ -36,7 +36,7 @@ import {
 import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
 
 // ---- RTK (Api Providers - ayrı endpoint) ----
-import { useListApiProvidersQuery } from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
+import { useListApiProvidersQuery } from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
 
 // ---- RTK (Public read-only – listeleme) ----
 import { useListProductFaqsQuery } from "@/integrations/metahub/rtk/endpoints/product_faqs.endpoints";
@@ -167,11 +167,11 @@ export default function ProductForm() {
 
   type RawProvider =
     | {
-        id?: string | number;
-        provider_id?: string | number;
-        name?: string;
-        provider_name?: string;
-      }
+      id?: string | number;
+      provider_id?: string | number;
+      name?: string;
+      provider_name?: string;
+    }
     | null
     | undefined;
 
@@ -332,7 +332,7 @@ export default function ProductForm() {
     );
     setQuantityOptions(
       (product.quantity_options as { quantity: number; price: number }[]) ??
-        []
+      []
     );
     setBadges((product.badges as Badge[]) ?? []);
 
@@ -361,8 +361,8 @@ export default function ProductForm() {
           typeof obj.stock_content === "string"
             ? obj.stock_content
             : typeof obj.code === "string"
-            ? obj.code
-            : "";
+              ? obj.code
+              : "";
         return code.trim() ? [code.trim()] : [];
       }
       return [];
@@ -427,7 +427,7 @@ export default function ProductForm() {
 
       const folder = `products/${safeFolder(
         (formData.slug as string) ||
-          slugify((formData.name as string) || "product")
+        slugify((formData.name as string) || "product")
       )}/cover`;
 
       const asset = await uploadAsset({
@@ -459,7 +459,8 @@ export default function ProductForm() {
           data?: { message?: string; error?: { message?: string } };
         })?.data?.message ||
         (err as {
-          data?: { error?: { message?: string };
+          data?: {
+            error?: { message?: string };
           };
         })?.data?.error?.message;
       toast({
@@ -474,16 +475,16 @@ export default function ProductForm() {
     arg:
       | File
       | {
-          target?: { files?: FileList | null };
-          currentTarget?: { files?: FileList | null };
-        }
+        target?: { files?: FileList | null };
+        currentTarget?: { files?: FileList | null };
+      }
   ) => {
     const file =
       arg instanceof File
         ? arg
         : arg?.target?.files?.[0] ??
-          arg?.currentTarget?.files?.[0] ??
-          null;
+        arg?.currentTarget?.files?.[0] ??
+        null;
     if (!file) {
       toast({
         title: "Dosya yok",
@@ -506,7 +507,7 @@ export default function ProductForm() {
     try {
       const folder = `products/${safeFolder(
         (formData.slug as string) ||
-          slugify((formData.name as string) || "product")
+        slugify((formData.name as string) || "product")
       )}/content`;
 
       const asset = await uploadAsset({
@@ -647,16 +648,16 @@ export default function ProductForm() {
       // Yeni ürün: her zaman body'de olsun
       reviewCountForCreate =
         rawReview === undefined ||
-        rawReview === null ||
-        rawReview === ""
+          rawReview === null ||
+          rawReview === ""
           ? 0
           : Number(rawReview) || 0;
     } else if (reviewCountDirty) {
       // Update: kullanıcı alanı değiştirdiyse patch ile gönder
       reviewCountForUpdate =
         rawReview === undefined ||
-        rawReview === null ||
-        rawReview === ""
+          rawReview === null ||
+          rawReview === ""
           ? 0
           : Number(rawReview) || 0;
     }
@@ -833,8 +834,8 @@ export default function ProductForm() {
         isCopyMode
           ? "Ürünü Kopyala"
           : isCreate
-          ? "Yeni Ürün Ekle"
-          : "Ürünü Düzenle"
+            ? "Yeni Ürün Ekle"
+            : "Ürünü Düzenle"
       }
     >
       {/* gizli input: Quill içerik görseli (embed fix) */}
@@ -888,8 +889,8 @@ export default function ProductForm() {
                 {loading || creating || updating
                   ? "Kaydediliyor..."
                   : isCreate || isCopyMode
-                  ? "Oluştur"
-                  : "Güncelle"}
+                    ? "Oluştur"
+                    : "Güncelle"}
               </Button>
             </CardHeader>
 
@@ -977,9 +978,9 @@ export default function ProductForm() {
                       arg:
                         | File
                         | {
-                            target?: { files?: FileList | null };
-                            currentTarget?: { files?: FileList | null };
-                          }
+                          target?: { files?: FileList | null };
+                          currentTarget?: { files?: FileList | null };
+                        }
                     ) => {
                       const ev = arg as {
                         target?: { files?: FileList | null };
@@ -1001,9 +1002,9 @@ export default function ProductForm() {
                         }
                         const folder = `products/${safeFolder(
                           (formData.slug as string) ||
-                            slugify(
-                              (formData.name as string) || "product"
-                            )
+                          slugify(
+                            (formData.name as string) || "product"
+                          )
                         )}/files`;
 
                         const asset = await uploadAsset({
@@ -1097,8 +1098,8 @@ export default function ProductForm() {
               {loading || creating || updating
                 ? "Kaydediliyor..."
                 : isCreate || isCopyMode
-                ? "Oluştur"
-                : "Güncelle"}
+                  ? "Oluştur"
+                  : "Güncelle"}
             </Button>
           </div>
         </form>
