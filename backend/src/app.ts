@@ -35,6 +35,7 @@ import { registerPayments } from '@/modules/payments/router';
 import { registerFaqs } from '@/modules/faqs/router';
 import { registerNotifications } from "@/modules/notifications/router";
 import { registerMail } from "@/modules/mail/router";
+import { registerContacts } from "@/modules/contact/router";
 
 
 import { registerProductsAdmin } from "@/modules/products/admin.routes";
@@ -56,6 +57,8 @@ import { registerFakeNotificationConfig } from './modules/siteSettings/fakeNotif
 import { registerFakeOrderNotifications } from './modules/fakeOrderNotifications/router';
 import { registerFaqsAdmin} from '@/modules/faqs/admin.routes';
 import { registerStorageAdmin } from '@/modules/storage/admin.routes';
+import { registerDbAdmin } from '@/modules/db_admin/admin.routes';
+import { registerContactsAdmin } from "@/modules/contact/admin.routes";
 
 function parseCorsOrigins(v?: string | string[]): boolean | string[] {
   if (!v) return true;
@@ -150,6 +153,8 @@ export async function createApp() {
   await registerTopbarAdmin(app);
   await registerFaqsAdmin(app);
   await registerStorageAdmin(app);
+  await registerDbAdmin(app);
+  await registerContactsAdmin(app);
 
 
   await registerFakeOrderNotifications(app);
@@ -180,6 +185,7 @@ export async function createApp() {
   await registerFaqs(app);
   await registerNotifications(app);
   await registerMail(app);
+  await registerContacts(app);
 
   registerErrorHandlers(app);
   return app;

@@ -68,6 +68,7 @@ export const metahubTags = [
   "Carts","Cart",
   "NotificationsMeta","Notifications","Notification",
   "Storage","StorageAsset","StorageFolder",
+  "Contacts","Contact",
 ] as const;
 
 export type MetahubTag = typeof metahubTags[number];

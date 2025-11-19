@@ -30,6 +30,8 @@ export type StatusResp = {
   user?: { id: string; email: string | null; role: "admin" | "moderator" | "user" };
 };
 
+const BASE="/auth";
+
 /* -----------------------------
  * Public/Auth Endpoints
  * ----------------------------- */
@@ -37,7 +39,7 @@ export const authApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     token: b.mutation<TokenResp, { email: string; password: string }>({
       query: ({ email, password }): FetchArgs => ({
-        url: "/auth/v1/token",
+        url: `${BASE}/token`,
         method: "POST",
         body: { grant_type: "password", email, password } satisfies LoginBody,
       }),
@@ -46,7 +48,7 @@ export const authApi = baseApi.injectEndpoints({
 
     signUp: b.mutation<TokenResp, SignUpBody>({
       query: (body): FetchArgs => ({
-        url: "/auth/v1/signup",
+        url: `${BASE}/signup`,
         method: "POST",
         body,
       }),
@@ -54,28 +56,28 @@ export const authApi = baseApi.injectEndpoints({
     }),
 
     refresh: b.mutation<{ access_token: string; token_type: "bearer" }, void>({
-      query: (): FetchArgs => ({ url: "/auth/v1/token/refresh", method: "POST" }),
+      query: (): FetchArgs => ({ url: `${BASE}/token/refresh`, method: "POST" }),
       invalidatesTags: ["Auth"],
     }),
 
     me: b.query<UserResp, void>({
-      query: (): FetchArgs => ({ url: "/auth/v1/user", method: "GET" }),
+      query: (): FetchArgs => ({ url: `${BASE}/user`, method: "GET" }),
       providesTags: ["Auth", "User"],
     }),
 
     status: b.query<StatusResp, void>({
-      query: (): FetchArgs => ({ url: "/auth/v1/status", method: "GET" }),
+      query: (): FetchArgs => ({ url: `${BASE}/status`, method: "GET" }),
       providesTags: ["Auth", "User"],
     }),
 
     logout: b.mutation<void, void>({
-      query: (): FetchArgs => ({ url: "/auth/v1/logout", method: "POST" }),
+      query: (): FetchArgs => ({ url: `${BASE}/logout`, method: "POST" }),
       invalidatesTags: ["Auth", "User"],
     }),
 
     signInWithGoogle: b.mutation<TokenResp, { idToken: string }>({
       query: ({ idToken }): FetchArgs => ({
-        url: "/auth/v1/google",
+        url: `${BASE}/google`,
         method: "POST",
         body: { id_token: idToken },
       }),
@@ -84,7 +86,7 @@ export const authApi = baseApi.injectEndpoints({
 
     googleStart: b.mutation<{ url: string }, { redirectTo?: string }>({
       query: ({ redirectTo }): FetchArgs => ({
-        url: "/auth/v1/google/start",
+        url: `${BASE}/google/start`,
         method: "POST",
         body: { redirectTo },
       }),
@@ -92,7 +94,7 @@ export const authApi = baseApi.injectEndpoints({
 
     updateUser: b.mutation<UserResp, Partial<User> & { password?: string }>({
       query: (body): FetchArgs => ({
-        url: "/auth/v1/user",
+        url: `${BASE}/user`,
         method: "PUT",
         body,
       }),

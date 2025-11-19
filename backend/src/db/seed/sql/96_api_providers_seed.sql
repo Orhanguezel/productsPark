@@ -1,6 +1,3 @@
-SET NAMES utf8mb4;
-SET time_zone = '+00:00';
-
 INSERT INTO `api_providers`
 (`id`, `name`, `type`, `credentials`, `is_active`, `created_at`, `updated_at`)
 VALUES
@@ -11,9 +8,12 @@ VALUES
  1,
  '2025-10-07 12:46:38',
  '2025-10-09 09:42:19')
-ON DUPLICATE KEY UPDATE
-  `name` = VALUES(`name`),
-  `type` = VALUES(`type`),
-  `credentials` = VALUES(`credentials`),
-  `is_active` = VALUES(`is_active`),
-  `updated_at` = VALUES(`updated_at`);
+...
+('2bbb7a4e-9b6b-49a4-9f4a-4c6b4a4d9c01',
+ 'Telegram Bot',
+ 'telegram',
+ '{ "bot_token": "{{TELEGRAM_BOT_TOKEN}}", "default_chat_id": "7474884105" }',
+ 1,
+ NOW(3),
+ NOW(3))
+...

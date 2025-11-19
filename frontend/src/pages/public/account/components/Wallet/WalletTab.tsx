@@ -6,10 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,14 +22,13 @@ import { toast } from "sonner";
 import { metahub } from "@/integrations/metahub/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
-import {
-  useListSiteSettingsQuery,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+import { useListSiteSettingsQuery } from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 import {
   useCreateOrderMutation,
   type CreateOrderBody,
 } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
 import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/db/types/wallet";
+import { useListPaymentProvidersQuery } from "@/integrations/metahub/rtk/endpoints/payment_providers.endpoints";
 
 type PaymentMethodId = "havale" | "eft" | "paytr" | "paytr_havale" | "shopier";
 
@@ -60,14 +56,6 @@ const asNumber = (v: unknown, d = 0): number => {
   return Number.isFinite(n) ? n : d;
 };
 
-const asBoolLoose = (v: unknown, d = false): boolean => {
-  if (typeof v === "boolean") return v;
-  const s = String(v ?? "").trim().toLowerCase();
-  if (["1", "true", "yes", "y", "on", "enabled"].includes(s)) return true;
-  if (["0", "false", "no", "n", "off", "disabled"].includes(s)) return false;
-  return d;
-};
-
 export function WalletTab({
   txns,
   txLoading,
@@ -85,104 +73,140 @@ export function WalletTab({
     isLoading: settingsLoading,
   } = useListSiteSettingsQuery(undefined);
 
+  // ---- payment_providers RTK (PUBLIC) ----
+  const {
+    data: providers = [],
+    isLoading: providersLoading,
+  } = useListPaymentProvidersQuery();
+
   // ---- orders RTK (create) ----
   const [createOrder, { isLoading: creatingOrder }] = useCreateOrderMutation();
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethodId | "">("");
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethodId | "">(
+    ""
+  );
   const [depositAmount, setDepositAmount] = useState("");
   const [depositing, setDepositing] = useState(false);
   const [transactionsPage, setTransactionsPage] = useState(1);
 
-  // site_settings'ten min limit + ödeme ayarlarını türet
+  // site_settings'ten min limit türet
   const minLimit = useMemo(() => {
     if (!siteSettings) return 10;
     const row = siteSettings.find((s) => s.key === "min_balance_limit");
     return asNumber(row?.value, 10);
   }, [siteSettings]);
 
+  // Ödeme yöntemlerini hem site_settings JSON'dan (havale/eft)
+  // hem de PUBLIC payment_providers listesinden (paytr, shopier, paytr_havale) türet
   useEffect(() => {
-    if (!user || !siteSettings) return;
-
-    const getVal = (key: string): unknown =>
-      siteSettings.find((s) => s.key === key)?.value;
+    if (!user) return;
 
     const methods: PaymentMethod[] = [];
 
-    // payment_methods JSON'u (iban vs)
-    const paymentSettings = getVal("payment_methods");
-    const getFromJson = <T,>(k: string, d: T): T =>
-      paymentSettings && typeof paymentSettings === "object"
-        ? ((paymentSettings as Record<string, unknown>)[k] as T) ?? d
-        : d;
+    // --------- 1) Havale / EFT detayları (site_settings.payment_methods JSON) ---------
+    if (siteSettings) {
+      const paymentMethodsRow = siteSettings.find(
+        (s) => s.key === "payment_methods"
+      );
 
-    // Havale
-    if (getFromJson("havale_enabled", false)) {
-      methods.push({
-        id: "havale",
-        name: "Havale",
-        enabled: true,
-        commission: 0,
-        iban: getFromJson<string | undefined>("havale_iban", undefined),
-        account_holder: getFromJson<string | undefined>("havale_account_holder", undefined),
-        bank_name: getFromJson<string | undefined>("havale_bank_name", undefined),
-      });
+      let cfg: Record<string, unknown> = {};
+      const raw = paymentMethodsRow?.value;
+
+      if (raw && typeof raw === "string") {
+        try {
+          cfg = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          cfg = {};
+        }
+      } else if (raw && typeof raw === "object") {
+        cfg = raw as Record<string, unknown>;
+      }
+
+      const getFromCfg = <T,>(k: string, d: T): T =>
+        (cfg[k] as T | undefined) ?? d;
+
+      // Havale
+      if (getFromCfg<boolean>("havale_enabled", false)) {
+        methods.push({
+          id: "havale",
+          name: "Havale",
+          enabled: true,
+          commission: 0,
+          iban: getFromCfg<string | undefined>("havale_iban", undefined),
+          account_holder: getFromCfg<string | undefined>(
+            "havale_account_holder",
+            undefined
+          ),
+          bank_name: getFromCfg<string | undefined>(
+            "havale_bank_name",
+            undefined
+          ),
+        });
+      }
+
+      // EFT
+      if (getFromCfg<boolean>("eft_enabled", false)) {
+        methods.push({
+          id: "eft",
+          name: "EFT",
+          enabled: true,
+          commission: 0,
+          iban: getFromCfg<string | undefined>("eft_iban", undefined),
+          account_holder: getFromCfg<string | undefined>(
+            "eft_account_holder",
+            undefined
+          ),
+          bank_name: getFromCfg<string | undefined>(
+            "eft_bank_name",
+            undefined
+          ),
+        });
+      }
     }
 
-    // EFT
-    if (getFromJson("eft_enabled", false)) {
-      methods.push({
-        id: "eft",
-        name: "EFT",
-        enabled: true,
-        commission: 0,
-        iban: getFromJson<string | undefined>("eft_iban", undefined),
-        account_holder: getFromJson<string | undefined>("eft_account_holder", undefined),
-        bank_name: getFromJson<string | undefined>("eft_bank_name", undefined),
-      });
-    }
+    // --------- 2) Kart / PayTR / Shopier / PayTR Havale (payment_providers PUBLIC) ---------
+    providers
+      .filter((p) => p.is_active)
+      .forEach((p) => {
+        const cfg = p.public_config ?? {};
+        const commission = asNumber(
+          (cfg as Record<string, unknown>).commission,
+          0
+        );
 
-    // PayTR kart
-    const paytrEnabled = asBoolLoose(getVal("paytr_enabled"), false);
-    const paytrComm = asNumber(getVal("paytr_commission"), 0);
-    if (paytrEnabled) {
-      methods.push({
-        id: "paytr",
-        name: "Kredi Kartı (PayTR)",
-        enabled: true,
-        commission: paytrComm,
+        if (p.key === "paytr") {
+          methods.push({
+            id: "paytr",
+            name: p.display_name || "Kredi Kartı (PayTR)",
+            enabled: true,
+            commission,
+          });
+        } else if (p.key === "paytr_havale") {
+          methods.push({
+            id: "paytr_havale",
+            name: p.display_name || "Havale/EFT (PayTR)",
+            enabled: true,
+            commission,
+          });
+        } else if (p.key === "shopier") {
+          methods.push({
+            id: "shopier",
+            name: p.display_name || "Kredi Kartı (Shopier)",
+            enabled: true,
+            commission,
+          });
+        }
       });
-    }
-
-    // PayTR havale
-    const paytrHavaleEnabled = asBoolLoose(getVal("paytr_havale_enabled"), false);
-    const paytrHavaleComm = asNumber(getVal("paytr_havale_commission"), 0);
-    if (paytrHavaleEnabled) {
-      methods.push({
-        id: "paytr_havale",
-        name: "Havale/EFT (PayTR)",
-        enabled: true,
-        commission: paytrHavaleComm,
-      });
-    }
-
-    // Shopier
-    const shopierEnabled = asBoolLoose(getVal("shopier_enabled"), false);
-    const shopierComm = asNumber(getVal("shopier_commission"), 0);
-    if (shopierEnabled) {
-      methods.push({
-        id: "shopier",
-        name: "Kredi Kartı (Shopier)",
-        enabled: true,
-        commission: shopierComm,
-      });
-    }
 
     setPaymentMethods(methods);
-    if (!selectedPayment && methods.length > 0) {
-      setSelectedPayment(methods[0].id);
-    }
-  }, [user, siteSettings, selectedPayment]);
+
+    // Daha önce seçilen yöntem hala listede varsa koru, yoksa ilk aktif yöntemi seç
+    setSelectedPayment((prev) => {
+      if (prev && methods.some((m) => m.id === prev)) return prev;
+      return methods[0]?.id ?? "";
+    });
+  }, [user?.id, siteSettings, providers]);
 
   /* ---------- Derived ---------- */
   const pagedTxns: WalletTxn[] = useMemo(() => {
@@ -205,7 +229,9 @@ export function WalletTab({
 
     const amount = parseFloat(depositAmount);
     if (amount < minLimit) {
-      toast.error(`Minimum yükleme tutarı ${minLimit.toLocaleString("tr-TR")} ₺'dir`);
+      toast.error(
+        `Minimum yükleme tutarı ${minLimit.toLocaleString("tr-TR")} ₺'dir`
+      );
       return;
     }
 
@@ -216,13 +242,15 @@ export function WalletTab({
 
     if (selectedPayment === "paytr") await handlePayTRPayment();
     else if (selectedPayment === "shopier") await handleShopierPayment();
-    else if (selectedPayment === "paytr_havale") await handlePayTRHavalePayment();
+    else if (selectedPayment === "paytr_havale")
+      await handlePayTRHavalePayment();
     else if (selectedPayment === "havale" || selectedPayment === "eft") {
       toast.success("Ödeme bilgilerine yönlendiriliyorsunuz...");
       window.location.href = `/bakiye-odeme-bilgileri?amount=${depositAmount}`;
     }
   };
 
+  /* ---------- PayTR Card ---------- */
   const handlePayTRPayment = async () => {
     if (!user || !profileData) return;
     const amount = parseFloat(depositAmount);
@@ -257,14 +285,13 @@ export function WalletTab({
         ],
         subtotal: subtotalStr, // cüzdana yatacak tutar
         discount: "0.00",
-        total: finalStr,       // karttan çekilecek (komisyonlu) tutar
+        total: finalStr, // karttan çekilecek (komisyonlu) tutar
       };
 
       const order = await createOrder(body).unwrap();
 
-      const { data: tokenData, error: tokenError } = await metahub.functions.invoke(
-        "paytr-get-token",
-        {
+      const { data: tokenData, error: tokenError } =
+        await metahub.functions.invoke("paytr-get-token", {
           body: {
             orderData: {
               merchant_oid: orderNumber,
@@ -286,14 +313,15 @@ export function WalletTab({
               address: "DİJİTAL ÜRÜN",
             },
           },
-        }
-      );
+        });
 
       if (tokenError || !tokenData?.success) {
         throw new Error(tokenData?.error || "Token alınamadı");
       }
 
-      navigate(`/odeme-iframe?token=${tokenData.token}&order_id=${order.order_number}`);
+      navigate(
+        `/odeme-iframe?token=${tokenData.token}&order_id=${order.order_number}`
+      );
     } catch (e) {
       console.error("PayTR payment error:", e);
       toast.error(e instanceof Error ? e.message : "Ödeme başlatılamadı");
@@ -302,6 +330,7 @@ export function WalletTab({
     }
   };
 
+  /* ---------- Shopier ---------- */
   const handleShopierPayment = async () => {
     if (!user || !profileData) return;
     const amount = parseFloat(depositAmount);
@@ -391,6 +420,7 @@ export function WalletTab({
     }
   };
 
+  /* ---------- PayTR Havale ---------- */
   const handlePayTRHavalePayment = async () => {
     if (!user || !profileData) return;
     const amount = parseFloat(depositAmount);
@@ -424,9 +454,8 @@ export function WalletTab({
 
       const order = await createOrder(body).unwrap();
 
-      const { data: tokenData, error: tokenError } = await metahub.functions.invoke(
-        "paytr-havale-get-token",
-        {
+      const { data: tokenData, error: tokenError } =
+        await metahub.functions.invoke("paytr-havale-get-token", {
           body: {
             orderData: {
               merchant_oid: orderNumber,
@@ -447,8 +476,7 @@ export function WalletTab({
               address: "DİJİTAL ÜRÜN",
             },
           },
-        }
-      );
+        });
 
       if (tokenError || !tokenData?.success) {
         throw new Error(tokenData?.error || "Token alınamadı");
@@ -487,13 +515,14 @@ export function WalletTab({
 
           <div className="space-y-4">
             <Label>Ödeme Yöntemi</Label>
-            {settingsLoading ? (
+            {settingsLoading || providersLoading ? (
               <div className="p-4 bg-muted rounded-md text-center text-sm text-muted-foreground">
                 Ödeme ayarları yükleniyor…
               </div>
             ) : paymentMethods.length === 0 ? (
               <div className="p-4 bg-muted rounded-md text-center text-sm text-muted-foreground">
-                Aktif ödeme yöntemi bulunamadı. Lütfen yönetici ile iletişime geçin.
+                Aktif ödeme yöntemi bulunamadı. Lütfen yönetici ile
+                iletişime geçin.
               </div>
             ) : (
               <>
@@ -553,7 +582,8 @@ export function WalletTab({
                               <span>
                                 ₺
                                 {(
-                                  parseFloat(depositAmount) + commissionAmount
+                                  parseFloat(depositAmount) +
+                                  commissionAmount
                                 ).toFixed(2)}
                               </span>
                             </div>
@@ -575,6 +605,7 @@ export function WalletTab({
               depositing ||
               creatingOrder ||
               settingsLoading ||
+              providersLoading ||
               paymentMethods.length === 0 ||
               !depositAmount ||
               parseFloat(depositAmount) <= 0 ||

@@ -1,3 +1,5 @@
+// src/pages/admin/ApiProviderForm.tsx
+
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,7 +14,7 @@ import {
   useGetApiProviderQuery,
   useCreateApiProviderMutation,
   useUpdateApiProviderMutation,
-} from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
+} from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
 
 export default function ApiProviderForm() {
   const { id } = useParams();

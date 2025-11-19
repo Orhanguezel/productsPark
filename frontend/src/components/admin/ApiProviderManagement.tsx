@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, RefreshCw } from "lucide-react";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -15,42 +17,57 @@ import {
   useDeleteApiProviderMutation,
   useUpdateApiProviderMutation,
   useCheckApiProviderBalanceMutation,
-} from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
+} from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
+import type {ApiProviderBalanceResponse} from "@/integrations/metahub/db/types/apiProviders";
 
 export const ApiProviderManagement = () => {
   const navigate = useNavigate();
 
-  const { data: providers, isLoading, refetch } = useListApiProvidersQuery(
-    { orderBy: { field: "created_at", asc: false } }
-  );
+  const { data: providers, isLoading, refetch } = useListApiProvidersQuery({
+    orderBy: { field: "created_at", asc: false },
+  });
+
   const [deleteProvider] = useDeleteApiProviderMutation();
   const [updateProvider] = useUpdateApiProviderMutation();
-  const [checkBalance, { isLoading: checking }] = useCheckApiProviderBalanceMutation();
+  const [checkBalance, { isLoading: checking }] =
+  useCheckApiProviderBalanceMutation();
 
   const handleDelete = async (id: string) => {
     if (!confirm("API sağlayıcıyı silmek istediğinizden emin misiniz?")) return;
     try {
       await deleteProvider(id).unwrap();
       toast({ title: "Başarılı", description: "API sağlayıcı silindi" });
+      refetch();
     } catch (e) {
       console.error(e);
-      toast({ title: "Hata", description: "Silme işlemi başarısız", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Silme işlemi başarısız",
+        variant: "destructive",
+      });
     }
   };
 
   const toggleActive = async (id: string, current: boolean) => {
     try {
       await updateProvider({ id, patch: { is_active: !current } }).unwrap();
+      refetch();
     } catch (e) {
       console.error(e);
-      toast({ title: "Hata", description: "Durum güncellenemedi", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Durum güncellenemedi",
+        variant: "destructive",
+      });
     }
   };
 
-  // inside refreshBalance
-const refreshBalance = async (providerId: string) => {
+  const refreshBalance = async (providerId: string) => {
   try {
-    const r = await checkBalance({ id: providerId }).unwrap();
+    const r: ApiProviderBalanceResponse = await checkBalance({
+      id: providerId,
+    }).unwrap();
+
     toast({
       title: "Bakiye Güncellendi",
       description: `Yeni bakiye: ${r.balance ?? 0} ${r.currency ?? ""}`,
@@ -59,8 +76,13 @@ const refreshBalance = async (providerId: string) => {
   } catch (e: any) {
     // RTK error shape: { status, data }
     const msg = e?.data?.message ?? "Bilinmeyen hata";
-    const raw = e?.data?.raw ? ` • Sağlayıcı: ${String(e.data.raw).slice(0,120)}` : "";
-    const err = e?.data?.error ? ` • Hata: ${String(e.data.error).slice(0,120)}` : "";
+    const raw = e?.data?.raw
+      ? ` • Sağlayıcı: ${String(e.data.raw).slice(0, 120)}`
+      : "";
+    const err = e?.data?.error
+      ? ` • Hata: ${String(e.data.error).slice(0, 120)}`
+      : "";
+
     console.error("Error refreshing balance:", e);
     toast({
       title: "Hata",
@@ -69,7 +91,6 @@ const refreshBalance = async (providerId: string) => {
     });
   }
 };
-
 
   if (isLoading) return <div>Yükleniyor...</div>;
 
@@ -85,7 +106,9 @@ const refreshBalance = async (providerId: string) => {
 
       {!providers?.length ? (
         <div className="text-center py-12 border rounded-lg">
-          <p className="text-muted-foreground mb-4">Henüz SMM API sağlayıcı eklenmemiş</p>
+          <p className="text-muted-foreground mb-4">
+            Henüz SMM API sağlayıcı eklenmemiş
+          </p>
           <Button onClick={() => navigate("/admin/api-providers/new")}>
             <Plus className="w-4 h-4 mr-2" />
             İlk Sağlayıcıyı Ekle
@@ -106,7 +129,9 @@ const refreshBalance = async (providerId: string) => {
             {providers.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{p.api_url}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {p.api_url}
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">
@@ -118,12 +143,16 @@ const refreshBalance = async (providerId: string) => {
                       onClick={() => refreshBalance(p.id)}
                       disabled={checking}
                     >
-                      <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
+                      <RefreshCw
+                        className={`w-4 h-4 ${checking ? "animate-spin" : ""
+                          }`}
+                      />
                     </Button>
                   </div>
                   {p.last_balance_check && (
                     <div className="text-xs text-muted-foreground">
-                      Son güncelleme: {new Date(p.last_balance_check).toLocaleString('tr-TR')}
+                      Son güncelleme:{" "}
+                      {new Date(p.last_balance_check).toLocaleString("tr-TR")}
                     </div>
                   )}
                 </TableCell>
@@ -135,10 +164,20 @@ const refreshBalance = async (providerId: string) => {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/api-providers/edit/${p.id}`)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        navigate(`/admin/api-providers/edit/${p.id}`)
+                      }
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(p.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(p.id)}
+                    >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>

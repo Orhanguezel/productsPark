@@ -22,11 +22,11 @@ const ProductDetail = lazy(() => import("./pages/public/product/ProductDetail"))
 const Categories = lazy(() => import("./pages/public/Categories"));
 const Cart = lazy(() => import("./pages/public/Cart"));
 const Checkout = lazy(() => import("./pages/public/checkout/Checkout"));
-const PaymentInfo = lazy(() => import("./pages/public/PaymentInfo"));
+const PaymentInfo = lazy(() => import("./pages/public/payment/PaymentInfo"));
 const DepositPaymentInfo = lazy(() => import("./pages/public/DepositPaymentInfo"));
-const PaymentIframe = lazy(() => import("./pages/public/PaymentIframe"));
-const PaymentSuccess = lazy(() => import("./pages/public/PaymentSuccess"));
-const PaymentPending = lazy(() => import("./pages/public/PaymentPending"));
+const PaymentIframe = lazy(() => import("./pages/public/payment/PaymentIframe"));
+const PaymentSuccess = lazy(() => import("./pages/public/payment/PaymentSuccess"));
+const PaymentPending = lazy(() => import("./pages/public/payment/PaymentPending"));
 const Auth = lazy(() => import("./pages/public/Auth"));
 const PasswordReset = lazy(() => import("./pages/public/PasswordReset"));
 const Blog = lazy(() => import("./pages/public/Blog"));
@@ -46,6 +46,8 @@ const CategoryList = lazy(() => import("./pages/admin/CategoryList"));
 const CategoryForm = lazy(() => import("./pages/admin/CategoryForm"));
 const BlogList = lazy(() => import("./pages/admin/BlogList"));
 const BlogForm = lazy(() => import("./pages/admin/BlogForm"));
+const ContactsList = lazy(() => import("./pages/admin/ContactsList"));
+const ContactDetail = lazy(() => import("./pages/admin/ContactDetail"));
 const CouponList = lazy(() => import("./pages/admin/CouponList"));
 const CouponForm = lazy(() => import("./pages/admin/CouponForm"));
 const OrderList = lazy(() => import("./pages/admin/OrderList"));
@@ -140,6 +142,8 @@ const AppContent = () => {
             <Route path="/admin/blog" element={<BlogList />} />
             <Route path="/admin/blog/new" element={<BlogForm />} />
             <Route path="/admin/blog/edit/:id" element={<BlogForm />} />
+            <Route path="/admin/contacts" element={<ContactsList />} />
+            <Route path="/admin/contacts/:id" element={<ContactDetail />} />
             <Route path="/admin/coupons" element={<CouponList />} />
             <Route path="/admin/coupons/new" element={<CouponForm />} />
             <Route path="/admin/coupons/edit/:id" element={<CouponForm />} />

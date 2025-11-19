@@ -18,7 +18,7 @@ export const coupons = mysqlTable(
     id: char("id", { length: 36 }).primaryKey().notNull(),
     code: varchar("code", { length: 50 }).notNull(),
 
-    // 🆕 Kupon başlığı ve içerik metni (HTML / rich text)
+    // Kupon başlığı ve içerik metni (HTML / rich text)
     title: varchar("title", { length: 200 }),
     content_html: text("content_html"),
 
@@ -31,6 +31,14 @@ export const coupons = mysqlTable(
     max_discount: decimal("max_discount", { precision: 10, scale: 2 }),
     usage_limit: int("usage_limit"),
     used_count: int("used_count").notNull().default(0),
+
+    // 🔥 Uygulama kapsamı + id listeleri
+    applicable_to: varchar("applicable_to", { length: 20 })
+      .notNull()
+      .default("all"), // 'all' | 'category' | 'product'
+    category_ids: text("category_ids"), // JSON string (["cat1","cat2"])
+    product_ids: text("product_ids"), // JSON string (["prod1","prod2"])
+
     valid_from: datetime("valid_from", { fsp: 3 }),
     valid_until: datetime("valid_until", { fsp: 3 }),
     is_active: boolean("is_active").notNull().default(true),
@@ -47,6 +55,8 @@ export const coupons = mysqlTable(
     index("coupons_active_idx").on(t.is_active),
     index("coupons_valid_from_idx").on(t.valid_from),
     index("coupons_valid_until_idx").on(t.valid_until),
+    // istersen buraya kapsam indexleri de ekleyebilirsin:
+    // index("coupons_applicable_to_idx").on(t.applicable_to),
   ],
 );
 

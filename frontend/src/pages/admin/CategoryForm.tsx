@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import ReactQuill from "react-quill";
+import ReactQuill, { Quill } from "react-quill";
 import "react-quill/dist/quill.snow.css";
 
 import {
@@ -103,6 +103,11 @@ export default function CategoryForm() {
     article_enabled: false,
     article_content: "",
   });
+
+  // Upload sonrası insert edeceğimiz index (cursor veya son)
+  const [pendingImageIndex, setPendingImageIndex] = useState<number | null>(
+    null
+  );
 
   // edit modunda doldur
   useEffect(() => {
@@ -219,11 +224,50 @@ export default function CategoryForm() {
     }
   };
 
-  // İçerik içine görsel ekleme (Quill image handler)
+  // İçerik içine görsel ekleme (Quill image handler) → index hesaplıyor
   const handleInsertContentImage = () => {
-    if (!contentImageInputRef.current) return;
+    const quill = quillRef.current?.getEditor?.();
+    if (!quill || !contentImageInputRef.current) return;
+
+    const range = quill.getSelection(true);
+    const index = range ? range.index : quill.getLength();
+
+    setPendingImageIndex(index);
     contentImageInputRef.current.click();
   };
+
+  // Editor içindeki görsellere tıklayınca o görseli sil (çöp ikonuna tıklanmış gibi)
+  useEffect(() => {
+    const editor = quillRef.current?.getEditor?.();
+    if (!editor) return;
+
+    const root = editor.root as HTMLElement;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target || target.tagName !== "IMG") return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const blot = Quill.find(target) as any;
+      if (!blot || typeof blot.offset !== "function") return;
+
+      const index = blot.offset(editor.scroll);
+      if (typeof index !== "number") return;
+
+      editor.deleteText(index, 1, "user");
+      toast({
+        title: "Silindi",
+        description: "Görsel içerikten kaldırıldı.",
+      });
+    };
+
+    root.addEventListener("click", handleClick);
+    return () => {
+      root.removeEventListener("click", handleClick);
+    };
+  }, []);
 
   const onPickContentImage = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -262,10 +306,17 @@ export default function CategoryForm() {
 
       const quill = quillRef.current?.getEditor?.();
       if (!quill) return;
-      const range = quill.getSelection(true);
-      const index = range ? range.index : quill.getLength();
+
+      let index = pendingImageIndex;
+      if (index == null) {
+        const range = quill.getSelection(true);
+        index = range ? range.index : quill.getLength();
+      }
+
       quill.insertEmbed(index, "image", url, "user");
       quill.setSelection(index + 1, 0, "user");
+
+      setPendingImageIndex(null);
 
       toast({
         title: "Görsel eklendi",
@@ -312,16 +363,25 @@ export default function CategoryForm() {
     }
   };
 
-  // SEO önizleme
+  /* ---------------- SEO ÖNİZLEME LOGİĞİ ---------------- */
+
   const seoTitle = (formData.seo_title || formData.name || "").trim();
-  const rawDesc = (
-    formData.seo_description ||
-    stripHtml(formData.article_content) ||
-    formData.description
-  ).trim();
-  const seoDesc = rawDesc.slice(0, 160);
+
+  // Öncelik:
+  // 1) SEO açıklama
+  // 2) Kısa açıklama
+  // 3) Makale içeriğinin strip edilmiş hali
+  const rawDescSource =
+    (formData.seo_description || "").trim() ||
+    (formData.description || "").trim() ||
+    stripHtml(formData.article_content || "");
+
+  const seoDesc = rawDescSource.slice(0, 160);
+
   const previewUrl =
     "/" + (formData.slug || slugify(formData.name) || "kategori");
+
+  /* ----------------------- RENDER ----------------------- */
 
   return (
     <AdminLayout title={isEdit ? "Kategoriyi Düzenle" : "Yeni Kategori"}>
@@ -571,67 +631,51 @@ export default function CategoryForm() {
 
                   {formData.article_enabled && (
                     <>
-                      <div className="flex items-center justify-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleInsertContentImage}
-                          disabled={uploading}
-                        >
-                          İçeriğe Görsel Ekle
-                        </Button>
-                        {/* gizli file input */}
-                        <input
-                          ref={contentImageInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={onPickContentImage}
-                        />
-                      </div>
+                      
 
                       <div className="space-y-2">
                         <Label>Makale İçeriği (HTML)</Label>
-                        <ReactQuill
-                          ref={quillRef as any}
-                          theme="snow"
-                          value={formData.article_content}
-                          onChange={(value) =>
-                            setFormData({
-                              ...formData,
-                              article_content: value,
-                            })
-                          }
-                          className="bg-background"
-                          modules={{
-                            toolbar: [
-                              [
-                                {
-                                  header: [
-                                    1, 2, 3, 4, 5, 6, false,
-                                  ],
-                                },
+                        <div className="category-article-editor">
+                          <ReactQuill
+                            ref={quillRef as any}
+                            theme="snow"
+                            value={formData.article_content}
+                            onChange={(value) =>
+                              setFormData({
+                                ...formData,
+                                article_content: value,
+                              })
+                            }
+                            className="bg-background"
+                            modules={{
+                              toolbar: [
+                                [
+                                  {
+                                    header: [
+                                      1, 2, 3, 4, 5, 6, false,
+                                    ],
+                                  },
+                                ],
+                                [
+                                  "bold",
+                                  "italic",
+                                  "underline",
+                                  "strike",
+                                ],
+                                [
+                                  { list: "ordered" },
+                                  { list: "bullet" },
+                                ],
+                                [
+                                  { color: [] },
+                                  { background: [] },
+                                ],
+                                ["link", "image"],
+                                ["clean"],
                               ],
-                              [
-                                "bold",
-                                "italic",
-                                "underline",
-                                "strike",
-                              ],
-                              [
-                                { list: "ordered" },
-                                { list: "bullet" },
-                              ],
-                              [
-                                { color: [] },
-                                { background: [] },
-                              ],
-                              ["link", "image"],
-                              ["clean"],
-                            ],
-                          }}
-                        />
+                            }}
+                          />
+                        </div>
                       </div>
                     </>
                   )}
@@ -680,6 +724,18 @@ export default function CategoryForm() {
                 <div className="mt-1 text-sm text-muted-foreground">
                   {seoDesc ||
                     "Meta açıklama veya içerik özeti burada görünecek."}
+                </div>
+              </div>
+
+              {/* KISA AÇIKLAMA ÖNİZLEME */}
+              <div className="rounded-lg border">
+                <div className="border-b p-3 text-sm font-medium">
+                  Kısa Açıklama Önizleme
+                </div>
+                <div className="p-4 text-sm text-muted-foreground">
+                  {formData.description.trim()
+                    ? formData.description
+                    : "Kısa açıklama girilmedi."}
                 </div>
               </div>
 

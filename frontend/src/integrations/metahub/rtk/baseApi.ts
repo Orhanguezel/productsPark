@@ -180,12 +180,12 @@ const rawBaseQuery: RBQ = fetchBaseQuery({
 type RawResult = Awaited<ReturnType<typeof rawBaseQuery>>;
 
 const AUTH_SKIP_REAUTH = new Set<string>([
-  "/auth/v1/token",
-  "/auth/v1/signup",
-  "/auth/v1/google",
-  "/auth/v1/google/start",
-  "/auth/v1/token/refresh",
-  "/auth/v1/logout",
+  "/auth/token",
+  "/auth/signup",
+  "/auth/google",
+  "/auth/google/start",
+  "/auth/token/refresh",
+  "/auth/logout",
 ]);
 
 function extractPath(u: string): string {
@@ -218,7 +218,7 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
 
   if (result.error?.status === 401 && !AUTH_SKIP_REAUTH.has(cleanPath)) {
     const refreshRes = await rawBaseQuery(
-      { url: "/auth/v1/token/refresh", method: "POST", headers: { "x-skip-auth": "1", Accept: "application/json" } },
+      { url: "/auth/token/refresh", method: "POST", headers: { "x-skip-auth": "1", Accept: "application/json" } },
       api,
       extra
     );

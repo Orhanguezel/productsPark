@@ -52,8 +52,10 @@ type FormState = {
 
   discount_type: DiscountType;
   discount_value: number;
+
   min_purchase: number;
-  max_uses: number | null;
+  max_discount: number | null;
+  usage_limit: number | null;
 
   valid_from: string; // YYYY-MM-DD
   valid_until: string | null; // YYYY-MM-DD | null
@@ -73,7 +75,8 @@ const defaults: FormState = {
   discount_type: "percentage",
   discount_value: 0,
   min_purchase: 0,
-  max_uses: null,
+  max_discount: null,
+  usage_limit: null,
   valid_from: todayStr(),
   valid_until: null,
   is_active: true,
@@ -133,7 +136,10 @@ export default function CouponForm() {
         discount_type: data.discount_type ?? "percentage",
         discount_value: Number(data.discount_value ?? 0),
         min_purchase: Number(data.min_purchase ?? 0),
-        max_uses: data.max_uses ?? null,
+        max_discount:
+          data.max_discount == null ? null : Number(data.max_discount),
+        usage_limit:
+          data.max_uses == null ? null : Number(data.max_uses), // FE'de usage_limit, modelde max_uses
         valid_from: data.valid_from
           ? new Date(data.valid_from).toISOString().split("T")[0]
           : todayStr(),
@@ -151,27 +157,62 @@ export default function CouponForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // --- Basit validasyonlar ---
+    if (!formData.code.trim()) {
+      toast.error("Kupon kodu zorunludur.");
+      return;
+    }
+    if (!formData.discount_value || formData.discount_value <= 0) {
+      toast.error("İndirim değeri sıfırdan büyük olmalıdır.");
+      return;
+    }
+
+    // Scope validation: product/category seçilmiş ama liste boşsa kayıt yapma
+    if (formData.applicable_to === "product" && formData.product_ids.length === 0) {
+      toast.error("Bu kupon belirli ürünler için; en az bir ürün seçmelisiniz.");
+      return;
+    }
+    if (formData.applicable_to === "category" && formData.category_ids.length === 0) {
+      toast.error("Bu kupon belirli kategoriler için; en az bir kategori seçmelisiniz.");
+      return;
+    }
+
     const payload: CreateCouponBody = {
       code: formData.code.trim(),
       title: formData.title.trim() || null,
       content_html: formData.content_html.trim() || null,
+
       discount_type: formData.discount_type,
-      discount_value: Number(formData.discount_value),
-      min_purchase: Number.isFinite(formData.min_purchase)
-        ? formData.min_purchase
-        : 0,
-      max_discount: null,
-      usage_limit: formData.max_uses ?? null,
+      discount_value: Number(formData.discount_value) || 0,
+
+      min_purchase:
+        formData.min_purchase != null
+          ? Number(formData.min_purchase) || 0
+          : 0,
+      max_discount:
+        formData.max_discount != null
+          ? Number(formData.max_discount)
+          : null,
+      usage_limit:
+        formData.usage_limit != null
+          ? Number(formData.usage_limit)
+          : null,
+
       valid_from: formData.valid_from || null,
       valid_until: formData.valid_until || null,
       is_active: formData.is_active,
+
       applicable_to: formData.applicable_to,
-      category_ids: formData.category_ids.length
-        ? formData.category_ids
-        : null,
-      product_ids: formData.product_ids.length
-        ? formData.product_ids
-        : null,
+      category_ids:
+        formData.applicable_to === "category" &&
+        formData.category_ids.length > 0
+          ? formData.category_ids
+          : null,
+      product_ids:
+        formData.applicable_to === "product" &&
+        formData.product_ids.length > 0
+          ? formData.product_ids
+          : null,
     };
 
     try {
@@ -227,7 +268,9 @@ export default function CouponForm() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="title">Başlık (müşteriye gösterilecek)</Label>
+                  <Label htmlFor="title">
+                    Başlık (müşteriye gösterilecek)
+                  </Label>
                   <Input
                     id="title"
                     value={formData.title}
@@ -319,17 +362,17 @@ export default function CouponForm() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="max_uses">
+                  <Label htmlFor="usage_limit">
                     Maksimum Kullanım (boş = sınırsız)
                   </Label>
                   <Input
-                    id="max_uses"
+                    id="usage_limit"
                     type="number"
-                    value={formData.max_uses ?? ""}
+                    value={formData.usage_limit ?? ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        max_uses: e.target.value
+                        usage_limit: e.target.value
                           ? parseInt(e.target.value, 10)
                           : null,
                       })
@@ -340,6 +383,27 @@ export default function CouponForm() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="max_discount">
+                    Maksimum İndirim Tutarı (boş = sınırsız)
+                  </Label>
+                  <Input
+                    id="max_discount"
+                    type="number"
+                    value={formData.max_discount ?? ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        max_discount: e.target.value
+                          ? parseFloat(e.target.value)
+                          : null,
+                      })
+                    }
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="valid_from">Başlangıç Tarihi</Label>
                   <Input
@@ -355,7 +419,9 @@ export default function CouponForm() {
                     required
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="valid_until">
                     Bitiş Tarihi (boş = süresiz)
@@ -384,9 +450,11 @@ export default function CouponForm() {
                       setFormData((s) => ({
                         ...s,
                         applicable_to: value,
+                        // scope değişince alakasız id listelerini sıfırla
                         category_ids:
                           value === "category" ? s.category_ids : [],
-                        product_ids: value === "product" ? s.product_ids : [],
+                        product_ids:
+                          value === "product" ? s.product_ids : [],
                       }))
                     }
                   >

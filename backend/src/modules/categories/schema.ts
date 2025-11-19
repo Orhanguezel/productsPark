@@ -1,5 +1,15 @@
+// FILE: src/modules/categories/schema.ts
 import {
-  mysqlTable, char, varchar, text, int, tinyint, datetime, index, uniqueIndex, foreignKey,
+  mysqlTable,
+  char,
+  varchar,
+  text,
+  int,
+  tinyint,
+  datetime,
+  index,
+  uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
@@ -22,12 +32,22 @@ export const categories = mysqlTable(
     icon: varchar("icon", { length: 100 }),
     parent_id: char("parent_id", { length: 36 }),
 
+    // ✅ SEO alanları
+    seo_title: varchar("seo_title", { length: 255 }),
+    seo_description: varchar("seo_description", { length: 500 }),
+
     // Yeni alanlar
     article_content: text("article_content"),
-    article_enabled: tinyint("article_enabled").notNull().default(0).$type<boolean>(),
+    article_enabled: tinyint("article_enabled")
+      .notNull()
+      .default(0)
+      .$type<boolean>(),
 
     is_active: tinyint("is_active").notNull().default(1).$type<boolean>(),
-    is_featured: tinyint("is_featured").notNull().default(0).$type<boolean>(),
+    is_featured: tinyint("is_featured")
+      .notNull()
+      .default(0)
+      .$type<boolean>(),
 
     display_order: int("display_order").notNull().default(0),
 
@@ -45,7 +65,9 @@ export const categories = mysqlTable(
     index("categories_parent_id_idx").on(t.parent_id),
     index("categories_active_idx").on(t.is_active),
     index("categories_order_idx").on(t.display_order),
-    index("categories_image_asset_idx").on(t.image_asset_id), // ✅
+    index("categories_image_asset_idx").on(t.image_asset_id),
+    // İstersen isme göre de ararsın diye:
+    // index("categories_seo_title_idx").on(t.seo_title),
 
     foreignKey({
       columns: [t.parent_id],

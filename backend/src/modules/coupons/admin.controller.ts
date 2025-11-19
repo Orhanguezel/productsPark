@@ -57,9 +57,12 @@ const mapRow = (r: CouponRow) => ({
   used_count: r.used_count == null ? null : Number(r.used_count),
   valid_from: iso(r.valid_from),
   valid_until: iso(r.valid_until),
-  applicable_to: "all" as const,
-  category_ids: null,
-  product_ids: null,
+
+  // 🔥 artık DB'deki değerleri yolluyoruz
+  applicable_to: (r.applicable_to as any) ?? "all",
+  category_ids: r.category_ids ?? null, // string | null (JSON)
+  product_ids: r.product_ids ?? null,   // string | null (JSON)
+
   created_at: iso(r.created_at),
   updated_at: iso(r.updated_at),
 });
@@ -127,14 +130,15 @@ export const adminGetCoupon: RouteHandler = async (req, reply) => {
 };
 
 /** POST /admin/coupons */
+/** POST /admin/coupons */
 export const adminCreateCoupon: RouteHandler = async (req, reply) => {
   try {
     const input = z
       .object({
         code: z.string().min(1),
 
-        // 🆕 Başlık + içerik
-        title: z.string().trim().min(1).max(200).optional(),
+        // Başlık + içerik
+        title: z.string().trim().min(1).max(200).optional().nullable(),
         content_html: z.string().optional().nullable(),
 
         discount_type: dType,
@@ -146,14 +150,37 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
         valid_until: z.union([z.string(), z.date()]).nullable().optional(),
         is_active: boolLike.optional(),
 
-        // FE’den gelebilecek ama DB’de olmayanlar:
-        applicable_to: z.any().optional(),
-        category_ids: z.any().optional(),
-        product_ids: z.any().optional(),
+        // 🔥 Gerçek tipler
+        applicable_to: z
+          .enum(["all", "category", "product"])
+          .optional()
+          .nullable(),
+        category_ids: z
+          .union([
+            z.array(z.string()),
+            z.string(),
+            z.null(),
+          ])
+          .optional(),
+        product_ids: z
+          .union([
+            z.array(z.string()),
+            z.string(),
+            z.null(),
+          ])
+          .optional(),
       })
       .parse(req.body ?? {});
 
     const id = randomUUID();
+
+    const serializeIds = (value: unknown): string | null => {
+      if (value == null) return null;
+      if (Array.isArray(value)) return JSON.stringify(value);
+      // eğer BE başka yerden string gelirse olduğu gibi sakla
+      return String(value);
+    };
+
     await db.insert(coupons).values({
       id,
       code: input.code,
@@ -173,6 +200,17 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
       valid_until: toDateOrNull(input.valid_until),
       is_active:
         input.is_active === undefined ? true : toBool(input.is_active),
+
+      // 🔥 kapsam alanları
+      applicable_to: (input.applicable_to as any) ?? "all",
+      category_ids:
+        input.applicable_to === "category"
+          ? serializeIds(input.category_ids)
+          : null,
+      product_ids:
+        input.applicable_to === "product"
+          ? serializeIds(input.product_ids)
+          : null,
     } satisfies CouponInsert);
 
     const [row] = await db
@@ -194,6 +232,7 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
   }
 };
 
+
 /** PATCH /admin/coupons/:id */
 export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
   try {
@@ -205,8 +244,8 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
       .object({
         code: z.string().min(1).optional(),
 
-        // 🆕 Başlık + içerik
-        title: z.string().trim().min(1).max(200).optional(),
+        // Başlık + içerik
+        title: z.string().trim().min(1).max(200).optional().nullable(),
         content_html: z.string().optional().nullable(),
 
         discount_type: dType.optional(),
@@ -223,9 +262,25 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
         valid_until: z.union([z.string(), z.date()]).nullable().optional(),
         is_active: boolLike.optional(),
 
-        applicable_to: z.any().optional(),
-        category_ids: z.any().optional(),
-        product_ids: z.any().optional(),
+        // 🔥 kapsam alanları
+        applicable_to: z
+          .enum(["all", "category", "product"])
+          .optional()
+          .nullable(),
+        category_ids: z
+          .union([
+            z.array(z.string()),
+            z.string(),
+            z.null(),
+          ])
+          .optional(),
+        product_ids: z
+          .union([
+            z.array(z.string()),
+            z.string(),
+            z.null(),
+          ])
+          .optional(),
       })
       .parse(req.body ?? {});
 
@@ -259,6 +314,37 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
     if (patch.is_active !== undefined)
       updates.is_active = toBool(patch.is_active);
 
+    const serializeIds = (value: unknown): string | null => {
+      if (value == null) return null;
+      if (Array.isArray(value)) return JSON.stringify(value);
+      return String(value);
+    };
+
+    // 🔥 kapsam alanları
+    if (patch.applicable_to !== undefined) {
+      updates.applicable_to = (patch.applicable_to as any) ?? "all";
+
+      // scope değişirse diğer listeleri de ona göre sıfırlamak mantıklı
+      if (patch.applicable_to === "all") {
+        updates.category_ids = null;
+        updates.product_ids = null;
+      }
+    }
+
+    if (patch.category_ids !== undefined) {
+      updates.category_ids =
+        patch.category_ids == null
+          ? null
+          : serializeIds(patch.category_ids);
+    }
+
+    if (patch.product_ids !== undefined) {
+      updates.product_ids =
+        patch.product_ids == null
+          ? null
+          : serializeIds(patch.product_ids);
+    }
+
     await db.update(coupons).set(updates).where(eq(coupons.id, id));
     const [row] = await db
       .select()
@@ -279,6 +365,7 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
       .send({ error: { message: "coupon_update_failed" } });
   }
 };
+
 
 /** POST /admin/coupons/:id/enable|disable */
 export const adminToggleCoupon: RouteHandler = async (req, reply) => {

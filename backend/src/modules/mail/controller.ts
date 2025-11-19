@@ -31,7 +31,7 @@ export const sendTestMail: RouteHandler = async (req, reply) => {
     const body = (req.body ?? {}) as { to?: string };
 
     const to =
-      body.to && body.to.length > 0 ? body.to : getUserEmail(req); // ✅ type guard ile çekiyoruz
+      body.to && body.to.length > 0 ? body.to : getUserEmail(req);
 
     if (!to) {
       return reply
@@ -54,6 +54,7 @@ export const sendTestMail: RouteHandler = async (req, reply) => {
       .send({ error: { message: "mail_test_failed", details: e?.message } });
   }
 };
+
 
 /**
  * Genel amaçlı mail gönderimi:
@@ -78,6 +79,7 @@ export const sendMailHandler: RouteHandler = async (req, reply) => {
       .send({ error: { message: "mail_send_failed", details: e?.message } });
   }
 };
+
 
 /**
  * Sipariş oluşturma mailini REST üzerinden tetiklemek istersen:

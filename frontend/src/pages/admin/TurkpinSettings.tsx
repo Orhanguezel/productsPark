@@ -1,6 +1,6 @@
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { useListApiProvidersQuery, useCreateApiProviderMutation, useUpdateApiProviderMutation } from "@/integrations/metahub/rtk/endpoints/api_providers.endpoints";
+import { useListApiProvidersQuery, useCreateApiProviderMutation, useUpdateApiProviderMutation } from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
 import { metahub } from "@/integrations/metahub/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

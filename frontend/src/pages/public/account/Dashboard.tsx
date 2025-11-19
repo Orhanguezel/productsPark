@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/pages/account/Dashboard.tsx  (WRAPPER - UPDATED)
+// FILE: src/pages/account/Dashboard.tsx  (WRAPPER - FIXED)
 // =============================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -55,12 +55,12 @@ const Dashboard = () => {
     }
   }, [unreadCount]);
 
-  // ---------- Queries ----------
+  // ---------- Orders ----------
   const ordersSkip = !user?.id;
   const { data: orders = [], isLoading: ordersLoading } =
     useListOrdersByUserQuery(user?.id ?? "", { skip: ordersSkip });
 
-  // keep args stable so RTKQ doesn't think arg changed each render
+  // ---------- Wallet: Transactions (me) ----------
   const walletArgs = useMemo(() => ({ order: "desc" as const }), []);
   const walletOpts = useMemo(
     () => ({
@@ -75,6 +75,7 @@ const Dashboard = () => {
   const { data: walletTxns = [], isLoading: txLoading } =
     useListMyWalletTransactionsQuery(walletArgs, walletOpts);
 
+  // ---------- Wallet: Balance (me) ----------
   const balanceOpts = useMemo(
     () => ({
       skip: !user?.id,
@@ -85,11 +86,10 @@ const Dashboard = () => {
     }),
     [user?.id]
   );
-  // Authoritative balance from backend (reflects admin approvals)
-  const { data: myBalance = 0 } = useGetMyWalletBalanceQuery(
-    undefined,
-    balanceOpts
-  );
+
+  // Authoritative balance from backend (reflects admin approvals & harcamalar)
+  const { data: myBalance = 0, isLoading: balanceLoading } =
+    useGetMyWalletBalanceQuery(undefined, balanceOpts);
 
   // ---------- Derived ----------
   const totalSpent = useMemo(
@@ -100,23 +100,7 @@ const Dashboard = () => {
     [orders]
   );
 
-  // Fallback balance from txns (in case BE balance lags briefly)
-  const computedFromTxns = useMemo(
-    () =>
-      (walletTxns as WalletTxn[]).reduce(
-        (sum, t) => sum + Number(t.amount || 0),
-        0
-      ),
-    [walletTxns]
-  );
-
-  // If there is a noticeable mismatch, show txn-sum as a temporary fallback
-  const displayBalance =
-    Math.abs((myBalance ?? 0) - computedFromTxns) > 0.009
-      ? computedFromTxns
-      : (myBalance ?? 0);
-
-  const loading = authLoading || ordersLoading || txLoading;
+  const loading = authLoading || ordersLoading || txLoading || balanceLoading;
 
   if (loading) {
     return (
@@ -134,9 +118,10 @@ const Dashboard = () => {
         <div className="container mx-auto px-4">
           <h1 className="text-4xl font-bold mb-8">Hesabım</h1>
 
+          {/* Üst kartlar: toplam sipariş / mevcut bakiye / toplam harcama */}
           <StatsCards
             ordersCount={orders.length}
-            walletBalance={displayBalance}
+            walletBalance={myBalance ?? 0}
             totalSpent={totalSpent}
             txLoading={txLoading}
           />
@@ -150,7 +135,12 @@ const Dashboard = () => {
                 value={tabValue}
                 onValueChange={(v) =>
                   setTabValue(
-                    v as "orders" | "wallet" | "profile" | "support" | "notifications"
+                    v as
+                      | "orders"
+                      | "wallet"
+                      | "profile"
+                      | "support"
+                      | "notifications"
                   )
                 }
               >
@@ -174,6 +164,7 @@ const Dashboard = () => {
                 </TabsContent>
 
                 <TabsContent value="wallet" className="space-y-4 mt-6">
+                  {/* Wallet işlemleri: RTK’dan gelen gerçek txn listesi */}
                   <WalletTab
                     txns={walletTxns as WalletTxn[]}
                     txLoading={txLoading}

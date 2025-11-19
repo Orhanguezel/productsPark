@@ -1,6 +1,5 @@
 // =============================================================
 // FILE: src/components/admin/AdminPanel/CouponManagement.tsx
-// (veya mevcut CouponManagement dosyan)
 // =============================================================
 
 import { useState } from "react";
@@ -61,7 +60,7 @@ type FormState = {
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-const defaultForm: FormState = {
+const makeDefaultForm = (): FormState => ({
   code: "",
   title: "",
   content_html: "",
@@ -72,10 +71,11 @@ const defaultForm: FormState = {
   valid_from: todayStr(),
   valid_until: null,
   is_active: true,
-};
+});
 
 export function CouponManagement() {
-  const { data: coupons = [], isLoading, refetch } = useListCouponsAdminQuery();
+  const { data: coupons = [], isLoading, refetch } =
+    useListCouponsAdminQuery();
   const [createCoupon, { isLoading: isCreating }] =
     useCreateCouponAdminMutation();
   const [updateCoupon, { isLoading: isUpdating }] =
@@ -85,13 +85,13 @@ export function CouponManagement() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
-  const [formData, setFormData] = useState<FormState>(defaultForm);
+  const [formData, setFormData] = useState<FormState>(makeDefaultForm);
 
   const saving = isCreating || isUpdating;
 
   const resetForm = () => {
     setEditingCoupon(null);
-    setFormData(defaultForm);
+    setFormData(makeDefaultForm());
   };
 
   const handleEdit = (coupon: Coupon) => {
@@ -130,22 +130,22 @@ export function CouponManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const discountValue = Number(formData.discount_value) || 0;
+    const minPurchase = Number(formData.min_purchase) || 0;
+
     const payload: CreateCouponBody = {
       code: formData.code.trim(),
       title: formData.title.trim() || null,
       content_html: formData.content_html.trim() || null,
       discount_type: formData.discount_type,
-      discount_value: Number(formData.discount_value),
-      min_purchase: Number.isFinite(formData.min_purchase)
-        ? formData.min_purchase
-        : 0,
-      // max_discount için UI alanın yok → null
+      discount_value: discountValue,
+      min_purchase: minPurchase,
       max_discount: null,
       usage_limit: formData.max_uses ?? null,
       valid_from: formData.valid_from || null,
       valid_until: formData.valid_until || null,
       is_active: formData.is_active,
-      // Şimdilik kapsam kullanılmıyor → tüm site
+      // Bu inline yönetim “tüm site” kuponları için
       applicable_to: "all",
       category_ids: null,
       product_ids: null,
@@ -218,7 +218,10 @@ export function CouponManagement() {
                   rows={3}
                   value={formData.content_html}
                   onChange={(e) =>
-                    setFormData({ ...formData, content_html: e.target.value })
+                    setFormData({
+                      ...formData,
+                      content_html: e.target.value,
+                    })
                   }
                   placeholder="Sipariş özetinde gösterilecek metni yazın."
                 />
@@ -417,7 +420,9 @@ export function CouponManagement() {
               <TableCell>
                 <div className="text-xs">
                   {coupon.valid_from
-                    ? new Date(coupon.valid_from).toLocaleDateString("tr-TR")
+                    ? new Date(
+                        coupon.valid_from,
+                      ).toLocaleDateString("tr-TR")
                     : "-"}
                   {coupon.valid_until && (
                     <>
@@ -461,6 +466,13 @@ export function CouponManagement() {
               </TableCell>
             </TableRow>
           ))}
+          {coupons.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center py-8">
+                Kupon bulunamadı.
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
     </div>

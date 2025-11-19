@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+// =============================================================
+// FILE: src/pages/Contact.tsx
+// =============================================================
+import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { metahub } from "@/integrations/metahub/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,71 +15,234 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useSeoSettings } from "@/hooks/useSeoSettings";
 
+// RTK: contacts + site_settings + mail
+import {
+  useCreateContactMutation,
+} from "@/integrations/metahub/rtk/endpoints/contacts.endpoints";
+import type {
+  ContactCreateInput,
+} from "@/integrations/metahub/db/types/contacts";
+
+import {
+  useGetSiteSettingByKeyQuery,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+
+import {
+  useSendMailMutation,
+} from "@/integrations/metahub/rtk/endpoints/mail.endpoints";
+import type { SendMailBody } from "@/integrations/metahub/rtk/endpoints/mail.endpoints";
+
+// -------------------- Validation şeması --------------------
 const contactSchema = z.object({
-  name: z.string().trim().min(2, { message: "Ad soyad en az 2 karakter olmalıdır" }).max(100),
-  email: z.string().trim().email({ message: "Geçerli bir e-posta adresi giriniz" }).max(255),
-  subject: z.string().trim().min(5, { message: "Konu en az 5 karakter olmalıdır" }).max(200),
-  message: z.string().trim().min(10, { message: "Mesaj en az 10 karakter olmalıdır" }).max(1000),
+  name: z
+    .string()
+    .trim()
+    .min(2, { message: "Ad soyad en az 2 karakter olmalıdır" })
+    .max(100),
+  email: z
+    .string()
+    .trim()
+    .email({ message: "Geçerli bir e-posta adresi giriniz" })
+    .max(255),
+  phone: z
+    .string()
+    .trim()
+    .min(10, { message: "Telefon numarası en az 10 karakter olmalıdır" })
+    .max(20),
+  subject: z
+    .string()
+    .trim()
+    .min(5, { message: "Konu en az 5 karakter olmalıdır" })
+    .max(200),
+  message: z
+    .string()
+    .trim()
+    .min(10, { message: "Mesaj en az 10 karakter olmalıdır" })
+    .max(1000),
 });
 
+// TR için çok kasmadan tel: link üretelim
+const toTelHref = (raw: string): string => {
+  const s = raw.trim();
+  if (!s) return "";
+  if (s.startsWith("+")) return `tel:${s}`;
+  return `tel:${s.replace(/\s+/g, "")}`;
+};
+
 const Contact = () => {
+  const { settings } = useSeoSettings();
+
+  // -------------------- Form state --------------------
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    phone: "",
     subject: "",
     message: "",
+    website: "", // honeypot
   });
-  const [loading, setLoading] = useState(false);
-  const { settings } = useSeoSettings();
-  const [whatsappNumber, setWhatsappNumber] = useState("905555555555");
 
-  useEffect(() => {
-    fetchWhatsappNumber();
-  }, []);
+  // RTK mutations
+  const [createContact, { isLoading: creating }] =
+    useCreateContactMutation();
+  const [sendMail, { isLoading: sendingMail }] =
+    useSendMailMutation();
 
-  const fetchWhatsappNumber = async () => {
-    try {
-      const { data } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "whatsapp_number")
-        .maybeSingle();
+  const loading = creating || sendingMail;
 
-      if (data?.value) {
-        setWhatsappNumber(String(data.value));
-      }
-    } catch (error) {
-      console.error("Error fetching whatsapp number:", error);
-    }
+  // WhatsApp numarasını site_settings'den çek
+  const { data: whatsappSetting } = useGetSiteSettingByKeyQuery(
+    "whatsapp_number"
+  );
+
+  const whatsappNumber =
+    typeof whatsappSetting?.value === "string" ||
+    typeof whatsappSetting?.value === "number"
+      ? String(whatsappSetting.value)
+      : "905555555555";
+
+  // Admin iletişim mail adresini site_settings'den çek
+  const { data: contactEmailSetting } =
+    useGetSiteSettingByKeyQuery("contact_email");
+
+  const defaultContactEmail = "destek@dijitalmarket.com";
+
+  const adminEmailTo =
+    typeof contactEmailSetting?.value === "string" ||
+    typeof contactEmailSetting?.value === "number"
+      ? String(contactEmailSetting.value)
+      : defaultContactEmail;
+
+  // İletişim bilgileri (görünen)
+  const contactEmail = adminEmailTo;
+  const contactPhoneDisplay = "+90 (555) 555 55 55";
+  const contactPhoneTel = "+90 555 555 55 55"; // tel: için normalize ediyoruz
+  const contactAddress = "İstanbul, Türkiye";
+
+  const telHref = toTelHref(contactPhoneTel);
+
+  // -------------------- Handlers --------------------
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      const validated = contactSchema.parse(formData);
-      setLoading(true);
+      // FE validation
+      const validated = contactSchema.parse({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        subject: formData.subject,
+        message: formData.message,
+      });
 
-      // Simulate sending message
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const basePayload = {
+        name: validated.name.trim(),
+        email: validated.email.trim(),
+        phone: validated.phone.trim(),
+        subject: validated.subject.trim(),
+        message: validated.message.trim(),
+      };
 
-      toast.success("Mesajınız başarıyla gönderildi! En kısa sürede size dönüş yapacağız.");
+      const websiteTrim = formData.website.trim();
+      const payload: ContactCreateInput = websiteTrim
+        ? { ...basePayload, website: websiteTrim }
+        : { ...basePayload, website: null };
 
-      // Reset form
+      // 1) Mesajı DB'ye kaydet
+      await createContact(payload).unwrap();
+
+      // 2) Admin'e mail gönder (SMTP ayarları BE'deki site_settings + env'den okunuyor)
+      try {
+        if (adminEmailTo) {
+          const siteName = settings.site_title || "Dijital Market";
+
+          const subjectMail = `${siteName} – Yeni iletişim mesajı: ${basePayload.subject}`;
+
+          const textLines = [
+            `Site: ${siteName}`,
+            "",
+            `Yeni bir iletişim formu dolduruldu:`,
+            "",
+            `Ad Soyad : ${basePayload.name}`,
+            `E-posta  : ${basePayload.email}`,
+            `Telefon  : ${basePayload.phone}`,
+            "",
+            `Konu     : ${basePayload.subject}`,
+            "",
+            `Mesaj:`,
+            basePayload.message,
+          ];
+
+          const text = textLines.join("\n");
+
+          const html = `
+            <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
+              <h2 style="font-size:18px;margin-bottom:8px;">Yeni İletişim Mesajı</h2>
+              <p><strong>Site:</strong> ${siteName}</p>
+              <p><strong>Ad Soyad:</strong> ${basePayload.name}</p>
+              <p><strong>E-posta:</strong> ${basePayload.email}</p>
+              <p><strong>Telefon:</strong> ${basePayload.phone}</p>
+              <p><strong>Konu:</strong> ${basePayload.subject}</p>
+              <p style="margin-top:12px;"><strong>Mesaj:</strong></p>
+              <p style="white-space:pre-line;margin-top:4px;">${basePayload.message}</p>
+            </div>
+          `;
+
+          const mailPayload: SendMailBody = {
+            to: adminEmailTo,
+            subject: subjectMail,
+            text,
+            html,
+          };
+
+          // Bu endpoint /mail/send -> BE tarafında SMTP ile gönderiyor
+          await sendMail(mailPayload).unwrap();
+        }
+      } catch (mailErr) {
+        // Mail gönderilemese bile form kaydı başarıyla alındı → sadece logla
+        console.error("İletişim maili gönderilirken hata:", mailErr);
+      }
+
+      toast.success(
+        "Mesajınız başarıyla gönderildi! En kısa sürede size dönüş yapacağız."
+      );
+
+      // Form reset
       setFormData({
         name: "",
         email: "",
+        phone: "",
         subject: "",
         message: "",
+        website: "",
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
+        toast.error(
+          error.errors[0]?.message ?? "Lütfen form alanlarını kontrol edin"
+        );
+      } else if (
+        typeof error === "object" &&
+        error !== null &&
+        "data" in error &&
+        (error as { data?: { error?: string } }).data?.error
+      ) {
+        toast.error(
+          `Hata: ${
+            (error as { data?: { error?: string } }).data?.error ??
+            "Bilinmeyen hata"
+          }`
+        );
       } else {
         toast.error("Mesaj gönderilirken bir hata oluştu");
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -90,32 +255,40 @@ const Contact = () => {
     return {
       "@context": "https://schema.org/",
       "@type": "ContactPage",
-      "mainEntity": {
+      mainEntity: {
         "@type": "Organization",
-        "name": settings.site_title,
-        "contactPoint": {
+        name: settings.site_title,
+        contactPoint: {
           "@type": "ContactPoint",
-          "telephone": "+90-555-555-5555",
-          "contactType": "customer service",
-          "availableLanguage": ["Turkish"],
-          "areaServed": "TR"
-        }
-      }
+          telephone: contactPhoneDisplay,
+          contactType: "customer service",
+          availableLanguage: ["Turkish"],
+          areaServed: "TR",
+        },
+      },
     };
   };
 
+  // -------------------- Render --------------------
   return (
     <div className="min-h-screen flex flex-col">
       <Helmet>
         <title>{settings.seo_contact_title}</title>
-        <meta name="description" content={settings.seo_contact_description} />
+        <meta
+          name="description"
+          content={settings.seo_contact_description}
+        />
         <meta property="og:title" content={settings.seo_contact_title} />
-        <meta property="og:description" content={settings.seo_contact_description} />
+        <meta
+          property="og:description"
+          content={settings.seo_contact_description}
+        />
         <meta property="og:type" content="website" />
         <script type="application/ld+json">
           {JSON.stringify(generateContactSchema())}
         </script>
       </Helmet>
+
       <Navbar />
 
       {/* Hero Section */}
@@ -143,58 +316,89 @@ const Contact = () => {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Honeypot (gizli alan) */}
+                    <div className="hidden">
+                      <Label htmlFor="website">Website</Label>
+                      <Input
+                        id="website"
+                        name="website"
+                        type="text"
+                        value={formData.website}
+                        onChange={handleInputChange}
+                        autoComplete="off"
+                        tabIndex={-1}
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="name">Ad Soyad *</Label>
                         <Input
                           id="name"
+                          name="name"
                           placeholder="Adınız Soyadınız"
                           value={formData.name}
-                          onChange={(e) =>
-                            setFormData({ ...formData, name: e.target.value })
-                          }
+                          onChange={handleInputChange}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="email">E-posta *</Label>
                         <Input
                           id="email"
+                          name="email"
                           type="email"
                           placeholder="ornek@email.com"
                           value={formData.email}
-                          onChange={(e) =>
-                            setFormData({ ...formData, email: e.target.value })
-                          }
+                          onChange={handleInputChange}
                           required
+                          disabled={loading}
                         />
                       </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Telefon *</Label>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        placeholder="+90 5xx xxx xx xx"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="subject">Konu *</Label>
                       <Input
                         id="subject"
+                        name="subject"
                         placeholder="Mesajınızın konusu"
                         value={formData.subject}
-                        onChange={(e) =>
-                          setFormData({ ...formData, subject: e.target.value })
-                        }
+                        onChange={handleInputChange}
                         required
+                        disabled={loading}
                       />
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="message">Mesajınız *</Label>
                       <Textarea
                         id="message"
+                        name="message"
                         placeholder="Mesajınızı buraya yazın..."
                         rows={6}
                         value={formData.message}
-                        onChange={(e) =>
-                          setFormData({ ...formData, message: e.target.value })
-                        }
+                        onChange={handleInputChange}
                         required
+                        disabled={loading}
                       />
                     </div>
+
                     <Button
                       type="submit"
                       size="lg"
@@ -229,10 +433,10 @@ const Contact = () => {
                     <div>
                       <p className="font-semibold mb-1">E-posta</p>
                       <a
-                        href="mailto:destek@dijitalmarket.com"
+                        href={`mailto:${contactEmail}`}
                         className="text-muted-foreground hover:text-primary"
                       >
-                        destek@dijitalmarket.com
+                        {contactEmail}
                       </a>
                     </div>
                   </div>
@@ -244,10 +448,10 @@ const Contact = () => {
                     <div>
                       <p className="font-semibold mb-1">Telefon</p>
                       <a
-                        href="tel:+905555555555"
+                        href={telHref}
                         className="text-muted-foreground hover:text-primary"
                       >
-                        +90 (555) 555 55 55
+                        {contactPhoneDisplay}
                       </a>
                     </div>
                   </div>
@@ -259,7 +463,7 @@ const Contact = () => {
                     <div>
                       <p className="font-semibold mb-1">Adres</p>
                       <p className="text-muted-foreground">
-                        İstanbul, Türkiye
+                        {contactAddress}
                       </p>
                     </div>
                   </div>
@@ -285,10 +489,15 @@ const Contact = () => {
                     Hızlı yanıt almak için WhatsApp üzerinden bize ulaşabilirsiniz
                   </p>
                   <Button
-                    className="w-full bg-white text-primary hover:bg-white/90"
+                    className="w-full bg-white text-primary hover:bg.white/90"
                     onClick={handleWhatsApp}
+                    disabled={loading}
                   >
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                     </svg>
                     WhatsApp ile Yaz
