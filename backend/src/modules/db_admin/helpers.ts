@@ -26,7 +26,9 @@ export function rmSafe(p?: string) {
   if (!p) return;
   try {
     if (existsSync(p)) unlinkSync(p);
-  } catch {}
+  } catch {
+    // ignore
+  }
 }
 
 export async function gunzipIfNeeded(path: string): Promise<string> {
@@ -75,7 +77,9 @@ async function tryDump(
     p.on("error", (e) => {
       try {
         ws.close();
-      } catch {}
+      } catch {
+        // ignore
+      }
       res({
         ok: false,
         stderr: (e && (e as any).message) || String(e),
@@ -88,7 +92,9 @@ async function tryDump(
       } else {
         try {
           ws.close();
-        } catch {}
+        } catch {
+          // ignore
+        }
         res({
           ok: false,
           code: code ?? undefined,
@@ -152,4 +158,3 @@ export async function runMysqlDumpAll(cfg: Cfg, outPath: string): Promise<void> 
 
   throw new Error(`mysqldump failed (all attempts). ${lastErr}`);
 }
-
