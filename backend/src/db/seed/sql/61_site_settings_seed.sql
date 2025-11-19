@@ -165,22 +165,20 @@ NOW(3), NOW(3)),
 NOW(3), NOW(3)),
 ('6d3e8f93-b0af-4d3e-bea2-bff8a010a6b3', 'telegram_template_new_ticket',
 '🎫 *Yeni Destek Talebi Açıldı!*\n\n👤 Kullanıcı: {{user_name}}\n📋 Konu: {{subject}}\n📊 Öncelik: {{priority}}\n{{category}}\n\n💬 Mesaj:\n{{message}}\n\n⏰ Talep Tarihi: {{created_at}}',
-NOW(3), NOW(3));
+NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- GOOGLE OAUTH / reCAPTCHA
--- ------------------------------------------------------------------
 ('11111111-2222-3333-4444-555555555555', 'google_client_id',    '4400...apps.googleusercontent.com', NOW(3), NOW(3)),
-('22222222-3333-4444-5555-666666666666', 'google_client_secret','GOCSPX-xxx', NOW(3), NOW(3))
+('22222222-3333-4444-5555-666666666666', 'google_client_secret','GOCSPX-xxx', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- CLOUDINARY / DOSYA YÜKLEME
--- ------------------------------------------------------------------
 ('aaaacccc-dddd-eeee-ffff-000000000001', 'cloudinary_cloud_name',       'my-cloud-name', NOW(3), NOW(3)),
 ('aaaacccc-dddd-eeee-ffff-000000000002', 'cloudinary_api_key',          'xxxxxx', NOW(3), NOW(3)),
 ('aaaacccc-dddd-eeee-ffff-000000000003', 'cloudinary_api_secret',       'yyyyyy', NOW(3), NOW(3)),
 ('aaaacccc-dddd-eeee-ffff-000000000004', 'cloudinary_folder',           'products', NOW(3), NOW(3)),
-('aaaacccc-dddd-eeee-ffff-000000000005', 'cloudinary_unsigned_preset',  'unsigned-upload', NOW(3), NOW(3))
+('aaaacccc-dddd-eeee-ffff-000000000005', 'cloudinary_unsigned_preset',  'unsigned-upload', NOW(3), NOW(3)),
 
 
 
@@ -199,6 +197,4 @@ NOW(3), NOW(3));
 -- EK: İLK SEED’DE OLMAYANLAR (ESKİ DUMPTAN ALINANLAR)
 -- ------------------------------------------------------------------
 ('07d5dc6d-329c-4ffc-b201-4ca5c7b42a64', 'new_ticket_telegram', '\"true\"', '2025-10-15 20:29:38', '2025-10-15 20:29:38'),
-('268e7369-f6cd-41b6-8106-2a61b55191cc', 'facebook_pixel_id', '\"\"', '2025-10-15 20:29:38', '2025-10-15 20:29:38'),
-('bde09951-f709-4526-b32a-fa0a25456519', 'home_faq_items', '\"[{\\\"answer\\\":\\\"Ödemeniz onaylandıktan sonra ürününüz otomatik olarak anında e-posta adresinize ve üye panelinize teslim edilir. Ortalama teslimat süresi 1-2 dakikadır.s4\\\",\\\"question\\\":\\\"Ürünler ne kadar sürede teslim edilir?s4\\\"},{\\\"answer\\\":\\\"Kredi kartı, banka havalesi, Papara, PayTR, Shopier ve kripto para (Coinbase Commerce) ile ödeme yapabilirsiniz. Tüm ödemeler SSL sertifikası ile güvence altındadır.s4\\\",\\\"question\\\":\\\"Hangi ödeme yöntemlerini kabul ediyorsunuz?sa4\\\"},{\\\"answer\\\":\\\"Satın aldığınız ürün çalışmaz veya hatalı ise 7 gün içinde destek ekibimizle iletişime geçerek değişim veya iade talebinde bulunabilirsiniz. Tüm ürünlerimiz garanti kapsamındadır.s4\\\",\\\"question\\\":\\\"Ürün çalışmazsa ne olur?s4\\\"},{\\\"answer\\\":\\\"Evet! 5+ ürün alımlarında %5, 10+ ürün alımlarında %10 indirim otomatik olarak uygulanır. Daha fazla bilgi için müşteri hizmetlerimizle iletişime geçebilirsiniz.s4\\\",\\\"question\\\":\\\"Toplu alımlarda indirim var mı?s4\\\"},{\\\"answer\\\":\\\"Her ürünün kullanım koşulları farklıdır. Ürün detay sayfasında lisans türü ve kaç cihazda kullanılabileceği belirtilmiştir. Tek kullanımlık, çoklu kullanım ve süreli lisanslar mevcuttur.s4\\\",\\\"question\\\":\\\"Lisanslar kaç cihazda kullanılabilir?sa4\\\"},{\\\"answer\\\":\\\"7/24 canlı destek, e-posta, WhatsApp ve Telegram üzerinden bizimle iletişime geçebilirsiniz. Üye panelinizden destek talebi oluşturabilir veya SSS bölümünü inceleyebilirsiniz.s4\\\",\\\"question\\\":\\\"Müşteri desteği nasıl alırım?sa4\\\"}]\"', '2025-10-15 20:29:38', '2025-10-15 20:29:38');
-
+('268e7369-f6cd-41b6-8106-2a61b55191cc', 'facebook_pixel_id', '\"\"', '2025-10-15 20:29:38', '2025-10-15 20:29:38');
