@@ -370,7 +370,9 @@ async function runSqlImport({
   } catch (err: any) {
     try {
       await conn.rollback();
-    } catch {}
+    } catch {
+      // ignore
+    }
     return {
       ok: false as const,
       error: err?.message || "SQL import failed",
@@ -378,7 +380,9 @@ async function runSqlImport({
   } finally {
     try {
       await conn.query("SET FOREIGN_KEY_CHECKS=1;");
-    } catch {}
+    } catch {
+      // ignore
+    }
     conn.release();
   }
 }
@@ -434,10 +438,17 @@ export const adminExportSql: RouteHandler = async (req, reply) => {
       req.log.error({ err }, "db export via mysqldump failed");
 
       // ENOENT veya spawn_error -> binary yok / çalışmıyor → JS fallback
-      if (msg.includes("ENOENT") || msg.includes("spawn_error")) {
+      // Ek olarak eski 'set-gtid-purged' tarzı option hataları vs. için de fallback kullanabiliriz.
+      const lower = msg.toLowerCase();
+      if (
+        msg.includes("ENOENT") ||
+        msg.includes("spawn_error") ||
+        lower.includes("unknown variable 'set-gtid-purged") ||
+        lower.includes("unrecognized option '--set-gtid-purged'")
+      ) {
         req.log.warn(
           { err },
-          "mysqldump/mariadb-dump bulunamadı, JS fallback dumper kullanılacak"
+          "mysqldump/mariadb-dump bulunamadı veya seçenek desteklenmiyor, JS fallback dumper kullanılacak"
         );
         await dumpDbViaConnection(cfg, tmpOut);
       } else {
@@ -617,10 +628,16 @@ export const adminCreateDbSnapshot: RouteHandler = async (req, reply) => {
       const msg = String(err?.message || "");
       req.log.error({ err, filename }, "db snapshot via mysqldump failed");
 
-      if (msg.includes("ENOENT") || msg.includes("spawn_error")) {
+      const lower = msg.toLowerCase();
+      if (
+        msg.includes("ENOENT") ||
+        msg.includes("spawn_error") ||
+        lower.includes("unknown variable 'set-gtid-purged") ||
+        lower.includes("unrecognized option '--set-gtid-purged'")
+      ) {
         req.log.warn(
           { err, filename },
-          "mysqldump/mariadb-dump yok, snapshot için JS fallback dumper kullanılacak"
+          "mysqldump/mariadb-dump yok veya seçenek desteklenmiyor, snapshot için JS fallback dumper kullanılacak"
         );
         await dumpDbViaConnection(cfg, fullPath);
       } else {
