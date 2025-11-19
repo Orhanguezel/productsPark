@@ -111,7 +111,6 @@ export async function runMysqlDumpAll(cfg: Cfg, outPath: string): Promise<void> 
     "--quick",
     "--skip-lock-tables",
     "--no-tablespaces",
-    "--set-gtid-purged=OFF",
   ];
 
   const fullFlags = ["--routines", "--triggers", "--events"];
@@ -153,3 +152,4 @@ export async function runMysqlDumpAll(cfg: Cfg, outPath: string): Promise<void> 
 
   throw new Error(`mysqldump failed (all attempts). ${lastErr}`);
 }
+
