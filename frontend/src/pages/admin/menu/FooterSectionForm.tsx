@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import type {
   FooterSection,
   UpsertFooterSectionBody,
-} from "@/integrations/metahub/db/types/footer";
+} from "@/integrations/metahub/rtk/types/footer";
 
 type Props = {
   open: boolean;

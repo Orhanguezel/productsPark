@@ -1,6 +1,6 @@
 // src/integrations/metahub/rtk/endpoints/user_roles.endpoints.ts
 import { baseApi as baseApi_ur } from "../baseApi";
-import type { UserRoleName } from "../../db/types/users";
+import type { UserRoleName } from "../types/users";
 
 /** Merkezi tipe uyumlu rol atamaları */
 export type RoleName = UserRoleName;
@@ -45,9 +45,9 @@ export const userRolesApi = baseApi_ur.injectEndpoints({
       providesTags: (result) =>
         result && result.length
           ? [
-              ...result.map((r) => ({ type: "UserRole" as const, id: r.id })),
-              { type: "UserRoles" as const, id: "LIST" },
-            ]
+            ...result.map((r) => ({ type: "UserRole" as const, id: r.id })),
+            { type: "UserRoles" as const, id: "LIST" },
+          ]
           : [{ type: "UserRoles" as const, id: "LIST" }],
     }),
 

@@ -42,7 +42,7 @@ import {
   useDeleteCustomPageAdminMutation,
   useGetCustomPageAdminByIdQuery,
 } from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
-import type { CustomPageView } from "@/integrations/metahub/db/types/customPages";
+import type { CustomPageView } from "@/integrations/metahub/rtk/types/customPages";
 
 /* ---------- Kapak Thumb: nokta atışı görsel seç ---------- */
 function PageCoverThumb(props: {
@@ -198,8 +198,8 @@ export default function PageList() {
                       <TableCell>
                         {page.created_at
                           ? new Date(
-                              page.created_at,
-                            ).toLocaleDateString("tr-TR")
+                            page.created_at,
+                          ).toLocaleDateString("tr-TR")
                           : "-"}
                       </TableCell>
 

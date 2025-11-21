@@ -8,10 +8,13 @@ import { Helmet } from "react-helmet-async";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 
-import { metahub } from "@/integrations/metahub/client";
-import type { Product } from "@/integrations/metahub/db/types/products";
-import type { CategoryRow } from "@/integrations/metahub/db/types/categories";
-import { useListProductsQuery } from "@/integrations/metahub/rtk/endpoints/products.endpoints";
+import type { Product } from "@/integrations/metahub/rtk/types/products";
+import type { Category } from "@/integrations/metahub/rtk/types/categories";
+
+import {
+  useListProductsWithMetaQuery,
+} from "@/integrations/metahub/rtk/endpoints/products.endpoints";
+import { useListCategoriesQuery } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
 
 import { useSeoSettings } from "@/hooks/useSeoSettings";
 
@@ -20,7 +23,7 @@ import CategoryNotFoundState from "./components/CategoryNotFoundState";
 import SubcategoryGrid from "./components/SubcategoryGrid";
 import ProductsSection from "./components/ProductsSection";
 
-type CategoryWithMeta = CategoryRow & {
+type CategoryWithMeta = Category & {
   // BE'den gelen ekstra alanlar
   product_count?: number;
   badges?: Array<{ text: string; active: boolean }>;
@@ -35,23 +38,53 @@ const ProductsPage = () => {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [totalProducts, setTotalProducts] = useState(0);
-
-  const [categories, setCategories] = useState<CategoryWithMeta[]>([]);
   const [currentCategory, setCurrentCategory] =
     useState<CategoryWithMeta | null>(null);
-  const [subcategories, setSubcategories] = useState<CategoryWithMeta[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("featured");
   const [categoryNotFound, setCategoryNotFound] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
 
   const { settings } = useSeoSettings();
 
   // Pagination
   const currentPage = parseInt(searchParams.get("page") || "1", 10);
+
+  /* -------------------- RTK Query: Categories -------------------- */
+
+  // Ana kategoriler (parent_id = null)
+  const {
+    data: categoriesData = [],
+    isLoading: isCategoriesLoading,
+    isFetching: isCategoriesFetching,
+  } = useListCategoriesQuery({
+    parent_id: null,
+    is_active: true,
+    sort: "display_order",
+    order: "asc",
+  });
+
+  const categories = categoriesData as CategoryWithMeta[];
+
+  // Alt kategoriler (seçili ana kategoriye göre)
+  const {
+    data: subcategoriesData = [],
+    isLoading: isSubcategoriesLoading,
+    isFetching: isSubcategoriesFetching,
+  } = useListCategoriesQuery(
+    currentCategory
+      ? {
+        parent_id: currentCategory.id,
+        is_active: true,
+        sort: "display_order",
+        order: "asc",
+      }
+      : undefined,
+    { skip: !currentCategory }
+  );
+
+  const subcategories = subcategoriesData as CategoryWithMeta[];
 
   /* -------------------- Derived values -------------------- */
 
@@ -90,41 +123,46 @@ const ProductsPage = () => {
     return { sortField, sortOrder };
   }, [sortBy]);
 
-  /* -------------------- RTK Query: Product List -------------------- */
+  /* -------------------- RTK Query: Product List (items + total) -------------------- */
 
   const {
-    data: products = [],
+    data: productsResult,
     isLoading: isProductsLoading,
     isFetching: isProductsFetching,
-  } = useListProductsQuery(
+  } = useListProductsWithMetaQuery(
     categories.length === 0
       ? undefined
       : {
-          category_id: categoryToFilter?.id,
-          is_active: true,
-          limit: ITEMS_PER_PAGE,
-          offset: (currentPage - 1) * ITEMS_PER_PAGE,
-          sort: sortField,
-          order: sortOrder,
-        },
+        category_id: categoryToFilter?.id,
+        is_active: true,
+        limit: ITEMS_PER_PAGE,
+        offset: (currentPage - 1) * ITEMS_PER_PAGE,
+        sort: sortField,
+        order: sortOrder,
+      },
     {
-      skip: categories.length === 0, // kategori gelmeden ürün sorgusunu tetikleme
+      // kategori listesi gelmeden ürün sorgusunu tetikleme
+      skip: categories.length === 0,
     }
   );
 
-  const loading = categoriesLoading || isProductsLoading || isProductsFetching;
+  const products = (productsResult?.items ?? []) as Product[];
+  const totalProducts = productsResult?.total ?? 0;
 
-  // totalPages'i backend’den count ile hesaplıyoruz (altta)
+  const loading =
+    isCategoriesLoading ||
+    isCategoriesFetching ||
+    isSubcategoriesLoading ||
+    isSubcategoriesFetching ||
+    isProductsLoading ||
+    isProductsFetching;
+
+  // totalPages artık RTK result’tan
   const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
   /* -------------------- Effects -------------------- */
 
-  // Kategorileri çek
-  useEffect(() => {
-    void fetchCategories();
-  }, []);
-
-  // URL slug / query param -> currentCategory & subcategories
+  // URL slug / query param -> currentCategory
   useEffect(() => {
     if (categories.length === 0) return;
 
@@ -134,7 +172,6 @@ const ProductsPage = () => {
         setCurrentCategory(category);
         setSelectedCategory(slug);
         setCategoryNotFound(false);
-        void fetchSubcategories(category.id);
       } else {
         setCategoryNotFound(true);
         setSelectedCategory("all");
@@ -154,73 +191,6 @@ const ProductsPage = () => {
       }
     }
   }, [slug, searchParams, categories]);
-
-  // Filtre değişince toplam ürün sayısını (count) çek
-  useEffect(() => {
-    if (categories.length === 0) return;
-    void fetchProductsCount();
-  }, [categories, currentCategory, selectedCategory]);
-
-  /* -------------------- Data Fetch Helpers -------------------- */
-
-  const fetchCategories = async () => {
-    try {
-      setCategoriesLoading(true);
-      const { data, error } = await metahub
-        .from("categories")
-        .select(
-          "id, name, slug, parent_id, description, icon, product_count, image_url, badges, article_content, article_enabled"
-        )
-        .order("name");
-
-      if (error) throw error;
-      setCategories((data as CategoryWithMeta[]) || []);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    } finally {
-      setCategoriesLoading(false);
-    }
-  };
-
-  const fetchSubcategories = async (parentId: string) => {
-    try {
-      const { data, error } = await metahub
-        .from("categories")
-        .select("id, name, slug, description, icon, product_count, image_url")
-        .eq("parent_id", parentId)
-        .order("name");
-
-      if (error) throw error;
-      setSubcategories((data as CategoryWithMeta[]) || []);
-    } catch (error) {
-      console.error("Error fetching subcategories:", error);
-    }
-  };
-
-  // Sadece toplam count (pagination için) – liste RTK’den geliyor
-  const fetchProductsCount = async () => {
-    try {
-      const categoryForCount =
-        currentCategory ||
-        (selectedCategory !== "all"
-          ? categories.find((c) => c.slug === selectedCategory) ?? null
-          : null);
-
-      let countQuery = metahub
-        .from("products")
-        .select("*", { count: "exact", head: true })
-        .eq("is_active", true);
-
-      if (categoryForCount) {
-        countQuery = countQuery.eq("category_id", categoryForCount.id);
-      }
-
-      const { count } = await countQuery;
-      setTotalProducts(count || 0);
-    } catch (error) {
-      console.error("Error fetching product count:", error);
-    }
-  };
 
   /* -------------------- Helpers -------------------- */
 
@@ -267,7 +237,10 @@ const ProductsPage = () => {
     <div className="min-h-screen flex flex-col">
       <Helmet>
         <title>{settings.seo_products_title}</title>
-        <meta name="description" content={settings.seo_products_description} />
+        <meta
+          name="description"
+          content={settings.seo_products_description}
+        />
         <meta property="og:title" content={settings.seo_products_title} />
         <meta
           property="og:description"
@@ -298,16 +271,14 @@ const ProductsPage = () => {
           ) : (
             // Ürün listesi / sort / pagination / article
             <ProductsSection
-              products={products as Product[]}
+              products={products}
               totalProducts={totalProducts}
               currentPage={currentPage}
               totalPages={totalPages}
               loading={loading}
               sortBy={sortBy}
               onSortChange={(value) =>
-                setSortBy(
-                  value as SortOption // Select string -> union
-                )
+                setSortBy(value as SortOption) // Select string -> union
               }
               selectedCategory={selectedCategory}
               onSelectedCategoryChange={setSelectedCategory}

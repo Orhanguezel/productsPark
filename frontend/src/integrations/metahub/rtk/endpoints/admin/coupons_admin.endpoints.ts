@@ -9,7 +9,7 @@ import type {
   DiscountType,
   CreateCouponBody,
   UpdateCouponBody,
-} from "../../../db/types/coupon";
+} from "../../types/coupon";
 
 const toNum = (x: unknown): number =>
   (typeof x === "number" ? x : Number(x)) || 0;
@@ -92,12 +92,12 @@ export const couponsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((c) => ({
-                type: "Coupons" as const,
-                id: c.id,
-              })),
-              { type: "Coupons" as const, id: "LIST" },
-            ]
+            ...result.map((c) => ({
+              type: "Coupons" as const,
+              id: c.id,
+            })),
+            { type: "Coupons" as const, id: "LIST" },
+          ]
           : [{ type: "Coupons" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

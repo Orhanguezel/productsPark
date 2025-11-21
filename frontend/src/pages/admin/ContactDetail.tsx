@@ -16,7 +16,7 @@ import type {
   ContactView,
   ContactUpdateInput,
   ContactStatus,
-} from "@/integrations/metahub/db/types/contacts";
+} from "@/integrations/metahub/rtk/types/contacts";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

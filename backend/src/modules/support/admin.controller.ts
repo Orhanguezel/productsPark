@@ -130,9 +130,9 @@ export const SupportAdminController = {
         is_admin: true, // admin’den geldiği için true
       });
 
-      // ✅ Admin yanıtı → "in_progress"
+      // ✅ Admin yanıtı → "waiting_response" (cevaplandı, kullanıcıdan yanıt bekleniyor)
       await SupportRepo.updateTicket(body.ticket_id, {
-        status: "in_progress" as any,
+        status: "waiting_response" as any,
       });
 
       // 🔔 Admin yanıtı → notification + mail

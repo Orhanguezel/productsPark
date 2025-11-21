@@ -1,7 +1,7 @@
 // src/integrations/metahub/rtk/endpoints/fake_notifications.endpoints.ts
 
 import { baseApi } from "../baseApi";
-import type { FakeOrderNotification, FakeNotificationSettings } from "../../db/types/fakeNotifications";
+import type { FakeOrderNotification, FakeNotificationSettings } from "../types/fakeNotifications";
 
 type ListParams = Partial<{
   is_active: boolean;
@@ -57,7 +57,7 @@ export const fakeNotificationsApi = baseApi.injectEndpoints({
 
     /* ================= ADMIN: CRUD ================= */
 
-   listFakeOrderNotifications: b.query<FakeOrderNotification[], ListParams | void>({
+    listFakeOrderNotifications: b.query<FakeOrderNotification[], ListParams | void>({
       // ⬇️ Burada sihir: p'yi default {} ile tek tipe indiriyoruz
       query: (p: ListParams = {}) => {
         const usp = new URLSearchParams();
@@ -78,9 +78,9 @@ export const fakeNotificationsApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((x) => ({ type: "FakeOrders" as const, id: x.id })),
-              { type: "FakeOrders" as const, id: "LIST" },
-            ]
+            ...result.map((x) => ({ type: "FakeOrders" as const, id: x.id })),
+            { type: "FakeOrders" as const, id: "LIST" },
+          ]
           : [{ type: "FakeOrders" as const, id: "LIST" }],
     }),
 

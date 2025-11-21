@@ -3,7 +3,6 @@
 // =============================================================
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -23,13 +22,34 @@ import { useGetSiteSettingByKeyQuery } from "@/integrations/metahub/rtk/endpoint
 import {
   useCreatePaymentRequestMutation,
 } from "@/integrations/metahub/rtk/endpoints/payment_requests.endpoints";
-import type { OrderView as Order } from "@/integrations/metahub/db/types";
+import {
+  useSendTelegramNotificationMutation,
+} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+import type { OrderView as Order } from "@/integrations/metahub/rtk/types";
 
 const toStringOrNull = (v: unknown): string | null =>
   typeof v === "string" ? v : v == null ? null : String(v);
 
 const truthy = (v: unknown) =>
   v === true || v === "true" || v === "1" || v === 1;
+
+// SessionStorage'dan gelen havale ödeme datası için basit tip
+type PaymentSessionData = {
+  cartItems?: Array<{
+    products: {
+      id: string;
+      name: string;
+      price?: number | string;
+    };
+    quantity?: number;
+    selected_options?: unknown;
+  }>;
+  subtotal?: number | string;
+  discount?: number | string;
+  total?: number | string;
+  appliedCoupon?: { code?: string } | null;
+  notes?: string | null;
+};
 
 const PaymentInfo = () => {
   const [searchParams] = useSearchParams();
@@ -68,12 +88,15 @@ const PaymentInfo = () => {
     paymentRequestTelegramSetting?.value
   );
 
-  // --- RTK: sipariş & payment_request oluşturma ---
+  // --- RTK: sipariş & payment_request & telegram ---
   const [createOrder] = useCreateOrderMutation();
   const [createPaymentRequest] = useCreatePaymentRequestMutation();
+  const [sendTelegramNotification] = useSendTelegramNotificationMutation();
 
   // --- local state: yeni flow için sessionStorage'daki paymentData ---
-  const [paymentData, setPaymentData] = useState<any>(null);
+  const [paymentData, setPaymentData] = useState<PaymentSessionData | null>(
+    null
+  );
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -91,7 +114,7 @@ const PaymentInfo = () => {
         navigate("/");
         return;
       }
-      const data = JSON.parse(savedData);
+      const data = JSON.parse(savedData) as PaymentSessionData;
       setPaymentData(data);
     } catch (err) {
       console.error(err);
@@ -127,9 +150,12 @@ const PaymentInfo = () => {
     // Telegram ayarı artık RTK site_settings'ten
     try {
       if (isPaymentTelegramEnabled) {
-        await metahub.functions.invoke("send-telegram-notification", {
-          body: { type: "new_payment_request", orderId: ord.id },
-        });
+        await sendTelegramNotification({
+          type: "new_payment_request",
+          orderId: ord.id,
+          amount,
+          currency: "TRY",
+        }).unwrap();
       }
     } catch (e) {
       console.warn("Telegram notification error", e);
@@ -144,7 +170,7 @@ const PaymentInfo = () => {
 
     const orderNumber = `ORD${Date.now()}`;
 
-    const items = (paymentData.cartItems ?? []).map((item: any) => {
+    const items = (paymentData.cartItems ?? []).map((item) => {
       const price = Number(item.products?.price ?? 0);
       const quantity = Number(item.quantity ?? 1);
       const total = price * quantity;
@@ -159,22 +185,19 @@ const PaymentInfo = () => {
       };
     });
 
-    const subtotalRaw = paymentData.subtotal ?? 0;
-    const discountRaw = paymentData.discount ?? 0;
-    const totalRaw = paymentData.total ?? subtotalRaw - discountRaw;
+    // 🔧 Burayı tamamen number'a çeviriyoruz ki TS hata vermesin
+    const subtotalRaw: number =
+      Number(paymentData.subtotal ?? 0) || 0;
+    const discountRaw: number =
+      Number(paymentData.discount ?? 0) || 0;
+    const totalRaw: number =
+      paymentData.total != null
+        ? Number(paymentData.total) || 0
+        : subtotalRaw - discountRaw;
 
-    const subtotalStr =
-      typeof subtotalRaw === "number"
-        ? subtotalRaw.toFixed(2)
-        : String(subtotalRaw);
-    const discountStr =
-      typeof discountRaw === "number"
-        ? discountRaw.toFixed(2)
-        : String(discountRaw);
-    const totalStr =
-      typeof totalRaw === "number"
-        ? totalRaw.toFixed(2)
-        : String(totalRaw);
+    const subtotalStr = subtotalRaw.toFixed(2);
+    const discountStr = discountRaw.toFixed(2);
+    const totalStr = totalRaw.toFixed(2);
 
     const body: CreateOrderBody = {
       order_number: orderNumber,
@@ -191,8 +214,11 @@ const PaymentInfo = () => {
     const createdOrder = await createOrder(body).unwrap();
 
     const amount =
-      Number(createdOrder.final_amount ?? createdOrder.total_amount ?? totalRaw) ||
-      0;
+      Number(
+        createdOrder.final_amount ??
+          createdOrder.total_amount ??
+          totalRaw
+      ) || 0;
 
     await createPaymentRequest({
       order_id: createdOrder.id,
@@ -212,9 +238,12 @@ const PaymentInfo = () => {
     // Telegram bildirimi (RTK'dan gelen ayar ile kontrol)
     try {
       if (isPaymentTelegramEnabled) {
-        await metahub.functions.invoke("send-telegram-notification", {
-          body: { type: "new_payment_request", orderId: createdOrder.id },
-        });
+        await sendTelegramNotification({
+          type: "new_payment_request",
+          orderId: createdOrder.id,
+          amount,
+          currency: "TRY",
+        }).unwrap();
       }
     } catch (e) {
       console.warn("Telegram notification error", e);
@@ -331,7 +360,9 @@ const PaymentInfo = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() =>
-                      copyToClipboard(Number(displayAmount ?? 0).toString())
+                      copyToClipboard(
+                        Number(displayAmount ?? 0).toString()
+                      )
                     }
                   >
                     <Copy className="h-4 w-4" />

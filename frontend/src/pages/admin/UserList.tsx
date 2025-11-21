@@ -17,7 +17,7 @@ import {
   useListUsersAdminQuery,
 } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
 import type { User as AdminApiUser } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
-import type { UserRoleName } from "@/integrations/metahub/db/types/users";
+import type { UserRoleName } from "@/integrations/metahub/rtk/types/users";
 
 // UI tipi (tabloda gösterilecek alanlar)
 interface UIUser {
@@ -59,7 +59,7 @@ export default function UserList() {
   } = useListUsersAdminQuery({
     limit: 200,
     sort: "created_at",
-    order: "desc",  
+    order: "desc",
   });
   // Hata durumlarını kullanıcıya göster
   useEffect(() => {

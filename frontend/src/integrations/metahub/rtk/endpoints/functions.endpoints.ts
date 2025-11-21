@@ -1,163 +1,283 @@
-// src/integrations/metahub/rtk/endpoints/functions.endpoints.ts
+// =============================================================
+// FILE: src/integrations/metahub/rtk/endpoints/functions.endpoints.ts
+// =============================================================
 import { baseApi } from "../baseApi";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
+import type {
+  PaytrTokenResult,
+  ShopierPaymentFormResult,
+  BalanceResult,
+} from "@/integrations/metahub/core/public-api";
+import type {
+  TurkpinGameListResult,
+  TurkpinProductListResult,
+  TurkpinListType,
+} from "@/integrations/metahub/rtk/types/turkpin";
 
-type UnknownRecord = Record<string, unknown>;
+const FN_BASE = "/functions";
 
-const toPriceString = (x: unknown): string => {
-  if (typeof x === "number") return x.toFixed(2);
-  if (typeof x === "string") {
-    const n = Number(x.replace(",", "."));
-    return Number.isFinite(n) ? n.toFixed(2) : "0.00";
-  }
-  const n = Number(x ?? 0);
-  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+/* ---------------- Request / Response tipleri ---------------- */
+
+export type PaytrTokenBody = {
+  email?: string;
+  payment_amount?: number | string; // kuruş
+  merchant_oid?: string;
+  user_ip?: string;
+  installment?: number | string;
+  no_installment?: number | string;
+  max_installment?: number | string;
+  currency?: string; // 'TL'
+  basket?: Array<[string, number, number]>; // [name, unit_price, qty]
+  lang?: string;
 };
 
-const toIntKurus = (x: unknown): number => {
-  if (typeof x === "number") return Math.round(x * 100);
-  if (typeof x === "string") {
-    const n = Number(x.replace(",", "."));
-    return Math.round((Number.isFinite(n) ? n : 0) * 100);
-  }
-  const n = Number(x ?? 0);
-  return Math.round((Number.isFinite(n) ? n : 0) * 100);
+/**
+ * Backend send-email fonksiyonu hem klasik subject/html/text
+ * hem de template_key + variables tarzı body alabiliyor.
+ * O yüzden FE tipini geniş tuttuk.
+ */
+export type SendEmailBody = {
+  to: string;
+
+  // Klasik kullanım
+  subject?: string;
+  html?: string;
+  text?: string;
+
+  // Template tabanlı kullanım
+  template_key?: string;
+  variables?: Record<string, unknown>;
 };
 
-const isPlainObject = (v: unknown): v is UnknownRecord =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-
-const isEmptyObject = (v: unknown): boolean =>
-  !isPlainObject(v) || Object.keys(v).length === 0;
-
-const normalizeKeyNames = (o: UnknownRecord): UnknownRecord => {
-  const out: UnknownRecord = {};
-  for (const [k, v] of Object.entries(o)) {
-    switch (k) {
-      case "orderId": out.order_id = v; break;
-      case "successUrl": out.success_url = v; break;
-      case "cancelUrl": out.cancel_url = v; break;
-      case "returnUrl": out.return_url = v; break;
-      default: out[k] = v;
-    }
-  }
-  return out;
+export type ManualDeliveryEmailBody = {
+  to: string;
+  customer_name?: string;
+  order_number?: string;
+  delivery_content: string;
+  site_name?: string;
 };
 
-const normalizeFnBody = (name: string, body?: unknown): UnknownRecord => {
-  const raw = isPlainObject(body) ? { ...body } : {};
+export type TelegramNotificationBody = Record<string, unknown>;
 
-  // CustomerInfo'yu sakla (email fallback için)
-  const customerInfo = isPlainObject((raw as UnknownRecord).customerInfo)
-    ? ((raw as UnknownRecord).customerInfo as UnknownRecord)
-    : {};
+export type SmmApiOrderBody = Record<string, unknown>;
+export type SmmApiStatusBody = Record<string, unknown>;
+export type TurkpinCreateOrderBody = Record<string, unknown>;
 
-  // orderData -> top-level merge
-  if (isPlainObject((raw as UnknownRecord).orderData)) {
-    Object.assign(raw, (raw as UnknownRecord).orderData as UnknownRecord);
-    delete (raw as UnknownRecord).orderData;
-  }
-
-  const b = normalizeKeyNames(raw);
-
-  // Ortak normalizasyon
-  if (b.amount !== undefined) b.amount = toPriceString(b.amount);
-  if (typeof b.currency === "string") {
-    const c = (b.currency as string).toUpperCase();
-    b.currency = c === "TRY" ? "TL" : c;
-  }
-  if (!b.email && typeof customerInfo.email === "string") {
-    b.email = customerInfo.email;
-  }
-  if (b.customer && !isPlainObject(b.customer)) delete b.customer;
-  if (b.meta && !isPlainObject(b.meta)) delete b.meta;
-
-  // PayTR kuruş dönüşümleri
-  const isPaytr = name === "paytr-get-token" || name === "paytr-havale-get-token";
-  if (isPaytr) {
-    if (b.payment_amount !== undefined) {
-      b.payment_amount = toIntKurus(b.payment_amount);
-    } else if (b.amount !== undefined) {
-      b.payment_amount = toIntKurus(b.amount);
-      delete b.amount;
-    }
-    if (b.final_amount !== undefined) {
-      b.final_amount = toIntKurus(b.final_amount);
-    }
-  }
-
-  // Shopier: body doğrudan iletilmeli (items BE’de zorunlu olabilir) → ÖZELLİKLE BOŞALTMA!
-  return b;
+/** Turkpin listeleri için body tipleri (type dosyasındaki TurkpinListType kullanılıyor) */
+export type TurkpinGameListBody = {
+  providerId: string;
+  listType: TurkpinListType; // "epin" | "topup"
 };
+
+export type TurkpinProductListBody = {
+  providerId: string;
+  gameId: string;
+  listType: TurkpinListType; // "epin" | "topup"
+};
+
+/** Turkpin bakiye sorgusu için body tipi */
+export type TurkpinBalanceBody = {
+  providerId: string;
+};
+
+export type SimpleSuccessResp = {
+  success: boolean;
+  error?: string;
+};
+
+/* Kullanıcı sipariş silme fonksiyonu için tipler */
+export type DeleteUserOrdersBody = {
+  email: string;
+};
+
+export type DeleteUserOrdersResp = {
+  success: boolean;
+  message?: string;
+  error?: string;
+};
+
+export type SmmApiOrderResp = {
+  success: boolean;
+  order_id: string;
+  status: string;
+};
+
+export type SmmApiStatusResp = {
+  success: boolean;
+  status: string;
+};
+
+export type TurkpinCreateOrderResp = {
+  success: boolean;
+  order_id: string;
+  status: string;
+};
+
+/* ---------------- RTK endpoints ---------------- */
 
 export const functionsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-    invokeFunction: b.mutation<
-      { result: UnknownRecord },
-      { name: string; body?: unknown }
+    /** POST /functions/paytr-get-token */
+    paytrGetToken: b.mutation<PaytrTokenResult, PaytrTokenBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/paytr-get-token`,
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /** POST /functions/paytr-havale-get-token */
+    paytrHavaleGetToken: b.mutation<PaytrTokenResult, PaytrTokenBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/paytr-havale-get-token`,
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /** POST /functions/shopier-create-payment */
+    shopierCreatePayment: b.mutation<
+      ShopierPaymentFormResult,
+      Record<string, unknown>
     >({
-      query: ({ name, body }) => {
-        const safeName = name.replace(/_/g, "-").toLowerCase();
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/shopier-create-payment`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-        const FN_PREFIX = (
-          (import.meta.env.VITE_FUNCTIONS_PREFIX as string | undefined) ||
-          "/functions/v1"
-        ).replace(/\/+$/, "");
+    /** POST /functions/send-email */
+    sendEmail: b.mutation<SimpleSuccessResp, SendEmailBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/send-email`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-        const normalized = normalizeFnBody(safeName, body);
-        const finalBody = isEmptyObject(normalized) ? {} : normalized;
+    /** POST /functions/manual-delivery-email */
+    manualDeliveryEmail: b.mutation<
+      SimpleSuccessResp,
+      ManualDeliveryEmailBody
+    >({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/manual-delivery-email`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-        return {
-          url: `${FN_PREFIX}/${encodeURIComponent(safeName)}`,
-          method: "POST",
-          body: finalBody,
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-        };
-      },
+    /** POST /functions/send-telegram-notification */
+    sendTelegramNotification: b.mutation<
+      { success: boolean },
+      TelegramNotificationBody
+    >({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/send-telegram-notification`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-      transformResponse: (res: unknown, _meta, arg): { result: UnknownRecord } => {
-        const payload = (res as UnknownRecord) ?? {};
-        const name = arg.name.replace(/_/g, "-").toLowerCase();
+    /** POST /functions/smm-api-order */
+    smmApiOrder: b.mutation<SmmApiOrderResp, SmmApiOrderBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/smm-api-order`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-        if (name === "paytr-get-token" || name === "paytr-havale-get-token") {
-          const token = (payload.token as string) || undefined;
-          const success =
-            typeof payload.success === "boolean" ? payload.success : Boolean(token);
-          return {
-            result: {
-              success,
-              token,
-              forward_payload: (payload as UnknownRecord).forward_payload ?? null,
-              expires_in: (payload as UnknownRecord).expires_in ?? null,
-            },
-          };
-        }
+    /** POST /functions/smm-api-status */
+    smmApiStatus: b.mutation<SmmApiStatusResp, SmmApiStatusBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/smm-api-status`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-        if (name === "shopier-create-payment") {
-          const p = payload as UnknownRecord;
-          const form_action =
-            (p.form_action as string) ?? "https://example.com/mock-shopier";
-          const form_data =
-            (p.form_data as UnknownRecord) ??
-            (() => {
-              try {
-                const url = String(p.payment_url ?? "");
-                const m = url.match(/[?&]oid=([^&]+)/i);
-                return { oid: m?.[1] ?? `SHP_${Date.now()}` };
-              } catch {
-                return { oid: `SHP_${Date.now()}` };
-              }
-            })();
+    /** POST /functions/turkpin-create-order */
+    turkpinCreateOrder: b.mutation<
+      TurkpinCreateOrderResp,
+      TurkpinCreateOrderBody
+    >({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/turkpin-create-order`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-          return { result: { success: true, form_action, form_data } };
-        }
+    /** POST /functions/turkpin-game-list */
+    turkpinGameList: b.mutation<TurkpinGameListResult, TurkpinGameListBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/turkpin-game-list`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-        return { result: payload };
-      },
+    /** POST /functions/turkpin-product-list */
+    turkpinProductList: b.mutation<
+      TurkpinProductListResult,
+      TurkpinProductListBody
+    >({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/turkpin-product-list`,
+        method: "POST",
+        body,
+      }),
+    }),
 
-      invalidatesTags: ["Functions"],
+    /** POST /functions/turkpin-balance */
+    turkpinBalance: b.mutation<BalanceResult, TurkpinBalanceBody>({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/turkpin-balance`,
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /** POST /functions/delete-user-orders */
+    deleteUserOrders: b.mutation<
+      DeleteUserOrdersResp,
+      DeleteUserOrdersBody
+    >({
+      query: (body): FetchArgs => ({
+        url: `${FN_BASE}/delete-user-orders`,
+        method: "POST",
+        body,
+      }),
+    }),
+
+    /** GET /functions/sitemap  (XML string döner) */
+    sitemap: b.query<string, void>({
+      query: (): FetchArgs => ({
+        url: `${FN_BASE}/sitemap`,
+        method: "GET",
+        // text response almak için (fetchBaseQuery'de built-in)
+        responseHandler: "text",
+      }),
     }),
   }),
   overrideExisting: true,
 });
 
-export const { useInvokeFunctionMutation } = functionsApi;
+export const {
+  usePaytrGetTokenMutation,
+  usePaytrHavaleGetTokenMutation,
+  useShopierCreatePaymentMutation,
+  useSendEmailMutation,
+  useManualDeliveryEmailMutation,
+  useSendTelegramNotificationMutation,
+  useSmmApiOrderMutation,
+  useSmmApiStatusMutation,
+  useTurkpinCreateOrderMutation,
+  useTurkpinGameListMutation,
+  useTurkpinProductListMutation,
+  useTurkpinBalanceMutation,
+  useDeleteUserOrdersMutation,
+  useSitemapQuery,
+} = functionsApi;

@@ -3,7 +3,7 @@
 // =============================================================
 import { baseApi } from "../baseApi";
 import { toNumber, isObject } from "@/integrations/metahub/core/normalize";
-import type { OrderView as Order } from "@/integrations/metahub/db/types";
+import type { OrderView as Order } from "@/integrations/metahub/rtk/types";
 
 // ---- Tipler ----
 // DDL: ("pending","processing","completed","cancelled","refunded")
@@ -120,9 +120,9 @@ export const ordersApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result && result.length
           ? [
-              ...result.map((o) => ({ type: "Order" as const, id: o.id })),
-              { type: "Orders" as const, id: "LIST" },
-            ]
+            ...result.map((o) => ({ type: "Order" as const, id: o.id })),
+            { type: "Orders" as const, id: "LIST" },
+          ]
           : [{ type: "Orders" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -155,9 +155,9 @@ export const ordersApi = baseApi.injectEndpoints({
       invalidatesTags: (result) =>
         result
           ? [
-              { type: "Order" as const, id: result.id },
-              { type: "Orders" as const, id: "LIST" },
-            ]
+            { type: "Order" as const, id: result.id },
+            { type: "Orders" as const, id: "LIST" },
+          ]
           : [{ type: "Orders" as const, id: "LIST" }],
     }),
   }),

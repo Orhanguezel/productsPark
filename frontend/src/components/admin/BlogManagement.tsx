@@ -25,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import type { BlogPost, UpsertBlogBody } from "@/integrations/metahub/db/types/blog";
+import type { BlogPost, UpsertBlogBody } from "@/integrations/metahub/rtk/types/blog";
 import {
   useListBlogPostsAdminQuery,
   useCreateBlogPostAdminMutation,
@@ -65,12 +65,12 @@ type BlogFormData = {
 // Tek alan güncelleyen helper
 const updateField =
   (setFormData: React.Dispatch<React.SetStateAction<BlogFormData>>) =>
-  <K extends keyof BlogFormData>(key: K, value: BlogFormData[K]) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
+    <K extends keyof BlogFormData>(key: K, value: BlogFormData[K]) => {
+      setFormData((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+    };
 
 // FE form datasını RTK body’ye map eden helper
 const toUpsertBody = (form: BlogFormData): UpsertBlogBody => ({

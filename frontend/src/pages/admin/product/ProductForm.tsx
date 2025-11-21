@@ -57,13 +57,13 @@ import type {
   UsedStockItem,
   ProductReviewRow,
   ProductFaqRow,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 import type {
   ReviewInput,
   FAQInput,
   CustomField,
   Badge,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 // ---- Sections ----
 import BasicInfo from "./form/sections/BasicInfo";

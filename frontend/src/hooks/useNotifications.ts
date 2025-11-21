@@ -10,7 +10,7 @@ import {
   useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
 } from "@/integrations/metahub/rtk/endpoints/notifications.endpoints";
-import type { Notification } from "@/integrations/metahub/db/types/notifications";
+import type { Notification } from "@/integrations/metahub/rtk/types/notifications";
 
 type UseNotificationsOptions = {
   /** Header için sadece sayım lazım ise false bırak (default: false) */

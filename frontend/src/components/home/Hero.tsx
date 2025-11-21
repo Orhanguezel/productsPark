@@ -1,149 +1,111 @@
+// FILE: src/components/home/Hero.tsx
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
-import { metahub } from "@/integrations/metahub/client";
 import { useNavigate } from "react-router-dom";
 
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  image_url: string | null;
-  icon: string | null;
-  description?: string | null;
-}
+import type { Category } from "@/integrations/metahub/rtk/types/categories";
+import { useListCategoriesQuery } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
+import {
+  useListSiteSettingsQuery,
+  type SiteSetting,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 
-const toBool = (v: unknown) =>
-  v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true" || v === "on";
+const toBool = (v: unknown): boolean =>
+  v === true ||
+  v === 1 ||
+  v === "1" ||
+  String(v).toLowerCase() === "true" ||
+  v === "on";
+
+const DEFAULT_SETTINGS = {
+  home_header_top_text: "İndirim Sezonu Başladı",
+  home_header_bottom_text:
+    "It is a long established fact that a reader will be distracted by the readable content of a page when looking at its layout.",
+  home_header_sub_text_1: "Yeni Üyelere Özel",
+  home_header_sub_text_2: "%10 Fırsatı Dijimin'de!",
+  home_header_button_text: "Ürünleri İncele",
+  home_header_show_contact: true as boolean | string,
+  home_hero_image_url: "",
+};
+
+type HeroSettings = typeof DEFAULT_SETTINGS;
 
 const Hero = () => {
   const navigate = useNavigate();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [settings, setSettings] = useState({
-    home_header_top_text: "İndirim Sezonu Başladı",
-    home_header_bottom_text:
-      "It is a long established fact that a reader will be distracted by the readable content of a page when looking at its layout.",
-    home_header_sub_text_1: "Yeni Üyelere Özel",
-    home_header_sub_text_2: "%10 Fırsatı Dijimin'de!",
-    home_header_button_text: "Ürünleri İncele",
-    home_header_show_contact: true as boolean | string,
-    home_hero_image_url: "",
+
+  /* --------- Site settings (RTK) --------- */
+
+  const { data: siteSettings } = useListSiteSettingsQuery({
+    prefix: "home_",
   });
 
+  const [settings, setSettings] = useState<HeroSettings>(DEFAULT_SETTINGS);
+
   useEffect(() => {
-    fetchSettings();
-    fetchCategories();
+    if (!siteSettings) return;
 
-    // Realtime (varsa) — hata alsa bile UI’yi bozmasın
-    try {
-      const channel = (metahub as any)
-        ?.channel?.("home-settings-changes")
-        ?.on?.(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "site_settings" },
-          (payload: any) => {
-            const keys = [
-              "home_header_top_text",
-              "home_header_bottom_text",
-              "home_header_sub_text_1",
-              "home_header_sub_text_2",
-              "home_header_button_text",
-              "home_header_show_contact",
-              "home_hero_image_url",
-            ];
-            if (keys.includes(payload?.new?.key)) fetchSettings();
-          }
-        )
-        ?.on?.(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "site_settings" },
-          (payload: any) => {
-            const keys = [
-              "home_header_top_text",
-              "home_header_bottom_text",
-              "home_header_sub_text_1",
-              "home_header_sub_text_2",
-              "home_header_button_text",
-              "home_header_show_contact",
-              "home_hero_image_url",
-            ];
-            if (keys.includes(payload?.new?.key)) fetchSettings();
-          }
-        )
-        ?.subscribe?.();
+    setSettings((prev) => {
+      const next: HeroSettings = { ...prev };
+      const dict: Record<string, SiteSetting["value"]> = {};
 
-      return () => {
-        try {
-          (metahub as any)?.removeChannel?.(channel);
-        } catch {/* ignore */}
-      };
-    } catch {/* ignore */}
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      // Boolean/tinyint/string uyumu için geniş filtre:
-      const { data, error } = await metahub
-        .from("categories")
-        .select("id, name, slug, image_url, icon, description")
-        .eq("is_active", true)
-        .in("is_featured", [true, 1, "1", "true"]) // prod’daki olası formatlar
-        .limit(1);
-
-      if (error) throw error;
-
-      // Fallback: featured yoksa ilk aktif kategoriye düş
-      if (!data || data.length === 0) {
-        const alt = await metahub
-          .from("categories")
-          .select("id, name, slug, image_url, icon, description")
-          .eq("is_active", true)
-          .order("display_order", { ascending: true })
-          .limit(1);
-
-        setCategories(Array.isArray(alt?.data) ? alt.data : []);
-        return;
+      for (const item of siteSettings) {
+        dict[item.key] = item.value;
       }
 
-      setCategories(data);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-      setCategories([]); // UI her durumda render etsin
-    }
-  };
-
-  const fetchSettings = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("site_settings")
-        .select("*")
-        .in("key", [
+      // String olan ayarlar
+      const stringKeys: Array<
+        keyof Pick<
+          HeroSettings,
+          | "home_header_top_text"
+          | "home_header_bottom_text"
+          | "home_header_sub_text_1"
+          | "home_header_sub_text_2"
+          | "home_header_button_text"
+          | "home_hero_image_url"
+        >
+      > = [
           "home_header_top_text",
           "home_header_bottom_text",
           "home_header_sub_text_1",
           "home_header_sub_text_2",
           "home_header_button_text",
-          "home_header_show_contact",
           "home_hero_image_url",
-        ]);
+        ];
 
-      if (error) throw error;
+      stringKeys.forEach((key) => {
+        const raw = dict[key as string];
+        if (typeof raw === "string") {
+          next[key] = raw as HeroSettings[typeof key];
+        }
+      });
 
-      if (Array.isArray(data) && data.length > 0) {
-        const obj = data.reduce((acc: any, item) => {
-          acc[item.key] = item.value;
-          return acc;
-        }, {});
-        setSettings((prev) => ({ ...prev, ...obj }));
+      // Contact gösterilsin mi?
+      const showRaw = dict["home_header_show_contact"];
+      if (typeof showRaw === "boolean" || typeof showRaw === "string") {
+        next.home_header_show_contact = showRaw;
       }
-    } catch (error) {
-      console.error("Error fetching home settings:", error);
-    }
-  };
 
-  const category = categories[0];
+      return next;
+    });
+  }, [siteSettings]);
+
+  /* --------- Categories (RTK) --------- */
+
+  const { data: categoriesData = [] } = useListCategoriesQuery({
+    is_active: true,
+    sort: "display_order",
+    order: "asc",
+  });
+
+  const categories = categoriesData as Category[];
+
+  // Önce featured olanı, yoksa ilk kategoriyi kullan
+  const category: Category | null =
+    categories.find((c) => c.is_featured) ?? categories[0] ?? null;
+
   const showContact = toBool(settings.home_header_show_contact);
-  const heroImg = settings.home_hero_image_url || category?.image_url;
+  const heroImg = settings.home_hero_image_url || category?.image_url || "";
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-background via-background to-primary/5">
@@ -152,7 +114,11 @@ const Hero = () => {
         <div className="absolute inset-0 z-0">
           {heroImg ? (
             <>
-              <img src={heroImg} alt="Hero Background" className="w-full h-full object-cover" />
+              <img
+                src={heroImg}
+                alt="Hero Background"
+                className="w-full h-full object-cover"
+              />
               <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-background/30" />
             </>
           ) : (
@@ -172,7 +138,9 @@ const Hero = () => {
               className="text-4xl md:text-6xl lg:text-7xl font-black leading-tight animate-fade-in"
               style={{ animationDelay: "0.1s" }}
             >
-              <span className="block mb-3">{settings.home_header_sub_text_1}</span>
+              <span className="block mb-3">
+                {settings.home_header_sub_text_1}
+              </span>
               <span className="block bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text text-transparent">
                 {settings.home_header_sub_text_2}
               </span>
@@ -185,12 +153,17 @@ const Hero = () => {
               {settings.home_header_bottom_text}
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+            <div
+              className="flex flex-col sm:flex-row gap-4 animate-fade-in"
+              style={{ animationDelay: "0.3s" }}
+            >
               <Button
                 size="lg"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xl hover:shadow-primary/50 transition-all text-base px-10 h-14 rounded-full font-bold group"
                 onClick={() =>
-                  navigate(category?.slug ? `/kategoriler/${category.slug}` : "/urunler")
+                  navigate(
+                    category?.slug ? `/kategoriler/${category.slug}` : "/urunler",
+                  )
                 }
               >
                 {settings.home_header_button_text}
@@ -202,7 +175,9 @@ const Hero = () => {
                   size="lg"
                   variant="outline"
                   className="border-2 border-primary/20 hover:bg-primary/5 text-base px-10 h-14 rounded-full font-bold backdrop-blur-sm"
-                  onClick={() => (window.location.href = "/iletisim")}
+                  onClick={() => {
+                    window.location.href = "/iletisim";
+                  }}
                 >
                   İletişime Geç
                 </Button>

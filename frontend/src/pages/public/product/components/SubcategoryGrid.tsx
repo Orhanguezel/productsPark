@@ -4,7 +4,7 @@
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import type { CategoryRow } from "@/integrations/metahub/db/types/categories";
+import type { CategoryRow } from "@/integrations/metahub/rtk/types/categories";
 
 type Subcategory = CategoryRow & {
   product_count?: number;

@@ -19,6 +19,12 @@ import { randomUUID } from "crypto";
 import { sendTicketRepliedMail } from "@/modules/mail/service";
 import { eq } from "drizzle-orm";
 
+/** Auth tarafında beklediğimiz user şekli (JWT payload) */
+type AuthUser = {
+  id?: string;
+  role?: string;
+} | undefined;
+
 /* ========== ortak helpers (mail + notification için) ========== */
 
 const now = () => new Date();
@@ -64,7 +70,7 @@ export async function fireTicketRepliedEventsForTicket(args: {
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.id, ticket.userId as any)) // 👈 BURAYI DÜZELTTİK
+    .where(eq(users.id, ticket.userId as any))
     .limit(1);
 
   if (!user || !user.email) return;
@@ -167,9 +173,9 @@ export const SupportController = {
       const { id } = req.params as { id: string };
       const patch = updateTicketBodySchema.parse(req.body);
 
-      // RBAC: admin değilse status/priority güncellemesin
-      // @ts-ignore
-      const role = (req.user?.role as string | undefined) ?? "user";
+      const authUser = req.user as AuthUser;
+      const role = (authUser?.role as string | undefined) ?? "user";
+
       if (role !== "admin" && ("status" in patch || "priority" in patch)) {
         reply.code(403);
         return { message: "Bu alanları güncelleme yetkiniz yok." };
@@ -211,10 +217,11 @@ export const SupportController = {
   async createReply(req: FastifyRequest, reply: FastifyReply) {
     try {
       const body = createReplyBodySchema.parse(req.body);
-      // @ts-ignore
-      const role = (req.user?.role as string | undefined) ?? "user";
-      // @ts-ignore
-      const userId = (req.user?.id as string | undefined) ?? body.user_id ?? null;
+
+      const authUser = req.user as AuthUser;
+      const role = (authUser?.role as string | undefined) ?? "user";
+      const userId =
+        (authUser?.id as string | undefined) ?? body.user_id ?? null;
 
       const created = await SupportRepo.createReply({
         ticket_id: body.ticket_id,
@@ -223,9 +230,12 @@ export const SupportController = {
         is_admin: role === "admin" ? (body.is_admin ?? true) : false,
       });
 
-      // ✅ KURAL: admin yanıtı → in_progress, kullanıcı yanıtı → waiting_response
-      const nextStatus = role === "admin" ? "in_progress" : "waiting_response";
-      await SupportRepo.updateTicket(body.ticket_id, { status: nextStatus as any });
+      // ✅ KURAL: admin yanıtı → waiting_response, kullanıcı yanıtı → in_progress
+      const nextStatus =
+        role === "admin" ? "waiting_response" : "in_progress";
+      await SupportRepo.updateTicket(body.ticket_id, {
+        status: nextStatus as any,
+      });
 
       // 🔔 Admin yanıtı için notification + mail
       if (role === "admin") {

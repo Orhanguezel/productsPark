@@ -8,7 +8,7 @@ import {
   CreateNotificationBody,
   UpdateNotificationBody,
   MarkAllReadResult,
-} from "../../db/types/notifications";
+} from "../types/notifications";
 
 /** GET /notifications/unread-count dönüş tipi (normalize edeceğiz) */
 interface UnreadCountRaw {
@@ -55,8 +55,8 @@ export const notificationsApi = baseApi.injectEndpoints({
             typeof unread_count === "number"
               ? unread_count
               : typeof unreadCount === "number"
-              ? unreadCount
-              : 0;
+                ? unreadCount
+                : 0;
 
           return {
             items: normalizedItems,
@@ -78,17 +78,17 @@ export const notificationsApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.items.map((n) => ({
-                type: "Notification" as const,
-                id: n.id,
-              })),
-              { type: "Notifications" as const, id: "LIST" },
-              { type: "NotificationsMeta" as const, id: "UNREAD" },
-            ]
+            ...result.items.map((n) => ({
+              type: "Notification" as const,
+              id: n.id,
+            })),
+            { type: "Notifications" as const, id: "LIST" },
+            { type: "NotificationsMeta" as const, id: "UNREAD" },
+          ]
           : [
-              { type: "Notifications" as const, id: "LIST" },
-              { type: "NotificationsMeta" as const, id: "UNREAD" },
-            ],
+            { type: "Notifications" as const, id: "LIST" },
+            { type: "NotificationsMeta" as const, id: "UNREAD" },
+          ],
     }),
 
     /** GET /notifications/unread-count → number */

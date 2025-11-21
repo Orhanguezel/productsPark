@@ -1,21 +1,27 @@
+import { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { useListApiProvidersQuery, useCreateApiProviderMutation, useUpdateApiProviderMutation } from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
-import { metahub } from "@/integrations/metahub/client";
+import {
+  useListApiProvidersQuery,
+  useCreateApiProviderMutation,
+  useUpdateApiProviderMutation,
+} from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, RefreshCw, Save } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
 import { Switch } from "@/components/ui/switch";
-import type { BalanceResult } from "@/integrations/metahub/core/public-api";
+import { useTurkpinBalanceMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
 
 const TurkpinSettings = () => {
   const [createProvider] = useCreateApiProviderMutation();
   const [updateProvider] = useUpdateApiProviderMutation();
+  const [turkpinBalanceMutation] = useTurkpinBalanceMutation();
+
   const [saving, setSaving] = useState(false);
   const [refreshingBalance, setRefreshingBalance] = useState(false);
+
   const [formData, setFormData] = useState({
     id: "",
     name: "Turkpin",
@@ -28,12 +34,17 @@ const TurkpinSettings = () => {
     username: "",
   });
 
-  const { data: providers, isLoading, refetch } = useListApiProvidersQuery({ orderBy: { field: "name", asc: true } });
-  const turkpin = (providers || []).find(p => p.name.toLowerCase() === "turkpin");
+  const { data: providers, isLoading, refetch } = useListApiProvidersQuery({
+    orderBy: { field: "name", asc: true },
+  });
+
+  const turkpin = (providers || []).find(
+    (p) => p.name.toLowerCase() === "turkpin"
+  );
 
   useEffect(() => {
     if (turkpin) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         id: turkpin.id,
         name: turkpin.name,
@@ -65,11 +76,18 @@ const TurkpinSettings = () => {
         await createProvider(payload).unwrap();
       }
 
-      toast({ title: "Başarılı", description: "Turkpin ayarları kaydedildi" });
+      toast({
+        title: "Başarılı",
+        description: "Turkpin ayarları kaydedildi",
+      });
       refetch();
     } catch (e) {
       console.error(e);
-      toast({ title: "Hata", description: "Ayarlar kaydedilemedi", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Ayarlar kaydedilemedi",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -77,34 +95,47 @@ const TurkpinSettings = () => {
 
   const refreshBalance = async () => {
     if (!formData.id) {
-      toast({ title: "Uyarı", description: "Önce Turkpin ayarlarını kaydedin", variant: "destructive" });
+      toast({
+        title: "Uyarı",
+        description: "Önce Turkpin ayarlarını kaydedin",
+        variant: "destructive",
+      });
       return;
     }
 
     setRefreshingBalance(true);
     try {
-      const { data, error } = await metahub.functions.invoke<BalanceResult>("turkpin-balance", {
-        body: { providerId: formData.id },
-      });
+      const result = await turkpinBalanceMutation({
+        providerId: formData.id,
+      }).unwrap();
 
-      if (error) throw error;
+      if (result?.success) {
+        // local state’i de güncelle
+        setFormData((prev) => ({
+          ...prev,
+          balance: result.balance ?? prev.balance,
+          currency: result.currency ?? prev.currency,
+        }));
 
-      if (data?.success) {
         toast({
           title: "Başarılı",
-          description: `Bakiye güncellendi: ${data.balance} ${data.currency}`,
+          description: `Bakiye güncellendi: ${result.balance} ${result.currency}`,
         });
         refetch();
       } else {
         toast({
           title: "Hata",
-          description: data?.error || "Bakiye güncellenemedi",
+          description: result?.error || "Bakiye güncellenemedi",
           variant: "destructive",
         });
       }
     } catch (err) {
       console.error("Balance refresh error:", err);
-      toast({ title: "Hata", description: "Bakiye güncellenirken bir hata oluştu", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Bakiye güncellenirken bir hata oluştu",
+        variant: "destructive",
+      });
     } finally {
       setRefreshingBalance(false);
     }
@@ -114,13 +145,17 @@ const TurkpinSettings = () => {
     <AdminLayout title="Turkpin Ayarları">
       <div className="space-y-6">
         {isLoading ? (
-          <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin" /></div>
+          <div className="flex justify-center p-8">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
         ) : (
           <>
             <Card>
               <CardHeader>
                 <CardTitle>API Bilgileri</CardTitle>
-                <CardDescription>Turkpin API bağlantı bilgilerini girin</CardDescription>
+                <CardDescription>
+                  Turkpin API bağlantı bilgilerini girin
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* username / password -> api_key compose */}
@@ -135,7 +170,7 @@ const TurkpinSettings = () => {
                       setFormData((f) => ({
                         ...f,
                         username,
-                        api_key: `${username}:${f.api_key.split(':')[1] || ''}`,
+                        api_key: `${username}:${f.api_key.split(":")[1] || ""}`,
                       }));
                     }}
                     placeholder="api@turkpin.net"
@@ -147,7 +182,7 @@ const TurkpinSettings = () => {
                   <Input
                     id="password"
                     type="password"
-                    value={formData.api_key.split(':')[1] || ""}
+                    value={formData.api_key.split(":")[1] || ""}
                     onChange={(e) => {
                       const password = e.target.value;
                       setFormData((f) => ({
@@ -165,7 +200,9 @@ const TurkpinSettings = () => {
                     id="api_url"
                     type="text"
                     value={formData.api_url}
-                    onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, api_url: e.target.value })
+                    }
                     disabled
                   />
                 </div>
@@ -174,14 +211,26 @@ const TurkpinSettings = () => {
                   <Switch
                     id="is_active"
                     checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, is_active: checked })
+                    }
                   />
                   <Label htmlFor="is_active">Aktif</Label>
                 </div>
 
                 <div className="flex gap-2">
                   <Button onClick={handleSave} disabled={saving}>
-                    {saving ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Kaydediliyor...</>) : (<><Save className="w-4 h-4 mr-2" />Kaydet</>)}
+                    {saving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Kaydediliyor...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Kaydet
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>
@@ -191,7 +240,9 @@ const TurkpinSettings = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Bakiye Bilgisi</CardTitle>
-                  <CardDescription>Turkpin hesap bakiyenizi görüntüleyin</CardDescription>
+                  <CardDescription>
+                    Turkpin hesap bakiyenizi görüntüleyin
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -201,12 +252,23 @@ const TurkpinSettings = () => {
                       </p>
                       {turkpin?.last_balance_check && (
                         <p className="text-sm text-muted-foreground">
-                          Son güncelleme: {new Date(turkpin.last_balance_check).toLocaleString("tr-TR")}
+                          Son güncelleme:{" "}
+                          {new Date(
+                            turkpin.last_balance_check
+                          ).toLocaleString("tr-TR")}
                         </p>
                       )}
                     </div>
-                    <Button onClick={refreshBalance} disabled={refreshingBalance} variant="outline">
-                      <RefreshCw className={`w-4 h-4 mr-2 ${refreshingBalance ? "animate-spin" : ""}`} />
+                    <Button
+                      onClick={refreshBalance}
+                      disabled={refreshingBalance}
+                      variant="outline"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 mr-2 ${
+                          refreshingBalance ? "animate-spin" : ""
+                        }`}
+                      />
                       Bakiyeyi Güncelle
                     </Button>
                   </div>

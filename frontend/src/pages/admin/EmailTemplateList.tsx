@@ -23,7 +23,7 @@ import {
   useDeleteEmailTemplateAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints";
 
-import type { EmailTemplateView } from "@/integrations/metahub/db/types/email";
+import type { EmailTemplateView } from "@/integrations/metahub/rtk/types/email";
 
 export default function EmailTemplateList() {
   const navigate = useNavigate();

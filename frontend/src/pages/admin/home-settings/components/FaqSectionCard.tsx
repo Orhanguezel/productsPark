@@ -15,7 +15,7 @@ import {
   useUpdateFaqAdminMutation,
   useRemoveFaqAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/faqs_admin.endpoints";
-import type { Faq } from "@/integrations/metahub/db/types/faqs";
+import type { Faq } from "@/integrations/metahub/rtk/types/faqs";
 import { toast } from "sonner";
 
 /** FE içinde kullanılacak lokal Faq modeli */
@@ -100,11 +100,11 @@ export function FaqSectionCard({
       prev.map((row) =>
         row._localId === localId
           ? {
-              ...row,
-              [field]:
-                field === "display_order" ? Number(value) || 0 : value,
-              _isDirty: true,
-            }
+            ...row,
+            [field]:
+              field === "display_order" ? Number(value) || 0 : value,
+            _isDirty: true,
+          }
           : row
       )
     );
@@ -114,10 +114,10 @@ export function FaqSectionCard({
     const nextOrder =
       rows.length > 0
         ? Math.max(
-            ...rows
-              .map((r) => r.display_order ?? 0)
-              .filter((n) => Number.isFinite(n))
-          ) + 1
+          ...rows
+            .map((r) => r.display_order ?? 0)
+            .filter((n) => Number.isFinite(n))
+        ) + 1
         : 1;
 
     const localId = `new-${Date.now()}-${Math.random()

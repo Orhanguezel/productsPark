@@ -1,8 +1,9 @@
 import { baseApi } from "../../baseApi";
-import type { UserRoleName } from "../../../db/types/users";
+import type { UserRoleName } from "../../types/users";
 
 /* ---------- helpers (type-safe) ---------- */
-const toIso = (x: unknown): string => new Date(x as string | number | Date).toISOString();
+const toIso = (x: unknown): string =>
+  new Date(x as string | number | Date).toISOString();
 const toBool = (x: unknown): boolean =>
   typeof x === "boolean" ? x : Number(x as unknown) === 1;
 
@@ -22,10 +23,13 @@ const tryParse = <T>(x: unknown): T => {
 
 const toRoleName = (v: unknown): UserRoleName | null => {
   const s = String(v ?? "").toLowerCase();
-  return s === "admin" || s === "moderator" || s === "user" ? (s as UserRoleName) : null;
+  return s === "admin" || s === "moderator" || s === "user"
+    ? (s as UserRoleName)
+    : null;
 };
 
-const joinComma = (ids: string[]) => ids.filter(Boolean).map(String).join(",");
+const joinComma = (ids: string[]) =>
+  ids.filter(Boolean).map(String).join(",");
 
 type UnknownRec = Record<string, unknown>;
 const asArrayOfRecord = (x: unknown): UnknownRec[] => {
@@ -73,7 +77,9 @@ export type ApiUser = {
 const normalizeUser = (u: ApiUser): User => {
   let roles: UserRoleName[] = [];
   if (Array.isArray(u.roles)) {
-    roles = u.roles.map(toRoleName).filter((r): r is UserRoleName => Boolean(r));
+    roles = u.roles
+      .map(toRoleName)
+      .filter((r): r is UserRoleName => Boolean(r));
   } else if (typeof u.roles === "string") {
     const parsed = tryParse<Array<string>>(u.roles);
     if (Array.isArray(parsed)) {
@@ -92,9 +98,9 @@ const normalizeUser = (u: ApiUser): User => {
   const metadata =
     u.metadata == null
       ? null
-      : (isRecord(u.metadata)
-          ? (u.metadata as Record<string, unknown>)
-          : tryParse<Record<string, unknown>>(u.metadata));
+      : isRecord(u.metadata)
+      ? (u.metadata as Record<string, unknown>)
+      : tryParse<Record<string, unknown>>(u.metadata);
 
   const lastRaw = u.last_login_at ?? u.last_sign_in_at ?? null;
 
@@ -122,11 +128,16 @@ export type UsersListParams = {
   order?: "asc" | "desc";
 };
 
+/** ⚠️ Email de admin tarafından güncellenebilsin diye email’i de ekledim */
 export type UpdateUserBody = Partial<
-  Pick<User, "full_name" | "phone" | "metadata" | "is_active">
+  Pick<User, "full_name" | "phone" | "metadata" | "is_active" | "email">
 > & { roles?: UserRoleName[] };
 
-export type InviteUserBody = { email: string; full_name?: string; roles?: UserRoleName[] };
+export type InviteUserBody = {
+  email: string;
+  full_name?: string;
+  roles?: UserRoleName[];
+};
 
 export const usersAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
@@ -137,7 +148,11 @@ export const usersAdminApi = baseApi.injectEndpoints({
           ? {
               ...params,
               is_active:
-                params.is_active == null ? undefined : params.is_active ? 1 : 0,
+                params.is_active == null
+                  ? undefined
+                  : params.is_active
+                  ? 1
+                  : 0,
             }
           : undefined,
       }),
@@ -147,18 +162,34 @@ export const usersAdminApi = baseApi.injectEndpoints({
           normalizeUser({
             id: r.id as string | number,
             email: (typeof r.email === "string" ? r.email : null) ?? null,
-            full_name: (typeof r.full_name === "string" ? r.full_name : null) ?? null,
-            phone: (typeof r.phone === "string" ? r.phone : null) ?? null,
+            full_name:
+              (typeof r.full_name === "string" ? r.full_name : null) ??
+              null,
+            phone:
+              (typeof r.phone === "string" ? r.phone : null) ?? null,
             is_active:
-              typeof r.is_active === "string" || typeof r.is_active === "number" || typeof r.is_active === "boolean"
+              typeof r.is_active === "string" ||
+              typeof r.is_active === "number" ||
+              typeof r.is_active === "boolean"
                 ? (r.is_active as boolean | 0 | 1 | "0" | "1")
                 : 1,
             role: typeof r.role === "string" ? r.role : null,
-            roles: Array.isArray(r.roles) ? (r.roles as Array<string>) : (typeof r.roles === "string" ? r.roles : null),
-            metadata: isRecord(r.metadata) || typeof r.metadata === "string" ? r.metadata : null,
-            created_at: (r.created_at as string | number | Date) ?? new Date().toISOString(),
-            last_login_at: (r as { last_login_at?: unknown }).last_login_at as string | number | Date | null,
-            last_sign_in_at: (r as { last_sign_in_at?: unknown }).last_sign_in_at as string | number | Date | null,
+            roles: Array.isArray(r.roles)
+              ? (r.roles as Array<string>)
+              : typeof r.roles === "string"
+              ? r.roles
+              : null,
+            metadata:
+              isRecord(r.metadata) || typeof r.metadata === "string"
+                ? r.metadata
+                : null,
+            created_at:
+              (r.created_at as string | number | Date) ??
+              new Date().toISOString(),
+            last_login_at: (r as { last_login_at?: unknown })
+              .last_login_at as string | number | Date | null,
+            last_sign_in_at: (r as { last_sign_in_at?: unknown })
+              .last_sign_in_at as string | number | Date | null,
           })
         );
       },
@@ -168,37 +199,59 @@ export const usersAdminApi = baseApi.injectEndpoints({
               ...result.map((u) => ({ type: "User" as const, id: u.id })),
               { type: "Users" as const, id: "LIST" },
             ]
-          : [{ type: "Users" as const, id: "LIST" }],
+          : [{ type: "Users", id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
 
     getUserAdmin: b.query<User, string>({
       query: (id) => ({ url: `/admin/users/${encodeURIComponent(id)}` }),
       transformResponse: (res: unknown): User => {
-        const [row] = asArrayOfRecord([res]).length ? asArrayOfRecord([res]) : [res as unknown];
+        const [row] = asArrayOfRecord([res]).length
+          ? asArrayOfRecord([res])
+          : [res as unknown];
         const r = isRecord(row) ? row : {};
         return normalizeUser({
           id: (r.id as string | number) ?? "",
           email: (typeof r.email === "string" ? r.email : null) ?? null,
-          full_name: (typeof r.full_name === "string" ? r.full_name : null) ?? null,
-          phone: (typeof r.phone === "string" ? r.phone : null) ?? null,
+          full_name:
+            (typeof r.full_name === "string" ? r.full_name : null) ??
+            null,
+          phone:
+            (typeof r.phone === "string" ? r.phone : null) ?? null,
           is_active:
-            typeof r.is_active === "string" || typeof r.is_active === "number" || typeof r.is_active === "boolean"
+            typeof r.is_active === "string" ||
+            typeof r.is_active === "number" ||
+            typeof r.is_active === "boolean"
               ? (r.is_active as boolean | 0 | 1 | "0" | "1")
               : 1,
           role: typeof r.role === "string" ? r.role : null,
-          roles: Array.isArray(r.roles) ? (r.roles as Array<string>) : (typeof r.roles === "string" ? r.roles : null),
-          metadata: isRecord(r.metadata) || typeof r.metadata === "string" ? r.metadata : null,
-          created_at: (r.created_at as string | number | Date) ?? new Date().toISOString(),
-          last_login_at: (r as { last_login_at?: unknown }).last_login_at as string | number | Date | null,
-          last_sign_in_at: (r as { last_sign_in_at?: unknown }).last_sign_in_at as string | number | Date | null,
+          roles: Array.isArray(r.roles)
+            ? (r.roles as Array<string>)
+            : typeof r.roles === "string"
+            ? r.roles
+            : null,
+          metadata:
+            isRecord(r.metadata) || typeof r.metadata === "string"
+              ? r.metadata
+              : null,
+          created_at:
+            (r.created_at as string | number | Date) ??
+            new Date().toISOString(),
+          last_login_at: (r as { last_login_at?: unknown })
+            .last_login_at as string | number | Date | null,
+          last_sign_in_at: (r as { last_sign_in_at?: unknown })
+            .last_sign_in_at as string | number | Date | null,
         });
       },
       providesTags: (_r, _e, id) => [{ type: "User", id }],
     }),
 
     inviteUserAdmin: b.mutation<{ ok: true; id?: string }, InviteUserBody>({
-      query: (body) => ({ url: "/admin/users/invite", method: "POST", body }),
+      query: (body) => ({
+        url: "/admin/users/invite",
+        method: "POST",
+        body,
+      }),
       transformResponse: (r: unknown) => {
         const rec = isRecord(r) ? (r as Record<string, unknown>) : {};
         const id = rec.id != null ? String(rec.id) : undefined;
@@ -218,18 +271,34 @@ export const usersAdminApi = baseApi.injectEndpoints({
         return normalizeUser({
           id: (r.id as string | number) ?? "",
           email: (typeof r.email === "string" ? r.email : null) ?? null,
-          full_name: (typeof r.full_name === "string" ? r.full_name : null) ?? null,
-          phone: (typeof r.phone === "string" ? r.phone : null) ?? null,
+          full_name:
+            (typeof r.full_name === "string" ? r.full_name : null) ??
+            null,
+          phone:
+            (typeof r.phone === "string" ? r.phone : null) ?? null,
           is_active:
-            typeof r.is_active === "string" || typeof r.is_active === "number" || typeof r.is_active === "boolean"
+            typeof r.is_active === "string" ||
+            typeof r.is_active === "number" ||
+            typeof r.is_active === "boolean"
               ? (r.is_active as boolean | 0 | 1 | "0" | "1")
               : 1,
           role: typeof r.role === "string" ? r.role : null,
-          roles: Array.isArray(r.roles) ? (r.roles as Array<string>) : (typeof r.roles === "string" ? r.roles : null),
-          metadata: isRecord(r.metadata) || typeof r.metadata === "string" ? r.metadata : null,
-          created_at: (r.created_at as string | number | Date) ?? new Date().toISOString(),
-          last_login_at: (r as { last_login_at?: unknown }).last_login_at as string | number | Date | null,
-          last_sign_in_at: (r as { last_sign_in_at?: unknown }).last_sign_in_at as string | number | Date | null,
+          roles: Array.isArray(r.roles)
+            ? (r.roles as Array<string>)
+            : typeof r.roles === "string"
+            ? r.roles
+            : null,
+          metadata:
+            isRecord(r.metadata) || typeof r.metadata === "string"
+              ? r.metadata
+              : null,
+          created_at:
+            (r.created_at as string | number | Date) ??
+            new Date().toISOString(),
+          last_login_at: (r as { last_login_at?: unknown })
+            .last_login_at as string | number | Date | null,
+          last_sign_in_at: (r as { last_sign_in_at?: unknown })
+            .last_sign_in_at as string | number | Date | null,
         });
       },
       invalidatesTags: (_r, _e, arg) => [
@@ -238,7 +307,10 @@ export const usersAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
-    setUserActiveAdmin: b.mutation<{ ok: true }, { id: string; is_active: boolean }>({
+    setUserActiveAdmin: b.mutation<
+      { ok: true },
+      { id: string; is_active: boolean }
+    >({
       query: ({ id, is_active }) => ({
         url: `/admin/users/${encodeURIComponent(id)}/active`,
         method: "POST",
@@ -251,7 +323,10 @@ export const usersAdminApi = baseApi.injectEndpoints({
       ],
     }),
 
-    setUserRolesAdmin: b.mutation<{ ok: true }, { id: string; roles: UserRoleName[] }>({
+    setUserRolesAdmin: b.mutation<
+      { ok: true },
+      { id: string; roles: UserRoleName[] }
+    >({
       query: ({ id, roles }) => ({
         url: `/admin/users/${encodeURIComponent(id)}/roles`,
         method: "POST",
@@ -266,7 +341,10 @@ export const usersAdminApi = baseApi.injectEndpoints({
     }),
 
     /** Mini liste: sadece id, full_name, email (ids ile filtre) */
-    listUsersAdminMini: b.query<Array<{ id: string; full_name: string | null; email: string }>, string[]>({
+    listUsersAdminMini: b.query<
+      Array<{ id: string; full_name: string | null; email: string }>,
+      string[]
+    >({
       query: (ids) => ({
         url: "/admin/users",
         params: { ids: joinComma(ids), fields: "id,full_name,email" },
@@ -275,7 +353,8 @@ export const usersAdminApi = baseApi.injectEndpoints({
         const rows = asArrayOfRecord(res);
         return rows.map((u) => ({
           id: String(u.id ?? ""),
-          full_name: typeof u.full_name === "string" ? u.full_name : null,
+          full_name:
+            typeof u.full_name === "string" ? u.full_name : null,
           email: String(u.email ?? ""),
         }));
       },
@@ -298,6 +377,20 @@ export const usersAdminApi = baseApi.injectEndpoints({
         { type: "AdminUsers", id: arg.id },
       ],
     }),
+
+    /** 🔐 Şifre güncelleme (admin) */
+    setUserPasswordAdmin: b.mutation<
+      { ok: true },
+      { id: string; password: string }
+    >({
+      query: ({ id, password }) => ({
+        url: `/admin/users/${encodeURIComponent(id)}/password`,
+        method: "POST",
+        body: { password },
+      }),
+      transformResponse: () => ({ ok: true as const }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "User", id: arg.id }],
+    }),
   }),
   overrideExisting: true,
 });
@@ -311,4 +404,5 @@ export const {
   useSetUserRolesAdminMutation,
   useListUsersAdminMiniQuery,
   useDeleteUserAdminMutation,
+  useSetUserPasswordAdminMutation, // ✅ yeni hook
 } = usersAdminApi;

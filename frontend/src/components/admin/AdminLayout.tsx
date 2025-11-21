@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+// =============================================================
+// FILE: src/components/admin/AdminLayout.tsx  (UPDATED)
+// =============================================================
+import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminSidebar } from "./AdminSidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ModeToggle } from "@/components/ModeToggle";
+
+// ✅ RTK auth.status kullan
+import { useStatusQuery } from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -15,10 +20,11 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading: authLoading } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // Determine active tab based on current path
+  // Auth status (is_admin + role bilgisi)
+  const { data: statusData, isLoading: statusLoading } = useStatusQuery();
+
+  // ---------- Active tab helper ----------
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.includes("/reports")) return "reports";
@@ -47,47 +53,45 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     return "dashboard";
   };
 
+  // ---------- isAdmin: auth.status + user.role/roles ----------
+  const isAdmin: boolean = (() => {
+    // 1) /auth/status yanıtı
+    if (statusData?.is_admin) return true;
+    if (statusData?.user?.role === "admin") return true;
+
+    // 2) useAuth içindeki user.role / user.roles
+    const role = user?.role;
+    if (role === "admin") return true;
+    if (typeof role === "string" && role.toLowerCase() === "admin") return true;
+
+    if (Array.isArray(user?.roles)) {
+      if (user.roles.some((r) => String(r).toLowerCase() === "admin")) {
+        return true;
+      }
+    }
+
+    return false;
+  })();
+
+  // ---------- Guard: login + admin kontrolü ----------
   useEffect(() => {
-    if (!authLoading && user) {
-      checkAdminStatus();
-    } else if (!authLoading && !user) {
-      navigate("/giris");
+    // Hâlâ yükleniyorsa bekle
+    if (authLoading || statusLoading) return;
+
+    // Login değilse → giriş sayfası
+    if (!user) {
+      navigate("/giris", { replace: true });
+      return;
     }
-  }, [user, authLoading, navigate]);
 
-  const checkAdminStatus = async () => {
-    if (!user) return;
-
-    setLoading(true);
-    try {
-      const { data, error } = await metahub
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error checking admin status:", error);
-        navigate("/");
-        return;
-      }
-
-      if (!data) {
-        navigate("/");
-        return;
-      }
-
-      setIsAdmin(true);
-    } catch (error) {
-      console.error("Error checking admin status:", error);
-      navigate("/");
-    } finally {
-      setLoading(false);
+    // Login ama admin değilse → ana sayfa
+    if (!isAdmin) {
+      navigate("/", { replace: true });
     }
-  };
+  }, [authLoading, statusLoading, user, isAdmin, navigate]);
 
-  if (authLoading || loading) {
+  // Global loading
+  if (authLoading || statusLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         Yükleniyor...
@@ -95,13 +99,15 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     );
   }
 
-  if (!isAdmin) {
+  // Guard: kullanıcı yoksa veya admin değilse (navigate effect zaten çalışıyor)
+  if (!user || !isAdmin) {
     return null;
   }
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
+        {/* Admin sidebar: aktif tab route üzerinden belirleniyor */}
         <AdminSidebar activeTab={getActiveTab()} onTabChange={() => { }} />
 
         <div className="flex-1 flex flex-col">

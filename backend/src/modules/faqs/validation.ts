@@ -1,3 +1,5 @@
+// src/modules/faqs/validation.ts
+
 import { z } from "zod";
 
 export const boolLike = z.union([

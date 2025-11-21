@@ -43,7 +43,7 @@ import type {
   Coupon,
   DiscountType,
   CreateCouponBody,
-} from "@/integrations/metahub/db/types/coupon";
+} from "@/integrations/metahub/rtk/types/coupon";
 
 type FormState = {
   code: string;
@@ -380,8 +380,8 @@ export function CouponManagement() {
                   {saving
                     ? "Kaydediliyor..."
                     : editingCoupon
-                    ? "Güncelle"
-                    : "Ekle"}
+                      ? "Güncelle"
+                      : "Ekle"}
                 </Button>
               </div>
             </form>
@@ -421,8 +421,8 @@ export function CouponManagement() {
                 <div className="text-xs">
                   {coupon.valid_from
                     ? new Date(
-                        coupon.valid_from,
-                      ).toLocaleDateString("tr-TR")
+                      coupon.valid_from,
+                    ).toLocaleDateString("tr-TR")
                     : "-"}
                   {coupon.valid_until && (
                     <>
@@ -436,11 +436,10 @@ export function CouponManagement() {
               </TableCell>
               <TableCell>
                 <span
-                  className={`px-2 py-1 rounded text-xs ${
-                    coupon.is_active
+                  className={`px-2 py-1 rounded text-xs ${coupon.is_active
                       ? "bg-green-100 text-green-800"
                       : "bg-gray-100 text-gray-800"
-                  }`}
+                    }`}
                 >
                   {coupon.is_active ? "Aktif" : "Pasif"}
                 </span>

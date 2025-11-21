@@ -1,7 +1,7 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/from/qb/url/utils.ts
 // =============================================================
-import { BASE_URL } from "../../constants";
+import { BASE_URL } from "../../../../rtk/constants";
 import { joinUrl, toQS } from "../../http";
 import { TABLES } from "../../../tables";
 import type { KnownTables } from "../../../types";

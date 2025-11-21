@@ -1,7 +1,7 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/from/qb/ops/deleteOp.ts
 // =============================================================
-import { BASE_URL } from "../../constants";
+import { BASE_URL } from "../../../../rtk/constants";
 import { buildAuthHeaders } from "../../http";
 import type { BuiltUrl } from "../url";
 import type { FetchResult } from "../../types";

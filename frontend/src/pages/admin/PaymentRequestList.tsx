@@ -1,6 +1,14 @@
-import { useState, useEffect } from "react";
+// =============================================================
+// FILE: src/pages/admin/PaymentRequestList.tsx
+// =============================================================
+import { useState, useMemo } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Pagination,
   PaginationContent,
@@ -19,77 +27,124 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { metahub } from "@/integrations/metahub/client";
 import { toast } from "sonner";
 import { Eye, CheckCircle, XCircle } from "lucide-react";
 
-// ...imports aynı
+import {
+  useListPaymentRequestsAdminQuery,
+  useUpdatePaymentRequestAdminMutation,
+  type PaymentRequestAdmin,
+} from "@/integrations/metahub/rtk/endpoints/admin/payment_requests_admin.endpoints";
 
-interface PaymentRequest {
-  id: string;
-  order_id: string;
-  user_id: string | null;
-  amount: number;
-  currency?: string | null;
-  payment_method: string;
-  payment_proof: string | null;   // <-- DÜZELTİLDİ
-  status: "pending" | "approved" | "rejected";
-  admin_note: string | null;     // <-- DÜZELTİLDİ
-  created_at: string;
-  orders: {
+import {
+  useUpdateOrderStatusAdminMutation,
+  useDeleteOrderAdminMutation,
+  type OrderStatus,
+  type PaymentStatus,
+} from "@/integrations/metahub/rtk/endpoints/admin/orders_admin.endpoints";
+
+import {
+  useGetSiteSettingAdminByKeyQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/site_settings_admin.endpoints";
+
+import {
+  useSendEmailMutation,
+  useSendTelegramNotificationMutation,
+} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+
+// RTK'dan gelen admin satırı, BE join ile genişleyen alanlarla genişletiyoruz
+type PaymentRequestView = PaymentRequestAdmin & {
+  payment_method?: string;
+  payment_proof?: string | null;
+  admin_note?: string | null;
+  orders?: {
     order_number: string;
     customer_name: string;
     customer_email: string;
-    order_items: Array<{ product_name: string; quantity: number; }>;
+    order_items: Array<{ product_name: string; quantity: number }>;
+    final_amount?: number | string | null;
   } | null;
-}
+};
+
+const itemsPerPage = 10;
+
+const normalizeBool = (v: unknown): boolean => {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v === 1;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return ["1", "true", "yes", "y", "on", "enabled"].includes(s);
+  }
+  return false;
+};
 
 const PaymentRequestList = () => {
-  const [requests, setRequests] = useState<PaymentRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedRequest, setSelectedRequest] = useState<PaymentRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] =
+    useState<PaymentRequestView | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [adminNote, setAdminNote] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => { fetchRequests(); }, []);
-
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await metahub
-        .from("payment_requests")
-        .select(`
-          *,
-          orders (
-            order_number,
-            customer_name,
-            customer_email,
-            order_items (
-              product_name,
-              quantity
-            )
-          )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      // Güvenli cast
-      setRequests((data as unknown as PaymentRequest[]) ?? []);
-    } catch (error) {
-      console.error("Error fetching requests:", error);
-      toast.error("Ödeme bildirimleri yüklenemedi");
-    } finally {
-      setLoading(false);
+  // RTK — admin endpoint ile liste (order + items dahil)
+  const {
+    data: rawRequests = [],
+    isLoading,
+    isFetching,
+    refetch,
+  } = useListPaymentRequestsAdminQuery(
+    {
+      limit: 500,
+      offset: 0,
+      include: ["order", "items"],
+    },
+    {
+      refetchOnMountOrArgChange: true,
     }
-  };
+  );
 
-  const handleViewRequest = (request: PaymentRequest) => {
+  const requests: PaymentRequestView[] = rawRequests.map(
+    (r) => r as PaymentRequestView
+  );
+
+  // Site ayarları (title + telegram)
+  const { data: siteTitleSetting } =
+    useGetSiteSettingAdminByKeyQuery("site_title");
+  const { data: telegramSetting } =
+    useGetSiteSettingAdminByKeyQuery("new_order_telegram");
+
+  const siteName = useMemo(
+    () =>
+      (siteTitleSetting?.value as string | undefined)?.toString() ||
+      "Platform",
+    [siteTitleSetting]
+  );
+
+  const telegramEnabled = useMemo(
+    () => normalizeBool(telegramSetting?.value),
+    [telegramSetting]
+  );
+
+  // Functions (email + telegram)
+  const [sendEmail] = useSendEmailMutation();
+  const [sendTelegramNotification] = useSendTelegramNotificationMutation();
+
+  // Orders admin mutasyonları
+  const [updateOrderStatusAdmin] = useUpdateOrderStatusAdminMutation();
+  const [deleteOrderAdmin] = useDeleteOrderAdminMutation();
+
+  // Payment request update
+  const [updatePaymentRequestAdmin] = useUpdatePaymentRequestAdminMutation();
+
+  const handleViewRequest = (request: PaymentRequestView) => {
     setSelectedRequest(request);
     setAdminNote(request.admin_note || "");
     setShowDialog(true);
@@ -97,145 +152,175 @@ const PaymentRequestList = () => {
 
   const handleApprove = async () => {
     if (!selectedRequest) return;
+    if (!selectedRequest.order_id) {
+      toast.error("Bu ödeme kaydına bağlı sipariş bulunamadı.");
+      return;
+    }
+
+    setBusy(true);
     try {
-      // 1) payment_request güncelle (KOLON ADI!)
-      await metahub
-        .from("payment_requests")
-        .update({ status: "approved", admin_note: adminNote })
-        .eq("id", selectedRequest.id);
+      // 1) Payment request status + admin_note
+      await updatePaymentRequestAdmin({
+        id: selectedRequest.id,
+        body: {
+          status: "approved",
+          admin_note: adminNote || null,
+        },
+      }).unwrap();
 
-      // 2) sipariş bilgileri (mail/teslimat)
-      const { data: orderData } = await metahub
-        .from("orders")
-        .select("customer_email, customer_name, order_number, final_amount")
-        .eq("id", selectedRequest.order_id)
-        .single();
+      // 2) Müşteriye mail
+      const customerEmail = selectedRequest.orders?.customer_email;
+      const customerName =
+        selectedRequest.orders?.customer_name || "Müşteri";
+      const orderNumber =
+        selectedRequest.orders?.order_number || "—";
 
-      const { data: siteSetting } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "site_title")
-        .single();
+      const finalAmountRaw =
+        selectedRequest.orders?.final_amount ?? selectedRequest.amount;
+      const finalAmount =
+        typeof finalAmountRaw === "number"
+          ? finalAmountRaw
+          : Number(finalAmountRaw ?? 0);
 
-      const siteName = siteSetting?.value || "Platform";
-
-      if (orderData?.customer_email) {
+      if (customerEmail) {
         try {
-          await metahub.functions.invoke("send-email", {
-            body: {
-              to: orderData.customer_email,
-              template_key: "order_received",
-              variables: {
-                customer_name: orderData.customer_name,
-                order_number: orderData.order_number,
-                final_amount: String(orderData.final_amount ?? "0"),
-                status: "İşleniyor",
-                site_name: siteName,
-              },
+          await sendEmail({
+            to: customerEmail,
+            template_key: "order_received",
+            variables: {
+              customer_name: customerName,
+              order_number: orderNumber,
+              final_amount: String(finalAmount.toFixed(2)),
+              status: "İşleniyor",
+              site_name: siteName,
             },
-          });
+          }).unwrap();
         } catch (e) {
           console.warn("order_received email error", e);
         }
       }
 
-      // 3) ürün teslim akışı (aynen korunuyor)
-      const { data: orderItems } = await metahub
-        .from("order_items")
-        .select("id, product_id, product_name, quantity, selected_options, products(delivery_type, stock_quantity, api_provider_id, api_product_id, file_url, api_quantity)")
-        .eq("order_id", selectedRequest.order_id);
+      // 3) Sipariş durumu: processing / completed
+      const allItemsDelivered = true; // şimdilik varsayım
 
-      const allItemsDelivered = true;
+      const newStatus: OrderStatus = allItemsDelivered
+        ? "completed"
+        : "processing";
+      const newPaymentStatus: PaymentStatus = "paid";
 
-      if (orderItems) {
-        for (const item of orderItems as any[]) {
-          const deliveryType = item?.products?.delivery_type;
-          const fileUrl = item?.products?.file_url;
-          // ... mevcut teslimat blokları aynı (auto_stock / file / api / manual)
-          // (Bu bloklar sizde zaten doğru; burada değişiklik yok.)
+      await updateOrderStatusAdmin({
+        id: selectedRequest.order_id,
+        body: {
+          status: newStatus,
+          payment_status: newPaymentStatus,
+          note: "Banka havale bildirimi admin tarafından onaylandı.",
+        },
+      }).unwrap();
+
+      // 4) Telegram bildirimi
+      if (telegramEnabled) {
+        try {
+          await sendTelegramNotification({
+            type: "new_order",
+            orderId: selectedRequest.order_id,
+            order_number: orderNumber,
+            amount: finalAmount,
+            currency: selectedRequest.currency,
+          }).unwrap();
+        } catch (e) {
+          console.warn("Telegram notify error", e);
         }
-      }
-
-      const orderStatus = allItemsDelivered ? "completed" : "processing";
-      const { error: orderUpdateError } = await metahub
-        .from("orders")
-        .update({ status: orderStatus, payment_status: "paid" })
-        .eq("id", selectedRequest.order_id);
-      if (orderUpdateError) throw orderUpdateError;
-
-      // Telegram (opsiyonel)
-      try {
-        const { data: telegramSettings } = await metahub
-          .from("site_settings")
-          .select("value")
-          .eq("key", "new_order_telegram")
-          .single();
-        const v = telegramSettings?.value;
-        const enabled = v === true || v === "true" || v === 1 || v === "1";
-        if (enabled) {
-          await metahub.functions.invoke("send-telegram-notification", {
-            body: { type: "new_order", orderId: selectedRequest.order_id },
-          });
-        }
-      } catch (e) {
-        console.warn("Telegram notify error", e);
       }
 
       toast.success("Ödeme onaylandı ve sipariş işleme alındı");
       setShowDialog(false);
-      fetchRequests();
+      await refetch();
     } catch (error) {
       console.error("Error approving payment:", error);
       toast.error("Ödeme onaylanırken hata oluştu");
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleReject = async () => {
     if (!selectedRequest) return;
-    try {
-      await metahub
-        .from("payment_requests")
-        .update({ status: "rejected", admin_note: adminNote })
-        .eq("id", selectedRequest.id);
+    if (!selectedRequest.order_id) {
+      toast.error("Bu ödeme kaydına bağlı sipariş bulunamadı.");
+      return;
+    }
 
-      await metahub.from("orders").delete().eq("id", selectedRequest.order_id);
+    setBusy(true);
+    try {
+      // 1) Payment request durumu + admin_note
+      await updatePaymentRequestAdmin({
+        id: selectedRequest.id,
+        body: {
+          status: "rejected",
+          admin_note: adminNote || null,
+        },
+      }).unwrap();
+
+      // 2) Siparişi tamamen sil (admin endpoint)
+      await deleteOrderAdmin(selectedRequest.order_id).unwrap();
 
       toast.success("Ödeme reddedildi ve sipariş silindi");
       setShowDialog(false);
-      fetchRequests();
+      await refetch();
     } catch (error) {
       console.error("Error rejecting payment:", error);
       toast.error("Ödeme reddedilirken hata oluştu");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const getStatusBadge = (status: PaymentRequest["status"]) => {
+  const getStatusBadge = (status: PaymentRequestAdmin["status"]) => {
     switch (status) {
-      case "approved": return <Badge className="bg-green-500">Onaylandı</Badge>;
-      case "rejected": return <Badge variant="destructive">Reddedildi</Badge>;
-      case "pending":  return <Badge variant="secondary">Bekliyor</Badge>;
-      default:         return <Badge>{status}</Badge>;
+      case "approved":
+        return <Badge className="bg-green-500">Onaylandı</Badge>;
+      case "rejected":
+        return <Badge variant="destructive">Reddedildi</Badge>;
+      case "pending":
+        return <Badge variant="secondary">Bekliyor</Badge>;
+      case "paid":
+        return <Badge className="bg-emerald-600">Ödendi</Badge>;
+      case "failed":
+        return <Badge variant="destructive">Başarısız</Badge>;
+      case "cancelled":
+        return <Badge variant="outline">İptal</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
     }
   };
 
-  if (loading) {
+  if (isLoading || isFetching) {
     return (
       <AdminLayout title="Ödeme Bildirimleri">
-        <div className="flex items-center justify-center h-64">Yükleniyor...</div>
+        <div className="flex items-center justify-center h-64">
+          Yükleniyor...
+        </div>
       </AdminLayout>
     );
   }
 
-  const totalPages = Math.max(1, Math.ceil(requests.length / itemsPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(requests.length / itemsPerPage)
+  );
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedRequests = requests.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedRequests = requests.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
 
   return (
     <AdminLayout title="Ödeme Bildirimleri">
       <div className="space-y-6">
-        {/* header */}
         <Card>
-          <CardHeader><CardTitle>Ödeme İstekleri ({requests.length})</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Ödeme İstekleri ({requests.length})</CardTitle>
+          </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
@@ -253,26 +338,52 @@ const PaymentRequestList = () => {
               <TableBody>
                 {paginatedRequests.map((request) => (
                   <TableRow key={request.id}>
-                    <TableCell className="font-medium">{request.orders?.order_number ?? "-"}</TableCell>
+                    <TableCell className="font-medium">
+                      {request.orders?.order_number ?? "-"}
+                    </TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{request.orders?.customer_name ?? "-"}</p>
-                        <p className="text-sm text-muted-foreground">{request.orders?.customer_email ?? "-"}</p>
+                        <p className="font-medium">
+                          {request.orders?.customer_name ?? "-"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {request.orders?.customer_email ?? "-"}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
-                        {(request.orders?.order_items ?? []).map((item, idx) => (
-                          <p key={idx} className="text-sm">{item.product_name} x{item.quantity}</p>
-                        ))}
+                        {(request.orders?.order_items ?? []).map(
+                          (item, idx) => (
+                            <p key={idx} className="text-sm">
+                              {item.product_name} x{item.quantity}
+                            </p>
+                          )
+                        )}
                       </div>
                     </TableCell>
-                    <TableCell>₺{Number(request.amount ?? 0).toFixed(2)}</TableCell>
-                    <TableCell className="uppercase">{request.payment_method}</TableCell>
-                    <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell>{new Date(request.created_at).toLocaleString("tr-TR")}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" onClick={() => handleViewRequest(request)}>
+                      ₺{Number(request.amount ?? 0).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="uppercase">
+                      {request.payment_method ?? "-"}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(request.status)}
+                    </TableCell>
+                    <TableCell>
+                      {request.created_at
+                        ? new Date(
+                            request.created_at
+                          ).toLocaleString("tr-TR")
+                        : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewRequest(request)}
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
                     </TableCell>
@@ -280,17 +391,84 @@ const PaymentRequestList = () => {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-4 flex justify-center">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() =>
+                          setCurrentPage((p) => Math.max(1, p - 1))
+                        }
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: totalPages }).map((_, idx) => {
+                      const page = idx + 1;
+                      return (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            isActive={page === currentPage}
+                            onClick={() => setCurrentPage(page)}
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() =>
+                          setCurrentPage((p) =>
+                            Math.min(totalPages, p + 1)
+                          )
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* pagination … (aynı) */}
-        {/* dialog … (admin_note/proof alanlarıyla güncellendi) */}
+        {/* Detay dialog */}
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
           <DialogContent className="max-w-2xl">
-            <DialogHeader><DialogTitle>Ödeme Bildirimi Detayı</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Ödeme Bildirimi Detayı</DialogTitle>
+            </DialogHeader>
             {selectedRequest && (
               <div className="space-y-4">
-                {/* … alanlar */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Sipariş No</Label>
+                    <p className="font-semibold">
+                      {selectedRequest.orders?.order_number ?? "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Tutar</Label>
+                    <p className="font-semibold">
+                      ₺{Number(selectedRequest.amount ?? 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Müşteri</Label>
+                    <p>{selectedRequest.orders?.customer_name ?? "-"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedRequest.orders?.customer_email ?? "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Yöntem</Label>
+                    <p className="uppercase">
+                      {selectedRequest.payment_method ?? "-"}
+                    </p>
+                  </div>
+                </div>
+
                 {selectedRequest.payment_proof && (
                   <div>
                     <Label>Dekont/Makbuz</Label>
@@ -314,11 +492,21 @@ const PaymentRequestList = () => {
 
                 {selectedRequest.status === "pending" && (
                   <div className="flex gap-2">
-                    <Button onClick={handleApprove} className="flex-1" variant="default">
+                    <Button
+                      onClick={handleApprove}
+                      className="flex-1"
+                      variant="default"
+                      disabled={busy}
+                    >
                       <CheckCircle className="w-4 h-4 mr-2" />
                       Onayla
                     </Button>
-                    <Button onClick={handleReject} className="flex-1" variant="destructive">
+                    <Button
+                      onClick={handleReject}
+                      className="flex-1"
+                      variant="destructive"
+                      disabled={busy}
+                    >
                       <XCircle className="w-4 h-4 mr-2" />
                       Reddet
                     </Button>

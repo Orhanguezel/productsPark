@@ -6,7 +6,7 @@ import type {
   ContactView,
   ContactCreateInput,
   CreateContactPublicResponse,
-} from "@/integrations/metahub/db/types/contacts";
+} from "@/integrations/metahub/rtk/types/contacts";
 
 export const contactsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({

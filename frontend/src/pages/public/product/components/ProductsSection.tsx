@@ -39,8 +39,8 @@ import {
 } from "@/components/ui/sheet";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Product } from "@/integrations/metahub/db/types/products";
-import type { CategoryRow } from "@/integrations/metahub/db/types/categories";
+import type { Product } from "@/integrations/metahub/rtk/types/products";
+import type { CategoryRow } from "@/integrations/metahub/rtk/types/categories";
 
 import { formatPrice } from "@/lib/utils";
 import type { SortOption } from "../Products";
@@ -176,9 +176,9 @@ const ProductsSection = ({
   const renderProductCardPrimary = (product: Product) => {
     const discount = product.original_price
       ? Math.round(
-          ((product.original_price - product.price) / product.original_price) *
-            100
-        )
+        ((product.original_price - product.price) / product.original_price) *
+        100
+      )
       : null;
 
     return (
@@ -223,11 +223,10 @@ const ProductsSection = ({
               {[...Array(5)].map((_, i) => (
                 <Star
                   key={i}
-                  className={`w-3 h-3 ${
-                    i < Math.floor(product.rating)
+                  className={`w-3 h-3 ${i < Math.floor(product.rating)
                       ? "fill-yellow-400 text-yellow-400"
                       : "text-gray-300"
-                  }`}
+                    }`}
                 />
               ))}
             </div>
@@ -275,7 +274,7 @@ const ProductsSection = ({
                 {Math.round(
                   ((product.original_price! - product.price) /
                     product.original_price!) *
-                    100
+                  100
                 )}
                 %
               </Badge>
@@ -307,11 +306,10 @@ const ProductsSection = ({
               {[...Array(5)].map((_, i) => (
                 <Star
                   key={i}
-                  className={`w-3 h-3 ${
-                    i < Math.floor(product.rating)
+                  className={`w-3 h-3 ${i < Math.floor(product.rating)
                       ? "fill-yellow-400 text-yellow-400"
                       : "text-gray-300"
-                  }`}
+                    }`}
                 />
               ))}
             </div>

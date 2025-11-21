@@ -8,7 +8,7 @@ import type {
   Product,
   ApiProduct,
   ProductsAdminListParams,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 const BASE = "/products";
 
@@ -31,7 +31,7 @@ const pluckArray = (res: unknown, keys: string[]): unknown[] => {
   if (Array.isArray(res)) return res;
   if (isRecord(res)) {
     for (const k of keys) {
-      const v = res[k];
+      const v = (res as Record<string, unknown>)[k];
       if (Array.isArray(v)) return v;
     }
   }
@@ -40,13 +40,13 @@ const pluckArray = (res: unknown, keys: string[]): unknown[] => {
 
 const toNumber = (x: unknown): number => {
   if (typeof x === "number") return x;
-  const n = Number(x as unknown);
+  const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 };
 
 const toNullableNumber = (x: unknown): number | null => {
   if (x === null || x === undefined || x === "") return null;
-  const n = Number(x as unknown);
+  const n = Number(x);
   return Number.isFinite(n) ? n : null;
 };
 
@@ -180,16 +180,35 @@ const normalizePublicProduct = (p: ApiProduct): Product => {
 
     categories: p.categories
       ? {
-          id: String(p.categories.id),
-          name: String(p.categories.name),
-          slug: (p.categories.slug ?? null) as string | null,
-        }
+        id: String(p.categories.id),
+        name: String(p.categories.name),
+        slug: (p.categories.slug ?? null) as string | null,
+      }
       : undefined,
   };
 };
 
+/** Liste + toplam sayıyı birlikte döndürmek için */
+export type ProductsListResult = {
+  items: Product[];
+  total: number;
+};
+
+type ProductsMetaResponse = {
+  data?: unknown[];
+  items?: unknown[];
+  rows?: unknown[];
+  result?: unknown[];
+  products?: unknown[];
+  total?: number | string;
+  count?: number | string;
+  total_count?: number | string;
+  [key: string]: unknown;
+};
+
 export const productsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
+    /** Eski: sadece dizi döner, meta yok */
     listProducts: b.query<Product[], ProductsListParams | void>({
       query: (params): FetchArgs => {
         const qp = params ? toQueryParams(params) : {};
@@ -197,15 +216,63 @@ export const productsApi = baseApi.injectEndpoints({
       },
       transformResponse: (res: unknown): Product[] => {
         const rows = pluckArray(res, ["data", "items", "rows", "result", "products"]);
-        return rows.filter(isRecord).map((x) => normalizePublicProduct(x as ApiProduct));
+        return rows
+          .filter(isRecord)
+          .map((x) => normalizePublicProduct(x as ApiProduct));
       },
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "Product" as const, id: p.id })),
-              { type: "Products" as const, id: "PUBLIC_LIST" },
-            ]
+            ...result.map((p) => ({ type: "Product" as const, id: p.id })),
+            { type: "Products" as const, id: "PUBLIC_LIST" },
+          ]
           : [{ type: "Products" as const, id: "PUBLIC_LIST" }],
+      keepUnusedDataFor: 60,
+    }),
+
+    /** Yeni: liste + total (pagination için) */
+    listProductsWithMeta: b.query<ProductsListResult, ProductsListParams | void>({
+      query: (params): FetchArgs => {
+        const qp = params ? toQueryParams(params) : {};
+        return { url: BASE, params: qp } as FetchArgs;
+      },
+      transformResponse: (res: unknown): ProductsListResult => {
+        const rows = pluckArray(res, ["data", "items", "rows", "result", "products"]);
+        const items = rows
+          .filter(isRecord)
+          .map((x) => normalizePublicProduct(x as ApiProduct));
+
+        let total = items.length;
+
+        if (isRecord(res)) {
+          const meta = res as ProductsMetaResponse;
+          const rawTotal = meta.total ?? meta.count ?? meta.total_count;
+          let parsed: number | undefined;
+
+          if (typeof rawTotal === "number") {
+            parsed = rawTotal;
+          } else if (typeof rawTotal === "string" && rawTotal.trim() !== "") {
+            const n = Number(rawTotal);
+            if (Number.isFinite(n)) parsed = n;
+          }
+
+          if (parsed !== undefined && parsed >= 0) {
+            total = parsed;
+          }
+        }
+
+        return { items, total };
+      },
+      providesTags: (result) =>
+        result && result.items.length
+          ? [
+            ...result.items.map((p) => ({
+              type: "Product" as const,
+              id: p.id,
+            })),
+            { type: "Products" as const, id: "PUBLIC_LIST_WITH_META" },
+          ]
+          : [{ type: "Products" as const, id: "PUBLIC_LIST_WITH_META" }],
       keepUnusedDataFor: 60,
     }),
 
@@ -240,6 +307,7 @@ export const productsApi = baseApi.injectEndpoints({
 
 export const {
   useListProductsQuery,
+  useListProductsWithMetaQuery,
   useGetProductQuery,
   useGetProductBySlugQuery,
 } = productsApi;

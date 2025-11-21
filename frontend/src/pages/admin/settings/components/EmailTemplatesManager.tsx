@@ -16,7 +16,7 @@ import { Plus, Edit, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 
-import type { EmailTemplateView } from "@/integrations/metahub/db/types/email";
+import type { EmailTemplateView } from "@/integrations/metahub/rtk/types/email";
 import {
   useListEmailTemplatesAdminQuery,
   useCreateEmailTemplateAdminMutation,

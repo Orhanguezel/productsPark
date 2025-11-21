@@ -7,7 +7,7 @@ import type {
   Coupon,
   ApiCoupon,
   DiscountType,
-} from "../../db/types/coupon";
+} from "../types/coupon";
 
 // helpers (typed)
 const toNum = (x: unknown): number =>
@@ -91,12 +91,12 @@ export const couponsApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((c) => ({
-                type: "Coupon" as const,
-                id: c.id,
-              })),
-              { type: "Coupon" as const, id: "LIST" },
-            ]
+            ...result.map((c) => ({
+              type: "Coupon" as const,
+              id: c.id,
+            })),
+            { type: "Coupon" as const, id: "LIST" },
+          ]
           : [{ type: "Coupon" as const, id: "LIST" }],
     }),
 

@@ -16,8 +16,8 @@ import {
   useListMyWalletTransactionsQuery,
   useGetMyWalletBalanceQuery,
 } from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
-import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/db/types/wallet";
-import type { OrderView as Order } from "@/integrations/metahub/db/types/orders";
+import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/rtk/types/wallet";
+import type { OrderView as Order } from "@/integrations/metahub/rtk/types/orders";
 
 // Local tabs
 import { StatsCards } from "./components/StatsCards";
@@ -136,11 +136,11 @@ const Dashboard = () => {
                 onValueChange={(v) =>
                   setTabValue(
                     v as
-                      | "orders"
-                      | "wallet"
-                      | "profile"
-                      | "support"
-                      | "notifications"
+                    | "orders"
+                    | "wallet"
+                    | "profile"
+                    | "support"
+                    | "notifications"
                   )
                 }
               >

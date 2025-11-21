@@ -29,7 +29,7 @@ import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints
 import type {
   WalletDepositRequest,
   WalletDepositStatus,
-} from "@/integrations/metahub/db/types/wallet";
+} from "@/integrations/metahub/rtk/types/wallet";
 
 /* ---------------- helpers ---------------- */
 const money = (v: number) => `${v.toLocaleString("tr-TR")} ₺`;

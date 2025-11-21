@@ -1,17 +1,38 @@
+// =============================================================
+// FILE: src/pages/admin/DeleteUserOrders.tsx
+// =============================================================
 import { useState } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { metahub } from "@/integrations/metahub/client";
 import { toast } from "sonner";
 import { Loader2, Trash2 } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useDeleteUserOrdersMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
 
 export default function DeleteUserOrders() {
   const [email, setEmail] = useState("kececimelih@gmail.com");
-  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [deleteUserOrders, { isLoading: isDeleting }] =
+    useDeleteUserOrdersMutation();
 
   const handleDelete = async () => {
     if (!email) {
@@ -19,25 +40,20 @@ export default function DeleteUserOrders() {
       return;
     }
 
-    setIsDeleting(true);
     try {
-      const { data, error } = await metahub.functions.invoke("delete-user-orders", {
-        body: { email },
-      });
+      const res = await deleteUserOrders({ email }).unwrap();
 
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success(data.message || "Siparişler başarıyla silindi");
+      if (res.success) {
+        toast.success(res.message || "Siparişler başarıyla silindi");
         setEmail("");
       } else {
-        toast.error(data.error || "Bir hata oluştu");
+        toast.error(res.error || "Bir hata oluştu");
       }
     } catch (error: any) {
       console.error("Error deleting orders:", error);
-      toast.error(error.message || "Siparişler silinirken bir hata oluştu");
-    } finally {
-      setIsDeleting(false);
+      toast.error(
+        error?.message || "Siparişler silinirken bir hata oluştu"
+      );
     }
   };
 
@@ -47,8 +63,8 @@ export default function DeleteUserOrders() {
         <CardHeader>
           <CardTitle>Kullanıcı Siparişlerini Sil</CardTitle>
           <CardDescription>
-            Bir kullanıcıya ait tüm siparişleri ve sipariş öğelerini kalıcı olarak silin.
-            Bu işlem geri alınamaz!
+            Bir kullanıcıya ait tüm siparişleri ve sipariş öğelerini kalıcı
+            olarak silin. Bu işlem geri alınamaz!
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -87,8 +103,9 @@ export default function DeleteUserOrders() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  <strong>{email}</strong> adresine sahip kullanıcının tüm siparişleri silinecek.
-                  Bu işlem geri alınamaz ve tüm sipariş verileri kalıcı olarak kaybolacak.
+                  <strong>{email}</strong> adresine sahip kullanıcının tüm
+                  siparişleri silinecek. Bu işlem geri alınamaz ve tüm
+                  sipariş verileri kalıcı olarak kaybolacak.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

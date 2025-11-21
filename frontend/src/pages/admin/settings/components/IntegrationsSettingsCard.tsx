@@ -7,7 +7,7 @@ import type { Dispatch, SetStateAction, ChangeEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import type { SiteSettings } from "@/integrations/metahub/db/types/site";
+import type { SiteSettings } from "@/integrations/metahub/rtk/types/site";
 
 type Props = {
   settings: SiteSettings;
@@ -17,13 +17,13 @@ type Props = {
 export default function IntegrationsSettingsCard({ settings, setSettings }: Props) {
   const handleChange =
     (key: keyof SiteSettings) =>
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      setSettings((prev) => ({
-        ...prev,
-        [key]: value,
-      }));
-    };
+      (e: ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSettings((prev) => ({
+          ...prev,
+          [key]: value,
+        }));
+      };
 
   return (
     <Card>

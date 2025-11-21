@@ -33,7 +33,7 @@ import { useListProductsAdminQuery } from "@/integrations/metahub/rtk/endpoints/
 import { useListCouponsAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
 // ✅ Public tekil kupon (kodla) — alias veriyoruz
 import { useGetCouponByCodeQuery as useGetPublicCouponByCodeQuery } from "@/integrations/metahub/rtk/endpoints/coupons.endpoints";
-import type { Coupon } from "@/integrations/metahub/db/types/coupon";
+import type { Coupon } from "@/integrations/metahub/rtk/types/coupon";
 
 type Frequency = "always" | "once" | "daily" | "weekly";
 type DisplayPages = "all" | "home" | "products" | "categories";

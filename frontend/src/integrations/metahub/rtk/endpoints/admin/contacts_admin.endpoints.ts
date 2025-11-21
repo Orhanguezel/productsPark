@@ -6,7 +6,7 @@ import type {
   ContactView,
   ContactListParams,
   ContactUpdateInput,
-} from "@/integrations/metahub/db/types/contacts";
+} from "@/integrations/metahub/rtk/types/contacts";
 
 /**
  * Admin liste sorgu eşlemesi: backend aşağıdaki alanları bekliyor:
@@ -44,9 +44,9 @@ export const contactsAdminApi = baseApi.injectEndpoints({
       providesTags: (res) =>
         res?.length
           ? [
-              { type: "Contacts" as const, id: "LIST" },
-              ...res.map((r) => ({ type: "Contacts" as const, id: r.id })),
-            ]
+            { type: "Contacts" as const, id: "LIST" },
+            ...res.map((r) => ({ type: "Contacts" as const, id: r.id })),
+          ]
           : [{ type: "Contacts" as const, id: "LIST" }],
     }),
 
@@ -69,9 +69,9 @@ export const contactsAdminApi = baseApi.injectEndpoints({
       invalidatesTags: (res) =>
         res?.id
           ? [
-              { type: "Contacts" as const, id: res.id },
-              { type: "Contacts" as const, id: "LIST" },
-            ]
+            { type: "Contacts" as const, id: res.id },
+            { type: "Contacts" as const, id: "LIST" },
+          ]
           : [{ type: "Contacts" as const, id: "LIST" }],
     }),
 

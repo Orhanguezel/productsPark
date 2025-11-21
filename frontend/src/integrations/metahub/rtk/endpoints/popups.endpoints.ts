@@ -3,7 +3,7 @@
 // =============================================================
 import { baseApi as baseApi_m4 } from "../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
-import type { Popup, PopupType } from "../../db/types/popup";
+import type { Popup, PopupType } from "../types/popup";
 
 const tryParse_m4 = <T>(x: unknown): T => {
   if (typeof x === "string") {
@@ -63,15 +63,15 @@ export const popupsApi = baseApi_m4.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "Popups" as const, id: p.id })),
-              { type: "Popups" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "Popups" as const, id: p.id })),
+            { type: "Popups" as const, id: "LIST" },
+          ]
           : [{ type: "Popups" as const, id: "LIST" }],
     }),
 
     getPopupByKey: b.query<Popup, { key: string; locale?: string }>({
       query: ({ key, locale }): FetchArgs => {
-        const qp: Record<string,unknown> = {};
+        const qp: Record<string, unknown> = {};
         if (locale !== undefined) qp.locale = locale;
         return { url: `${BASE}/by-key/${encodeURIComponent(key)}`, params: qp };
       },

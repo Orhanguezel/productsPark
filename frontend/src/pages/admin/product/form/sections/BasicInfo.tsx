@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import type { ProductAdmin } from "@/integrations/metahub/db/types/products";
+import type { ProductAdmin } from "@/integrations/metahub/rtk/types/products";
 import { toNumber } from "../constants";
 
 type Props = {
@@ -165,9 +165,9 @@ export default function BasicInfo({
           )}
         </div>
 
-        {/* Satış Sayısı */}
+        {/* Yorum / Satış Sayısı */}
         <div className="space-y-2">
-          <Label htmlFor="review_count">Satış Sayısı</Label>
+          <Label htmlFor="review_count">Yorum / Satış Sayısı</Label>
           <Input
             id="review_count"
             inputMode="numeric"
@@ -176,8 +176,10 @@ export default function BasicInfo({
               handleNumericChange("review_count", e.target.value)
             }
             placeholder="Örn: 150"
-            disabled// 👈 gerçek satıştan geliyor
           />
+          <p className="text-xs text-muted-foreground">
+            Ürün için gösterilecek toplam değerlendirme/yorum sayısı.
+          </p>
         </div>
       </div>
 

@@ -7,7 +7,7 @@ import type { FetchArgs } from "@reduxjs/toolkit/query";
 import type {
   ProductReviewRow,
   ReviewInput,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 type ListReviewsParams = {
   product_id?: string;

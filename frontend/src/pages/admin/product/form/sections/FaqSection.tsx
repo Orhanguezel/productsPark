@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { FAQInput } from "@/integrations/metahub/db/types/products";
+import type { FAQInput } from "@/integrations/metahub/rtk/types/products";
 
 type Props = {
   faqs: FAQInput[];

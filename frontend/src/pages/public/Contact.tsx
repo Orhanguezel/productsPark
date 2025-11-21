@@ -21,7 +21,7 @@ import {
 } from "@/integrations/metahub/rtk/endpoints/contacts.endpoints";
 import type {
   ContactCreateInput,
-} from "@/integrations/metahub/db/types/contacts";
+} from "@/integrations/metahub/rtk/types/contacts";
 
 import {
   useGetSiteSettingByKeyQuery,
@@ -97,7 +97,7 @@ const Contact = () => {
 
   const whatsappNumber =
     typeof whatsappSetting?.value === "string" ||
-    typeof whatsappSetting?.value === "number"
+      typeof whatsappSetting?.value === "number"
       ? String(whatsappSetting.value)
       : "905555555555";
 
@@ -109,7 +109,7 @@ const Contact = () => {
 
   const adminEmailTo =
     typeof contactEmailSetting?.value === "string" ||
-    typeof contactEmailSetting?.value === "number"
+      typeof contactEmailSetting?.value === "number"
       ? String(contactEmailSetting.value)
       : defaultContactEmail;
 
@@ -235,9 +235,8 @@ const Contact = () => {
         (error as { data?: { error?: string } }).data?.error
       ) {
         toast.error(
-          `Hata: ${
-            (error as { data?: { error?: string } }).data?.error ??
-            "Bilinmeyen hata"
+          `Hata: ${(error as { data?: { error?: string } }).data?.error ??
+          "Bilinmeyen hata"
           }`
         );
       } else {

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Dispatch, SetStateAction } from "react";
-import type { SiteSettings } from "@/integrations/metahub/db/types/site";
+import type { SiteSettings } from "@/integrations/metahub/rtk/types/site";
 
 type Props = {
   settings: SiteSettings;

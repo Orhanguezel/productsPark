@@ -1,6 +1,6 @@
 // src/integrations/metahub/rtk/endpoints/admin/auth.admin.endpoints.ts
 import { baseApi } from "../../baseApi";
-import type { AdminUserRaw, AdminUserView, UserRoleName } from "@/integrations/metahub/db/types/users";
+import type { AdminUserRaw, AdminUserView, UserRoleName } from "@/integrations/metahub/rtk/types/users";
 
 const asRole = (v: unknown): UserRoleName | null => {
   const s = String(v ?? "").toLowerCase();

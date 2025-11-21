@@ -7,7 +7,7 @@ import type { FetchArgs } from "@reduxjs/toolkit/query";
 import type {
   Review,
   ReviewInput,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 const BASE = "/admin/products";
 

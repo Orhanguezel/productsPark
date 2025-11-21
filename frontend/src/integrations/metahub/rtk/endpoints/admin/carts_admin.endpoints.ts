@@ -7,7 +7,7 @@ import type {
   AdminApiCartItem,
   AdminCart,
   AdminApiCart,
-} from "@/integrations/metahub/db/types/cart";
+} from "@/integrations/metahub/rtk/types/cart";
 
 // helpers
 const toNumber = (x: unknown): number =>
@@ -57,10 +57,10 @@ const normalizeCart = (c: ApiCart): Cart => ({
   user_id: (c.user_id ?? null) as string | null,
   user: c.user
     ? {
-        id: c.user.id,
-        email: c.user.email ?? null,
-        name: c.user.name ?? null,
-      }
+      id: c.user.id,
+      email: c.user.email ?? null,
+      name: c.user.name ?? null,
+    }
     : null,
   items: Array.isArray(c.items)
     ? c.items.map(normalizeCartItem)
@@ -121,12 +121,12 @@ export const cartsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((c) => ({
-                type: "Carts" as const,
-                id: c.id,
-              })),
-              { type: "Carts" as const, id: "LIST" },
-            ]
+            ...result.map((c) => ({
+              type: "Carts" as const,
+              id: c.id,
+            })),
+            { type: "Carts" as const, id: "LIST" },
+          ]
           : [{ type: "Carts" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

@@ -1,8 +1,7 @@
 // =============================================================
-// FILE: src/components/TurkpinSettings.tsx
+// FILE: src/components/TurkpinSettings.tsx  (UPDATED)
 // =============================================================
 import { useEffect, useMemo, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,13 +21,15 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { RefreshCw } from "lucide-react";
 import { useListApiProvidersQuery } from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
-import type { ApiProvider } from "@/integrations/metahub/db/types/apiProviders";
+import {
+  useTurkpinGameListMutation,
+  useTurkpinProductListMutation,
+} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+import type { ApiProvider } from "@/integrations/metahub/rtk/types/apiProviders";
 import type {
   TurkpinGame,
   TurkpinProduct,
-  TurkpinGameListResult,
-  TurkpinProductListResult,
-} from "@/integrations/metahub/db/types/turkpin";
+} from "@/integrations/metahub/rtk/types/turkpin";
 
 interface TurkpinSettingsProps {
   formData: any;
@@ -49,15 +50,19 @@ export const TurkpinSettings = ({
   const providerOptions = useMemo(
     () =>
       (providers as ApiProvider[]).filter(
-        (p) => p.provider_type === "epin" || p.provider_type === "topup",
+        (p) => p.provider_type === "epin" || p.provider_type === "topup"
       ),
-    [providers],
+    [providers]
   );
 
   const [games, setGames] = useState<TurkpinGame[]>([]);
   const [products, setProducts] = useState<TurkpinProduct[]>([]);
   const [loadingGames, setLoadingGames] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
+
+  // ✅ Turkpin RTK mutations
+  const [turkpinGameList] = useTurkpinGameListMutation();
+  const [turkpinProductList] = useTurkpinProductListMutation();
 
   // product_type veya provider değişince oyunları getir
   useEffect(() => {
@@ -88,25 +93,17 @@ export const TurkpinSettings = ({
       const listType: "epin" | "topup" =
         formData.product_type === "epin" ? "epin" : "topup";
 
-      // ✅ TurkpinGameListResult overload'ını kullanıyoruz
-      const { data, error } = await metahub.functions.invoke(
-        "turkpin-game-list",
-        {
-          body: {
-            providerId: formData.api_provider_id,
-            listType,
-          },
-        },
-      ) as { data: TurkpinGameListResult | null; error: { message: string } | null };
+      const result = await turkpinGameList({
+        providerId: formData.api_provider_id,
+        listType,
+      }).unwrap();
 
-      if (error) throw error;
-
-      if (data?.success) {
-        setGames(data.games ?? []);
+      if (result?.success) {
+        setGames(result.games ?? []);
       } else {
         toast({
           title: "Hata",
-          description: data?.error || "Oyun listesi alınamadı",
+          description: result?.error || "Oyun listesi alınamadı",
           variant: "destructive",
         });
       }
@@ -129,29 +126,18 @@ export const TurkpinSettings = ({
       const listType: "epin" | "topup" =
         formData.product_type === "epin" ? "epin" : "topup";
 
-      // ✅ TurkpinProductListResult overload'ını kullanıyoruz
-      const { data, error } = await metahub.functions.invoke(
-        "turkpin-product-list",
-        {
-          body: {
-            providerId: formData.api_provider_id,
-            gameId: formData.epin_game_id,
-            listType,
-          },
-        },
-      ) as {
-        data: TurkpinProductListResult | null;
-        error: { message: string } | null;
-      };
+      const result = await turkpinProductList({
+        providerId: formData.api_provider_id,
+        gameId: formData.epin_game_id,
+        listType,
+      }).unwrap();
 
-      if (error) throw error;
-
-      if (data?.success) {
-        setProducts(data.products ?? []);
+      if (result?.success) {
+        setProducts(result.products ?? []);
       } else {
         toast({
           title: "Hata",
-          description: data?.error || "Ürün listesi alınamadı",
+          description: result?.error || "Ürün listesi alınamadı",
           variant: "destructive",
         });
       }
@@ -169,7 +155,7 @@ export const TurkpinSettings = ({
 
   const syncProductData = () => {
     const selectedProduct = products.find(
-      (p) => p.id === formData.epin_product_id,
+      (p) => p.id === formData.epin_product_id
     );
     if (!selectedProduct) return;
 
@@ -353,7 +339,7 @@ export const TurkpinSettings = ({
               }
               className="rounded border-gray-300"
             />
-            <Label htmlFor="auto_delivery_enabled">
+          <Label htmlFor="auto_delivery_enabled">
               Otomatik Teslimat Aktif
             </Label>
           </div>
@@ -380,7 +366,7 @@ export const TurkpinSettings = ({
             <CardContent>
               {(() => {
                 const product = products.find(
-                  (p) => p.id === formData.epin_product_id,
+                  (p) => p.id === formData.epin_product_id
                 );
                 if (!product) return null;
                 return (

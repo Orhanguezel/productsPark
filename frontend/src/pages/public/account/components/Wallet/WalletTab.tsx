@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/pagination";
 import { toast } from "sonner";
 
-import { metahub } from "@/integrations/metahub/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
 import { useListSiteSettingsQuery } from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
@@ -27,8 +26,13 @@ import {
   useCreateOrderMutation,
   type CreateOrderBody,
 } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
-import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/db/types/wallet";
+import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/rtk/types/wallet";
 import { useListPaymentProvidersQuery } from "@/integrations/metahub/rtk/endpoints/payment_providers.endpoints";
+import {
+  usePaytrGetTokenMutation,
+  usePaytrHavaleGetTokenMutation,
+  useShopierCreatePaymentMutation,
+} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
 
 type PaymentMethodId = "havale" | "eft" | "paytr" | "paytr_havale" | "shopier";
 
@@ -81,6 +85,11 @@ export function WalletTab({
 
   // ---- orders RTK (create) ----
   const [createOrder, { isLoading: creatingOrder }] = useCreateOrderMutation();
+
+  // ---- functions RTK ----
+  const [paytrGetToken] = usePaytrGetTokenMutation();
+  const [paytrHavaleGetToken] = usePaytrHavaleGetTokenMutation();
+  const [shopierCreatePayment] = useShopierCreatePaymentMutation();
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethodId | "">(
@@ -157,10 +166,7 @@ export function WalletTab({
             "eft_account_holder",
             undefined
           ),
-          bank_name: getFromCfg<string | undefined>(
-            "eft_bank_name",
-            undefined
-          ),
+          bank_name: getFromCfg<string | undefined>("eft_bank_name", undefined),
         });
       }
     }
@@ -290,32 +296,26 @@ export function WalletTab({
 
       const order = await createOrder(body).unwrap();
 
-      const { data: tokenData, error: tokenError } =
-        await metahub.functions.invoke("paytr-get-token", {
-          body: {
-            orderData: {
-              merchant_oid: orderNumber,
-              payment_amount: finalTotal,
-              final_amount: finalTotal,
-              order_id: order.id,
-              items: [
-                {
-                  product_name: "Cüzdan Bakiye Yükleme",
-                  quantity: 1,
-                  total_price: amount,
-                },
-              ],
-            },
-            customerInfo: {
-              name: profileData.full_name ?? "",
-              email: user.email ?? "",
-              phone: profileData.phone ?? "05000000000",
-              address: "DİJİTAL ÜRÜN",
-            },
-          },
-        });
+      // PayTR backend: payment_amount kuruş cinsinden bekliyor
+      const payment_amount_kurus = Math.round(finalTotal * 100);
+      const basket = [
+        ["Cüzdan Bakiye Yükleme", Math.round(amount * 100), 1],
+      ] as [string, number, number][];
 
-      if (tokenError || !tokenData?.success) {
+      const tokenData = await paytrGetToken({
+        email: user.email ?? "",
+        payment_amount: payment_amount_kurus,
+        merchant_oid: orderNumber,
+        user_ip: "127.0.0.1",
+        installment: 0,
+        no_installment: 1,
+        max_installment: 0,
+        currency: "TL",
+        basket,
+        lang: "tr",
+      }).unwrap();
+
+      if (!tokenData?.success || !tokenData.token) {
         throw new Error(tokenData?.error || "Token alınamadı");
       }
 
@@ -370,47 +370,25 @@ export function WalletTab({
 
       const order = await createOrder(body).unwrap();
 
-      const { data: paymentData, error: paymentError } =
-        await metahub.functions.invoke("shopier-create-payment", {
-          body: {
-            orderData: {
-              merchant_oid: orderNumber,
-              user_id: user.id,
-              total_amount: amount,
-              discount_amount: 0,
-              final_amount: finalTotal,
-              order_id: order.id,
-              items: [
-                {
-                  product_name: "Cüzdan Bakiye Yükleme",
-                  quantity: 1,
-                  price: amount,
-                  total_price: amount,
-                },
-              ],
-            },
-            customerInfo: {
-              name: profileData.full_name ?? "",
-              email: user.email ?? "",
-              phone: profileData.phone ?? "05000000000",
-            },
-          },
-        });
+      // Şu an backend stub body'yi kullanmıyor; tip izin verdiği kadarıyla boş obje gönderiyoruz.
+      const paymentData = await shopierCreatePayment({}).unwrap();
 
-      if (paymentError || !paymentData?.success) {
+      if (!paymentData?.success || !paymentData.form_action || !paymentData.form_data) {
         throw new Error(paymentData?.error || "Ödeme oluşturulamadı");
       }
 
       const form = document.createElement("form");
       form.method = "POST";
       form.action = paymentData.form_action;
+
       Object.keys(paymentData.form_data).forEach((key) => {
         const input = document.createElement("input");
         input.type = "hidden";
         input.name = key;
-        input.value = String(paymentData.form_data[key]);
+        input.value = String(paymentData.form_data![key]);
         form.appendChild(input);
       });
+
       document.body.appendChild(form);
       form.submit();
     } catch (e) {
@@ -454,31 +432,25 @@ export function WalletTab({
 
       const order = await createOrder(body).unwrap();
 
-      const { data: tokenData, error: tokenError } =
-        await metahub.functions.invoke("paytr-havale-get-token", {
-          body: {
-            orderData: {
-              merchant_oid: orderNumber,
-              payment_amount: amount,
-              order_id: order.id,
-              items: [
-                {
-                  product_name: "Cüzdan Bakiye Yükleme",
-                  quantity: 1,
-                  total_price: amount,
-                },
-              ],
-            },
-            customerInfo: {
-              name: profileData.full_name ?? "",
-              email: user.email ?? "",
-              phone: profileData.phone ?? "05000000000",
-              address: "DİJİTAL ÜRÜN",
-            },
-          },
-        });
+      const payment_amount_kurus = Math.round(amount * 100);
+      const basket = [
+        ["Cüzdan Bakiye Yükleme", Math.round(amount * 100), 1],
+      ] as [string, number, number][];
 
-      if (tokenError || !tokenData?.success) {
+      const tokenData = await paytrHavaleGetToken({
+        email: user.email ?? "",
+        payment_amount: payment_amount_kurus,
+        merchant_oid: orderNumber,
+        user_ip: "127.0.0.1",
+        installment: 0,
+        no_installment: 1,
+        max_installment: 0,
+        currency: "TL",
+        basket,
+        lang: "tr",
+      }).unwrap();
+
+      if (!tokenData?.success) {
         throw new Error(tokenData?.error || "Token alınamadı");
       }
 
@@ -521,16 +493,13 @@ export function WalletTab({
               </div>
             ) : paymentMethods.length === 0 ? (
               <div className="p-4 bg-muted rounded-md text-center text-sm text-muted-foreground">
-                Aktif ödeme yöntemi bulunamadı. Lütfen yönetici ile
-                iletişime geçin.
+                Aktif ödeme yöntemi bulunamadı. Lütfen yönetici ile iletişime geçin.
               </div>
             ) : (
               <>
                 <RadioGroup
                   value={selectedPayment}
-                  onValueChange={(v) =>
-                    setSelectedPayment(v as PaymentMethodId)
-                  }
+                  onValueChange={(v) => setSelectedPayment(v as PaymentMethodId)}
                 >
                   {paymentMethods.map((method) => (
                     <div
@@ -644,7 +613,9 @@ export function WalletTab({
                     </div>
                     <p
                       className={`font-bold ${
-                        txn.amount > 0 ? "text-green-600" : "text-red-600"
+                        txn.amount > 0
+                          ? "text-green-600"
+                          : "text-red-600"
                       }`}
                     >
                       {txn.amount > 0 ? "+" : ""}₺

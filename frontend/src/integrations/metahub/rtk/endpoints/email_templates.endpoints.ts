@@ -2,7 +2,7 @@
 // FILE: src/integrations/metahub/rtk/endpoints/email_templates.endpoints.ts
 // =============================================================
 import { baseApi as baseApi_m5 } from "../baseApi";
-import type { EmailTemplateRow, EmailTemplateView, BoolLike } from "../../db/types/email";
+import type { EmailTemplateRow, EmailTemplateView, BoolLike } from "../types/email";
 
 // küçük yardımcılar (admin dosyasındakilerle eş)
 const toBool = (x: BoolLike | undefined): boolean =>
@@ -58,9 +58,9 @@ export const emailTemplatesApi = baseApi_m5.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((t) => ({ type: "EmailTemplate" as const, id: t.id })),
-              { type: "EmailTemplate" as const, id: "LIST" },
-            ]
+            ...result.map((t) => ({ type: "EmailTemplate" as const, id: t.id })),
+            { type: "EmailTemplate" as const, id: "LIST" },
+          ]
           : [{ type: "EmailTemplate" as const, id: "LIST" }],
     }),
 

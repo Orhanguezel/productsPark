@@ -7,7 +7,7 @@ import type {
   SupportTicketStatus,
   SupportTicketPriority,
   ApiSupportTicket,
-} from "../../db/types/support";
+} from "../types/support";
 
 /* ---------------- Helpers ---------------- */
 
@@ -75,15 +75,15 @@ const toQuery = (p?: {
   const q: Record<string, unknown> = {};
   if (!p) return q;
   if (p?.user_id) q.user_id = p.user_id;
-if (p?.status) q.status = p.status;
-if (p?.priority) q.priority = p.priority;
-if (p?.q) q.q = p.q;
-if (p?.limit != null) q.limit = p.limit;
-if (p?.offset != null) q.offset = p.offset;
-// BE sadece "created_at" | "updated_at" kabul eder → olduğu gibi gönder
-if (p?.sort) q.sort = p.sort;
-// "asc" | "desc" zaten uygun
-if (p?.order) q.order = p.order;
+  if (p?.status) q.status = p.status;
+  if (p?.priority) q.priority = p.priority;
+  if (p?.q) q.q = p.q;
+  if (p?.limit != null) q.limit = p.limit;
+  if (p?.offset != null) q.offset = p.offset;
+  // BE sadece "created_at" | "updated_at" kabul eder → olduğu gibi gönder
+  if (p?.sort) q.sort = p.sort;
+  // "asc" | "desc" zaten uygun
+  if (p?.order) q.order = p.order;
   return q;
 };
 
@@ -114,9 +114,9 @@ export const supportTicketsApi = baseApi5.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((t) => ({ type: "SupportTicket" as const, id: t.id })),
-              { type: "SupportTickets" as const, id: "LIST" },
-            ]
+            ...result.map((t) => ({ type: "SupportTicket" as const, id: t.id })),
+            { type: "SupportTickets" as const, id: "LIST" },
+          ]
           : [{ type: "SupportTickets" as const, id: "LIST" }],
     }),
 

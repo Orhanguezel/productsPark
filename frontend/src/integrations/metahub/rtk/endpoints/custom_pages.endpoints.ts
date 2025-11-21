@@ -3,7 +3,7 @@
 // (public FE; slug ile get vs.)
 // =============================================================
 import { baseApi } from "../baseApi";
-import type { CustomPageRow, CustomPageView } from "../../db/types/customPages";
+import type { CustomPageRow, CustomPageView } from "../types/customPages";
 
 const toBool = (x: unknown): boolean =>
   x === true || x === 1 || x === "1" || x === "true";
@@ -77,9 +77,9 @@ export const customPagesApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "CustomPage" as const, id: p.id })),
-              { type: "CustomPages" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "CustomPage" as const, id: p.id })),
+            { type: "CustomPages" as const, id: "LIST" },
+          ]
           : [{ type: "CustomPages" as const, id: "LIST" }],
     }),
 

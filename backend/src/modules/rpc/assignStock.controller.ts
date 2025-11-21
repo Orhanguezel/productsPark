@@ -1,3 +1,5 @@
+// src/modules/rpc/assignStock.controller.ts
+
 import type { RouteHandler } from 'fastify';
 import { pool, db } from '@/db/client';
 import { eq, sql } from 'drizzle-orm';

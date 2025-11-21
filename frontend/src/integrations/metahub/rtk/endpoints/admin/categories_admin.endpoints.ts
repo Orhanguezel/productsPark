@@ -3,7 +3,7 @@
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
-import type { Category, ApiCategory, UpsertCategoryBody } from "../../../db/types/categories";
+import type { Category, ApiCategory, UpsertCategoryBody } from "../../types/categories";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -184,9 +184,9 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((c) => ({ type: "Categories" as const, id: c.id })),
-              { type: "Categories" as const, id: "LIST" },
-            ]
+            ...result.map((c) => ({ type: "Categories" as const, id: c.id })),
+            { type: "Categories" as const, id: "LIST" },
+          ]
           : [{ type: "Categories" as const, id: "LIST" }],
       keepUnusedDataFor: 30,
     }),

@@ -29,7 +29,7 @@ import {
   useToggleActiveCategoryAdminMutation,
   useToggleFeaturedCategoryAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
-import type { Category } from "@/integrations/metahub/db/types/categories";
+import type { Category } from "@/integrations/metahub/rtk/types/categories";
 import { Switch } from "@/components/ui/switch";
 
 type FilterTab = "all" | "main" | "sub";
@@ -95,7 +95,6 @@ export default function CategoryList() {
 
   useEffect(() => {
     refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [delCat] = useDeleteCategoryAdminMutation();

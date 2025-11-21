@@ -1,3 +1,5 @@
+// src/modules/functions/paytr.controller.ts
+
 import type { FastifyReply, FastifyRequest } from "fastify";
 import crypto from "crypto";
 import { getPaytrConfig, type PaytrProviderConfig } from "@/modules/payments/service";

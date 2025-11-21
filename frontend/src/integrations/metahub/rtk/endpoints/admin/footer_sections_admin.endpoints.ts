@@ -9,7 +9,7 @@ import type {
   UpsertFooterSectionBody,
   ReorderFooterSectionItem,
   FooterLink,
-} from "@/integrations/metahub/db/types/footer";
+} from "@/integrations/metahub/rtk/types/footer";
 
 /* utils */
 const toNum = (x: unknown): number =>
@@ -85,9 +85,9 @@ export const footerSectionsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((i) => ({ type: "FooterSections" as const, id: i.id })),
-              { type: "FooterSections" as const, id: "LIST" },
-            ]
+            ...result.map((i) => ({ type: "FooterSections" as const, id: i.id })),
+            { type: "FooterSections" as const, id: "LIST" },
+          ]
           : [{ type: "FooterSections" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

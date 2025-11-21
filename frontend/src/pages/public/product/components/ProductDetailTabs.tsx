@@ -43,9 +43,8 @@ const ProductDetailTabs = ({
         className="w-full"
       >
         <TabsList
-          className={`grid w-full ${
-            showDemoTab ? "grid-cols-4" : "grid-cols-3"
-          }`}
+          className={`grid w-full ${showDemoTab ? "grid-cols-4" : "grid-cols-3"
+            }`}
         >
           <TabsTrigger value="description">Ürün Açıklaması</TabsTrigger>
 
@@ -133,7 +132,7 @@ const ProductDetailTabs = ({
             <Card>
               <CardHeader>
                 <h3 className="text-xl font-semibold">
-                  Müşteri Değerlendirmeleri
+                  Müşteri Satışleri
                 </h3>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -151,11 +150,10 @@ const ProductDetailTabs = ({
                           {[...Array(5)].map((_, i) => (
                             <Star
                               key={i}
-                              className={`w-4 h-4 ${
-                                i < review.rating
+                              className={`w-4 h-4 ${i < review.rating
                                   ? "fill-yellow-400 text-yellow-400"
                                   : "text-gray-300"
-                              }`}
+                                }`}
                             />
                           ))}
                         </div>

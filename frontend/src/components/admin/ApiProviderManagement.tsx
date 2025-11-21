@@ -18,7 +18,7 @@ import {
   useUpdateApiProviderMutation,
   useCheckApiProviderBalanceMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
-import type {ApiProviderBalanceResponse} from "@/integrations/metahub/db/types/apiProviders";
+import type { ApiProviderBalanceResponse } from "@/integrations/metahub/rtk/types/apiProviders";
 
 export const ApiProviderManagement = () => {
   const navigate = useNavigate();
@@ -30,7 +30,7 @@ export const ApiProviderManagement = () => {
   const [deleteProvider] = useDeleteApiProviderMutation();
   const [updateProvider] = useUpdateApiProviderMutation();
   const [checkBalance, { isLoading: checking }] =
-  useCheckApiProviderBalanceMutation();
+    useCheckApiProviderBalanceMutation();
 
   const handleDelete = async (id: string) => {
     if (!confirm("API sağlayıcıyı silmek istediğinizden emin misiniz?")) return;
@@ -63,34 +63,34 @@ export const ApiProviderManagement = () => {
   };
 
   const refreshBalance = async (providerId: string) => {
-  try {
-    const r: ApiProviderBalanceResponse = await checkBalance({
-      id: providerId,
-    }).unwrap();
+    try {
+      const r: ApiProviderBalanceResponse = await checkBalance({
+        id: providerId,
+      }).unwrap();
 
-    toast({
-      title: "Bakiye Güncellendi",
-      description: `Yeni bakiye: ${r.balance ?? 0} ${r.currency ?? ""}`,
-    });
-    refetch();
-  } catch (e: any) {
-    // RTK error shape: { status, data }
-    const msg = e?.data?.message ?? "Bilinmeyen hata";
-    const raw = e?.data?.raw
-      ? ` • Sağlayıcı: ${String(e.data.raw).slice(0, 120)}`
-      : "";
-    const err = e?.data?.error
-      ? ` • Hata: ${String(e.data.error).slice(0, 120)}`
-      : "";
+      toast({
+        title: "Bakiye Güncellendi",
+        description: `Yeni bakiye: ${r.balance ?? 0} ${r.currency ?? ""}`,
+      });
+      refetch();
+    } catch (e: any) {
+      // RTK error shape: { status, data }
+      const msg = e?.data?.message ?? "Bilinmeyen hata";
+      const raw = e?.data?.raw
+        ? ` • Sağlayıcı: ${String(e.data.raw).slice(0, 120)}`
+        : "";
+      const err = e?.data?.error
+        ? ` • Hata: ${String(e.data.error).slice(0, 120)}`
+        : "";
 
-    console.error("Error refreshing balance:", e);
-    toast({
-      title: "Hata",
-      description: `${msg}${raw}${err}`,
-      variant: "destructive",
-    });
-  }
-};
+      console.error("Error refreshing balance:", e);
+      toast({
+        title: "Hata",
+        description: `${msg}${raw}${err}`,
+        variant: "destructive",
+      });
+    }
+  };
 
   if (isLoading) return <div>Yükleniyor...</div>;
 

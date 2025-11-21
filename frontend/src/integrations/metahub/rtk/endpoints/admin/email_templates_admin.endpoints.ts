@@ -2,7 +2,7 @@
 // FILE: src/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints.ts
 // =============================================================
 import { baseApi } from "../../baseApi";
-import type { EmailTemplateRow, EmailTemplateView } from "../../../db/types/email";
+import type { EmailTemplateRow, EmailTemplateView } from "../../types/email";
 
 // helpers
 const toBool = (v: unknown): boolean =>
@@ -37,9 +37,9 @@ const toArrayOfStrings = (v: unknown): string[] => {
 
 // row -> view
 const toView = (row: unknown): EmailTemplateView => {
-   const r = (row ?? {}) as Record<string, unknown>;
+  const r = (row ?? {}) as Record<string, unknown>;
   const htmlSrc = r["body_html"] ?? r["content"] ?? r["html"] ?? r["body"];
-   return {
+  return {
     id: str(r["id"]),
     key: str(r["template_key"] ?? r["key"]),
     // ŞABLON ADI: template_name yoksa olası alternatiflere bak
@@ -66,9 +66,9 @@ export const emailTemplatesAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((t) => ({ type: "EmailTemplates" as const, id: t.id })),
-              { type: "EmailTemplates" as const, id: "LIST" },
-            ]
+            ...result.map((t) => ({ type: "EmailTemplates" as const, id: t.id })),
+            { type: "EmailTemplates" as const, id: "LIST" },
+          ]
           : [{ type: "EmailTemplates" as const, id: "LIST" }],
     }),
 

@@ -38,7 +38,7 @@ import {
 import type {
   SiteSettings,
   ValueType,
-} from "@/integrations/metahub/db/types/site";
+} from "@/integrations/metahub/rtk/types/site";
 
 // ------------------ Defaults ------------------
 
@@ -311,7 +311,7 @@ export default function SettingsPage() {
           };
           toast.error(
             "PayTR kaydedilemedi: " +
-              (e?.data?.message || e?.message || "Hata"),
+            (e?.data?.message || e?.message || "Hata"),
           );
         }
       }

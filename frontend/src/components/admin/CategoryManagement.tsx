@@ -37,7 +37,7 @@ import {
 import type {
   Category as CategoryModel,
   UpsertCategoryBody,
-} from "@/integrations/metahub/db/types/categories";
+} from "@/integrations/metahub/rtk/types/categories";
 
 type FormState = {
   name: string;

@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/select";
 
 // Tipler & RTK endpoint'leri
-import type { TopbarSetting } from "@/integrations/metahub/db/types/topbar";
-import type { Coupon } from "@/integrations/metahub/db/types/coupon";
+import type { TopbarSetting } from "@/integrations/metahub/rtk/types/topbar";
+import type { Coupon } from "@/integrations/metahub/rtk/types/coupon";
 import {
   useListTopbarAdminQuery,
   useCreateTopbarAdminMutation,

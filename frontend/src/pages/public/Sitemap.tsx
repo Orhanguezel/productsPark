@@ -1,55 +1,49 @@
-import { useEffect, useState } from 'react';
-import { metahub } from '@/integrations/metahub/client';
+// =============================================================
+// FILE: src/pages/Sitemap.tsx
+// =============================================================
+import { useEffect } from "react";
+import { useSitemapQuery } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
 
 const Sitemap = () => {
-  const [sitemapXml, setSitemapXml] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+  const {
+    data: sitemapXml = "",
+    isLoading,
+    isError,
+  } = useSitemapQuery();
 
   useEffect(() => {
-    const fetchSitemap = async () => {
-      try {
-        const { data, error } = await metahub.functions.invoke('sitemap');
-
-        if (error) {
-          console.error('Sitemap fetch error:', error);
-          setSitemapXml('<?xml version="1.0" encoding="UTF-8"?><error>Failed to load sitemap</error>');
-        } else {
-          setSitemapXml(data);
-        }
-      } catch (err) {
-        console.error('Sitemap fetch error:', err);
-        setSitemapXml('<?xml version="1.0" encoding="UTF-8"?><error>Failed to load sitemap</error>');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSitemap();
-  }, []);
-
-  useEffect(() => {
-    if (!loading && sitemapXml) {
-      // Set content type to XML
-      const blob = new Blob([sitemapXml], { type: 'application/xml' });
+    if (!isLoading && sitemapXml) {
+      // XML içeriğini bir Blob'a çevirip tarayıcıda direkt XML olarak göster
+      const blob = new Blob([sitemapXml], { type: "application/xml" });
       const url = URL.createObjectURL(blob);
 
-      // Replace current page with XML content
+      // Mevcut sayfayı XML içeriği ile değiştir
       window.location.replace(url);
     }
-  }, [loading, sitemapXml]);
+  }, [isLoading, sitemapXml]);
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div style={{ padding: '20px', fontFamily: 'monospace' }}>
+      <div style={{ padding: "20px", fontFamily: "monospace" }}>
         Loading sitemap...
       </div>
     );
   }
 
+  if (isError || !sitemapXml) {
+    return (
+      <div style={{ padding: "20px", fontFamily: "monospace" }}>
+        Failed to load sitemap.
+      </div>
+    );
+  }
+
+  // Normalde buraya hiç düşmeyecek (location.replace çalıştığı için),
+  // ama fallback olarak XML'i düz text olarak gösterelim.
   return (
-    <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+    <pre style={{ whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
       {sitemapXml}
-    </div>
+    </pre>
   );
 };
 

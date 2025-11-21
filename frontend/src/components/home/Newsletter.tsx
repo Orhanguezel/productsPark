@@ -1,50 +1,44 @@
-import { useEffect, useState } from "react";
-import { metahub } from "@/integrations/metahub/client";
+// FILE: src/components/home/Newsletter.tsx
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  useGetSiteSettingByKeyQuery,
+  type JsonLike,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+
+const DEFAULT_SCROLL_CONTENT =
+  '<h2>Hesap Satın Al</h2><p>Tüm dünyada bulunan oyunları daha eğlenceli hale getiren birçok ürün ve eşya, oyun keyfini katlamanıza destek oluyoruz.</p>';
+
+/** site_settings.value → boolean */
+const toBool = (v: JsonLike | undefined): boolean => {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (["1", "true", "yes", "y", "on"].includes(s)) return true;
+    if (["0", "false", "no", "n", "off"].includes(s)) return false;
+  }
+  // default: aktif olsun
+  return true;
+};
+
+/** site_settings.value → HTML string */
+const toHtml = (v: JsonLike | undefined): string => {
+  if (typeof v === "string" && v.trim().length > 0) return v;
+  return DEFAULT_SCROLL_CONTENT;
+};
 
 const Newsletter = () => {
-  const [scrollContent, setScrollContent] = useState("<h2>Hesap Satın Al</h2><p>Tüm dünyada bulunan oyunları daha eğlenceli hale getiren birçok ürün ve eşya, oyun keyfini katlamanıza destek oluyoruz.</p>");
-  const [isActive, setIsActive] = useState(true);
+  // RTK: içerik
+  const { data: contentSetting } = useGetSiteSettingByKeyQuery(
+    "home_scroll_content",
+  );
+  // RTK: aktif/pasif
+  const { data: activeSetting } = useGetSiteSettingByKeyQuery(
+    "home_scroll_content_active",
+  );
 
-  useEffect(() => {
-    fetchScrollContent();
-  }, []);
-
-  const fetchScrollContent = async () => {
-    try {
-      const { data: contentData, error: contentError } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "home_scroll_content")
-        .maybeSingle();
-
-      const { data: activeData, error: activeError } = await metahub
-        .from("site_settings")
-        .select("value")
-        .eq("key", "home_scroll_content_active")
-        .maybeSingle();
-
-      if (contentError) {
-        console.error("Error fetching scroll content:", contentError);
-      }
-
-      if (activeError) {
-        console.error("Error fetching scroll content active status:", activeError);
-      }
-
-      if (contentData && typeof contentData.value === "string") {
-        setScrollContent(contentData.value);
-      }
-
-      if (activeData && typeof activeData.value === "boolean") {
-        setIsActive(activeData.value);
-      }
-    } catch (error) {
-      console.error("Error fetching scroll content:", error);
-    }
-  };
-
-
+  const scrollContent = toHtml(contentSetting?.value);
+  const isActive = toBool(activeSetting?.value);
 
   if (!isActive) return null;
 

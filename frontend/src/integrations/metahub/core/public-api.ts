@@ -15,7 +15,7 @@ import type {
 import type {
   TurkpinGameListResult,
   TurkpinProductListResult,
-} from "../db/types/turkpin";
+} from "../rtk/types/turkpin";
 
 /* ========================= Auth Facade ========================= */
 

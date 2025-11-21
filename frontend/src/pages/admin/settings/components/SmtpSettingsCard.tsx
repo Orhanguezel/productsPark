@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
-import type { SiteSettings } from "@/integrations/metahub/db/types/site";
+import type { SiteSettings } from "@/integrations/metahub/rtk/types/site";
 import { useSendTestMailMutation } from "@/integrations/metahub/rtk/endpoints/mail.endpoints";
 
 type Props = {
@@ -51,7 +51,7 @@ export default function SmtpSettingsCard({ settings, setSettings }: Props) {
       console.error(err);
       toast.error(
         "SMTP testi başarısız: " +
-          (e?.data?.message || e?.message || "Bilinmeyen hata"),
+        (e?.data?.message || e?.message || "Bilinmeyen hata"),
       );
     }
   };

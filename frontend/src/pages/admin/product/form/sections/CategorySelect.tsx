@@ -5,7 +5,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CategoryRow, ProductAdmin } from "@/integrations/metahub/db/types/products";
+import type { CategoryRow, ProductAdmin } from "@/integrations/metahub/rtk/types/products";
 
 type Props = {
   parentCategories: Pick<CategoryRow, "id" | "name" | "parent_id">[];

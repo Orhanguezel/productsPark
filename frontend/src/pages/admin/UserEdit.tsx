@@ -1,7 +1,6 @@
 // src/pages/admin/users/UserEdit.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { metahub } from "@/integrations/metahub/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,14 +43,29 @@ import {
   useDeleteUserAdminMutation,
   useGetUserAdminQuery,
   useSetUserRolesAdminMutation,
+  useUpdateUserAdminMutation,
+  useSetUserPasswordAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
 import { useStatusQuery } from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
 import {
   useAdjustUserWalletMutation,
-  useListWalletTransactionsQuery, // ✅ admin wallet txns
+  useListWalletTransactionsQuery,
 } from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
+import { useListOrdersAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/orders_admin.endpoints";
+import { useListSupportTicketsAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/support_admin.endpoints";
 
-import type { WalletTransaction } from "@/integrations/metahub/db/types/wallet";
+import type { WalletTransaction } from "@/integrations/metahub/rtk/types/wallet";
+
+/* -------- helpers -------- */
+const toNum = (v: unknown): number => {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = Number(v.replace?.(",", ".") ?? v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
 
 type RoleName = "admin" | "moderator" | "user";
 
@@ -70,34 +84,6 @@ type UserEditFormData = {
   email: string;
   password: string;
   is_active: boolean;
-};
-
-type Order = {
-  id: string;
-  order_number: string;
-  final_amount: number | string;
-  status: string;
-  created_at: string;
-};
-
-type SupportTicket = {
-  id: string;
-  subject: string;
-  status: string;
-  priority: string;
-  category: string | null;
-  created_at: string;
-};
-
-/* -------- helpers -------- */
-const toNum = (v: unknown): number => {
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const n = Number(v.replace?.(",", ".") ?? v);
-    return Number.isFinite(n) ? n : 0;
-  }
-  const n = Number(v ?? 0);
-  return Number.isFinite(n) ? n : 0;
 };
 
 const ROLE_WEIGHT: Record<RoleName, number> = {
@@ -152,19 +138,21 @@ export default function UserEdit() {
   } = useGetUserAdminQuery(id ?? "", { skip: !id });
 
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceType, setBalanceType] = useState<"add" | "subtract">("add");
   const [balanceDescription, setBalanceDescription] = useState("");
-  const [adjustWallet, { isLoading: adjusting }] = useAdjustUserWalletMutation();
+
+  const [adjustWallet, { isLoading: adjusting }] =
+    useAdjustUserWalletMutation();
 
   const [deleteUserAdmin] = useDeleteUserAdminMutation();
   const [setUserRolesAdmin, { isLoading: rolesSaving }] =
     useSetUserRolesAdminMutation();
+  const [updateUserAdmin] = useUpdateUserAdminMutation();
+  const [setUserPasswordAdmin] = useSetUserPasswordAdminMutation();
 
   const [editForm, setEditForm] = useState<UserEditFormData>({
     full_name: "",
@@ -176,7 +164,7 @@ export default function UserEdit() {
   // Rol yönetimi UI state
   const [selectedRole, setSelectedRole] = useState<RoleName>("user");
 
-  // ✅ Admin wallet transactions (RTK) — tüm bakiye & geçmiş buradan
+  // ✅ Admin wallet transactions (RTK)
   const {
     data: walletTxns = [],
     isLoading: walletTxLoading,
@@ -185,7 +173,42 @@ export default function UserEdit() {
       ? {
           user_id: id,
           order: "desc",
-          // limit: 200, // istersen limit ekleyebilirsin
+        }
+      : undefined,
+    {
+      skip: !id,
+    }
+  );
+
+  // ✅ Admin orders (RTK)
+  const {
+    data: orders = [],
+    isLoading: ordersLoading,
+  } = useListOrdersAdminQuery(
+    id
+      ? {
+          user_id: id,
+          limit: 10,
+          sort: "created_at",
+          order: "desc",
+        }
+      : undefined,
+    {
+      skip: !id,
+    }
+  );
+
+  // ✅ Admin support tickets (RTK)
+  const {
+    data: tickets = [],
+    isLoading: ticketsLoading,
+  } = useListSupportTicketsAdminQuery(
+    id
+      ? {
+          user_id: id,
+          limit: 50,
+          sort: "created_at",
+          order: "desc",
         }
       : undefined,
     {
@@ -220,46 +243,13 @@ export default function UserEdit() {
     });
   }, [adminUser]);
 
-  // Diğer tablolar (orders + tickets) — Supabase direkt
-  useEffect(() => {
-    if (!id) return;
-
-    const fetchOrders = async () => {
-      try {
-        const { data, error } = await metahub
-          .from("orders")
-          .select("id, order_number, final_amount, status, created_at")
-          .eq("user_id", id)
-          .order("created_at", { ascending: false })
-          .limit(10);
-        if (error) throw error;
-        setOrders((data ?? []) as Order[]);
-      } catch {
-        toast.error("Siparişler yüklenirken hata oluştu");
-      }
-    };
-
-    const fetchTickets = async () => {
-      try {
-        const { data, error } = await metahub
-          .from("support_tickets")
-          .select("*")
-          .eq("user_id", id)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        setTickets((data ?? []) as SupportTicket[]);
-      } catch {
-        toast.error("Destek talepleri yüklenirken hata oluştu");
-      }
-    };
-
-    void fetchOrders();
-    void fetchTickets();
-  }, [id]);
-
   // ✅ Bakiye: txn toplamından hesapla, backend ile uyuşmuyorsa tx'ni göster
   const computedFromTxns = useMemo(
-    () => walletTxns.reduce((sum, t) => sum + toNum(t.amount), 0),
+    () =>
+      walletTxns.reduce(
+        (sum, t: WalletTransaction) => sum + toNum(t.amount),
+        0
+      ),
     [walletTxns]
   );
   const backendBalance = user?.wallet_balance ?? 0;
@@ -273,23 +263,22 @@ export default function UserEdit() {
     try {
       setSaving(true);
 
-      const { error: profileError } = await metahub
-        .from("profiles")
-        .update({
+      // 🔹 Profil güncelleme (email, full_name, is_active)
+      await updateUserAdmin({
+        id,
+        body: {
           full_name: editForm.full_name,
           email: editForm.email,
-          is_active: editForm.is_active ? 1 : 0,
-        })
-        .eq("id", id);
-      if (profileError) throw profileError;
+          is_active: editForm.is_active,
+        },
+      }).unwrap();
 
+      // 🔹 Şifre güncelleme (girildiyse)
       if (editForm.password) {
-        const { data: pwRes, error: invokeError } =
-          await metahub.functions.invoke("update-user-password", {
-            body: { userId: id, password: editForm.password },
-          });
-        if (invokeError) throw invokeError;
-        if (!(pwRes as any)?.success) throw new Error("Şifre güncellenemedi");
+        await setUserPasswordAdmin({
+          id,
+          password: editForm.password,
+        }).unwrap();
       }
 
       toast.success("Kullanıcı güncellendi");
@@ -297,7 +286,9 @@ export default function UserEdit() {
       await refetchAdmin();
     } catch (err: any) {
       console.error(err);
-      toast.error("Kullanıcı güncellenirken hata: " + (err?.message ?? ""));
+      toast.error(
+        "Kullanıcı güncellenirken hata: " + (err?.message ?? "")
+      );
     } finally {
       setSaving(false);
     }
@@ -518,9 +509,7 @@ export default function UserEdit() {
                     <Label>Mevcut Rol</Label>
                     <Badge
                       variant={
-                        user.role === "admin"
-                          ? "default"
-                          : "secondary"
+                        user.role === "admin" ? "default" : "secondary"
                       }
                     >
                       {user.role === "admin"
@@ -538,7 +527,10 @@ export default function UserEdit() {
                         id="is_active"
                         checked={editForm.is_active}
                         onCheckedChange={(checked) =>
-                          setEditForm({ ...editForm, is_active: checked })
+                          setEditForm({
+                            ...editForm,
+                            is_active: checked,
+                          })
                         }
                       />
                       <span>
@@ -728,7 +720,16 @@ export default function UserEdit() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.length === 0 ? (
+                    {ordersLoading ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-center py-4 text-muted-foreground"
+                        >
+                          Siparişler yükleniyor…
+                        </TableCell>
+                      </TableRow>
+                    ) : orders.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={4}
@@ -879,7 +880,16 @@ export default function UserEdit() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tickets.length === 0 ? (
+                    {ticketsLoading ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="text-center py-4 text-muted-foreground"
+                        >
+                          Destek talepleri yükleniyor…
+                        </TableCell>
+                      </TableRow>
+                    ) : tickets.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={6}

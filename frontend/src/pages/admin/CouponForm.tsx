@@ -2,7 +2,7 @@
 // FILE: src/pages/admin/CouponForm.tsx
 // =============================================================
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useGetCouponAdminByIdQuery,
@@ -13,7 +13,14 @@ import type {
   Coupon,
   DiscountType,
   CreateCouponBody,
-} from "@/integrations/metahub/db/types/coupon";
+} from "@/integrations/metahub/rtk/types/coupon";
+
+import {
+  useListCategoriesAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
+import {
+  useListProductsAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +39,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Checkbox } from "@/components/ui/checkbox";
-import { metahub } from "@/integrations/metahub/client";
 
 type Scope = NonNullable<Coupon["applicable_to"]>; // 'all' | 'category' | 'product'
 
@@ -90,6 +96,7 @@ export default function CouponForm() {
   const isEdit = !!id;
   const navigate = useNavigate();
 
+  // Kupon detay (edit)
   const {
     data,
     isFetching,
@@ -104,22 +111,39 @@ export default function CouponForm() {
   const [updateCoupon, { isLoading: isUpdating }] =
     useUpdateCouponAdminMutation();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  // Kategori & ürün listeleri (RTK ADMIN endpoint'leri)
+  const {
+    data: categoriesData = [],
+    isLoading: categoriesLoading,
+  } = useListCategoriesAdminQuery(undefined);
+
+  const {
+    data: productsData = [],
+    isLoading: productsLoading,
+  } = useListProductsAdminQuery({ limit: 1000 });
+
+  // Sadece id + name projeksiyonu
+  const categories: Category[] = useMemo(
+    () =>
+      (categoriesData || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    [categoriesData]
+  );
+
+  const products: Product[] = useMemo(
+    () =>
+      (productsData || []).map((p) => ({
+        id: p.id,
+        name: p.name,
+      })),
+    [productsData]
+  );
+
   const [formData, setFormData] = useState<FormState>(defaults);
   const saving = isCreating || isUpdating;
-
-  // Opsiyonel kategori/ürün doldurma
-  useEffect(() => {
-    (async () => {
-      const [cats, prods] = await Promise.all([
-        metahub.from("categories").select("id, name").order("name"),
-        metahub.from("products").select("id, name").order("name"),
-      ]);
-      if (!cats.error) setCategories((cats.data as Category[]) || []);
-      if (!prods.error) setProducts((prods.data as Product[]) || []);
-    })();
-  }, []);
+  const loadingLists = categoriesLoading || productsLoading;
 
   // Edit mode → formu doldur
   useEffect(() => {
@@ -168,12 +192,22 @@ export default function CouponForm() {
     }
 
     // Scope validation: product/category seçilmiş ama liste boşsa kayıt yapma
-    if (formData.applicable_to === "product" && formData.product_ids.length === 0) {
-      toast.error("Bu kupon belirli ürünler için; en az bir ürün seçmelisiniz.");
+    if (
+      formData.applicable_to === "product" &&
+      formData.product_ids.length === 0
+    ) {
+      toast.error(
+        "Bu kupon belirli ürünler için; en az bir ürün seçmelisiniz."
+      );
       return;
     }
-    if (formData.applicable_to === "category" && formData.category_ids.length === 0) {
-      toast.error("Bu kupon belirli kategoriler için; en az bir kategori seçmelisiniz.");
+    if (
+      formData.applicable_to === "category" &&
+      formData.category_ids.length === 0
+    ) {
+      toast.error(
+        "Bu kupon belirli kategoriler için; en az bir kategori seçmelisiniz."
+      );
       return;
     }
 
@@ -477,6 +511,11 @@ export default function CouponForm() {
                   <div className="space-y-2">
                     <Label>Kategoriler</Label>
                     <div className="border rounded-md p-4 max-h-48 overflow-y-auto">
+                      {loadingLists && categories.length === 0 && (
+                        <div className="text-sm text-muted-foreground">
+                          Kategoriler yükleniyor...
+                        </div>
+                      )}
                       {categories.map((category) => (
                         <div
                           key={category.id}
@@ -485,7 +524,7 @@ export default function CouponForm() {
                           <Checkbox
                             id={`cat-${category.id}`}
                             checked={formData.category_ids.includes(
-                              category.id,
+                              category.id
                             )}
                             onCheckedChange={(checked) =>
                               setFormData((s) => ({
@@ -493,7 +532,7 @@ export default function CouponForm() {
                                 category_ids: checked
                                   ? [...s.category_ids, category.id]
                                   : s.category_ids.filter(
-                                      (x) => x !== category.id,
+                                      (x) => x !== category.id
                                     ),
                               }))
                             }
@@ -514,6 +553,11 @@ export default function CouponForm() {
                   <div className="space-y-2">
                     <Label>Ürünler</Label>
                     <div className="border rounded-md p-4 max-h-48 overflow-y-auto">
+                      {loadingLists && products.length === 0 && (
+                        <div className="text-sm text-muted-foreground">
+                          Ürünler yükleniyor...
+                        </div>
+                      )}
                       {products.map((product) => (
                         <div
                           key={product.id}
@@ -522,7 +566,7 @@ export default function CouponForm() {
                           <Checkbox
                             id={`prod-${product.id}`}
                             checked={formData.product_ids.includes(
-                              product.id,
+                              product.id
                             )}
                             onCheckedChange={(checked) =>
                               setFormData((s) => ({
@@ -530,7 +574,7 @@ export default function CouponForm() {
                                 product_ids: checked
                                   ? [...s.product_ids, product.id]
                                   : s.product_ids.filter(
-                                      (x) => x !== product.id,
+                                      (x) => x !== product.id
                                     ),
                               }))
                             }

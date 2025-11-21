@@ -7,7 +7,7 @@ import type {
   StoragePublicUploadResponse,
   StorageSignMultipartBody,
   StorageSignMultipartResponse,
-} from "@/integrations/metahub/db/types/storage";
+} from "@/integrations/metahub/rtk/types/storage";
 
 const sanitize = (name: string) => name.replace(/[^\w.\-]+/g, "_");
 

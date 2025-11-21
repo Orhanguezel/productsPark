@@ -28,7 +28,7 @@ import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints
 
 import type {
   SupportTicket, SupportTicketStatus, SupportTicketPriority
-} from "@/integrations/metahub/db/types/support";
+} from "@/integrations/metahub/rtk/types/support";
 
 type FilterStatus = SupportTicketStatus | "all";
 
