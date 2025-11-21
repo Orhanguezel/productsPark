@@ -6,7 +6,7 @@ import { GripVertical, Pencil, Trash2, FileText, ExternalLink } from "lucide-rea
 import { DndContext, closestCenter, DragEndEvent, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { MenuItemAdmin } from "@/integrations/metahub/db/types/menu";
+import type { MenuItemAdmin } from "@/integrations/metahub/rtk/types/menu";
 import { availableIcons } from "./icons";
 
 type Props = {

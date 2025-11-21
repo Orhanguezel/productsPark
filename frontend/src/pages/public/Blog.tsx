@@ -1,63 +1,44 @@
-// 
+// =============================================================
+// FILE: src/pages/Blog.tsx  (veya senin Blog sayfan nerede ise)
+// =============================================================
 
-import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, User } from "lucide-react";
-import { metahub } from "@/integrations/metahub/client";
 import { useNavigate } from "react-router-dom";
 import { useSeoSettings } from "@/hooks/useSeoSettings";
 
-interface BlogPost {
-  id: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  author_name: string;
-  created_at: string;
-  image_url: string;
-  read_time: string;
-  slug: string;
-  is_featured: boolean;
-}
+import { useListBlogPostsQuery } from "@/integrations/metahub/rtk/endpoints/blog_posts.endpoints";
+import type { BlogPost } from "@/integrations/metahub/rtk/types/blog";
 
 const Blog = () => {
   const navigate = useNavigate();
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [featuredPost, setFeaturedPost] = useState<BlogPost | null>(null);
-  const [loading, setLoading] = useState(true);
   const { settings } = useSeoSettings();
 
-  useEffect(() => {
-    fetchBlogPosts();
-  }, []);
+  // 🔹 RTK: Blog postları çek (yayında olanlar, created_at desc)
+  const {
+    data: allPosts = [],
+    isLoading,
+    isError,
+  } = useListBlogPostsQuery({
+    is_published: true,
+    sort: "created_at",
+    order: "desc",
+  });
 
-  const fetchBlogPosts = async () => {
-    try {
-      const { data, error } = await metahub
-        .from("blog_posts")
-        .select("*")
-        .eq("is_published", true)
-        .order("created_at", { ascending: false });
+  // Öne çıkan yazı + diğerleri
+  const featuredPost: BlogPost | null =
+    allPosts.find((p) => p.is_featured) ?? allPosts[0] ?? null;
 
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const featured = data.find(post => post.is_featured) || data[0];
-        setFeaturedPost(featured);
-        setPosts(data.filter(post => post.id !== featured.id));
-      }
-    } catch (error) {
-      console.error("Error fetching blog posts:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const posts: BlogPost[] = featuredPost
+    ? allPosts.filter((p) => p.id !== featuredPost.id)
+    : allPosts;
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "";
     return new Date(dateString).toLocaleDateString("tr-TR", {
       day: "numeric",
       month: "long",
@@ -65,12 +46,29 @@ const Blog = () => {
     });
   };
 
-  if (loading) {
+  const fallbackImage =
+    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=400&fit=crop";
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-muted-foreground">Yükleniyor...</p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (isError || !allPosts.length) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">
+            Şu anda görüntülenecek blog yazısı bulunamadı.
+          </p>
         </div>
         <Footer />
       </div>
@@ -86,6 +84,7 @@ const Blog = () => {
         <meta property="og:description" content={settings.seo_blog_description} />
         <meta property="og:type" content="website" />
       </Helmet>
+
       <Navbar />
 
       {/* Hero Section */}
@@ -112,7 +111,7 @@ const Blog = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2">
                 <div className="relative h-64 lg:h-auto">
                   <img
-                    src={featuredPost.image_url || "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=400&fit=crop"}
+                    src={featuredPost.image_url || fallbackImage}
                     alt={featuredPost.title}
                     className="w-full h-full object-cover"
                   />
@@ -122,24 +121,26 @@ const Blog = () => {
                 </div>
                 <CardContent className="p-8 flex flex-col justify-center">
                   <Badge className="w-fit mb-4" variant="secondary">
-                    {featuredPost.category}
+                    {featuredPost.category ?? "Genel"}
                   </Badge>
                   <h2 className="text-3xl font-bold mb-4 hover:text-primary transition-colors">
                     {featuredPost.title}
                   </h2>
                   <p className="text-muted-foreground mb-6">
-                    {featuredPost.excerpt}
+                    {featuredPost.excerpt ?? ""}
                   </p>
                   <div className="flex items-center gap-6 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4" />
-                      {featuredPost.author_name}
+                      {featuredPost.author_name ?? "Admin"}
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
                       {formatDate(featuredPost.created_at)}
                     </div>
-                    <span>{featuredPost.read_time} okuma</span>
+                    <span>
+                      {featuredPost.read_time ?? "Okuma süresi"}
+                    </span>
                   </div>
                 </CardContent>
               </div>
@@ -156,7 +157,7 @@ const Blog = () => {
                   <CardHeader className="p-0">
                     <div className="relative overflow-hidden aspect-video">
                       <img
-                        src={post.image_url || "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=400&fit=crop"}
+                        src={post.image_url || fallbackImage}
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
@@ -164,20 +165,20 @@ const Blog = () => {
                   </CardHeader>
                   <CardContent className="p-6">
                     <Badge className="mb-3" variant="secondary">
-                      {post.category}
+                      {post.category ?? "Genel"}
                     </Badge>
                     <h3 className="text-xl font-bold mb-3 group-hover:text-primary transition-colors line-clamp-2">
                       {post.title}
                     </h3>
                     <p className="text-muted-foreground mb-4 line-clamp-3">
-                      {post.excerpt}
+                      {post.excerpt ?? ""}
                     </p>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
                         {formatDate(post.created_at)}
                       </div>
-                      <span>{post.read_time}</span>
+                      <span>{post.read_time ?? "Okuma süresi"}</span>
                     </div>
                   </CardContent>
                 </Card>

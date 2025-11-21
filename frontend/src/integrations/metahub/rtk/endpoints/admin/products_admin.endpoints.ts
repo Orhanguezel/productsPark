@@ -12,7 +12,7 @@ import type {
   ApiProduct,
   UsedStockItem,
   CategoryRow,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 const BASE = "/admin/products";
 type QueryParams = Record<string, string | number | boolean | undefined>;
@@ -194,9 +194,9 @@ export const productsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "Product" as const, id: p.id })),
-              { type: "Products" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "Product" as const, id: p.id })),
+            { type: "Products" as const, id: "LIST" },
+          ]
           : [{ type: "Products" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -227,11 +227,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       { id: string; body: PatchProductBody }
     >({
       query: ({ id, body }) =>
-        ({
-          url: `${BASE}/${encodeURIComponent(id)}`,
-          method: "PATCH",
-          body: toApiBody(body),
-        } as FetchArgs),
+      ({
+        url: `${BASE}/${encodeURIComponent(id)}`,
+        method: "PATCH",
+        body: toApiBody(body),
+      } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: (_r, _e, arg) => [
@@ -257,11 +257,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       { ids: string[]; is_active: boolean }
     >({
       query: ({ ids, is_active }) =>
-        ({
-          url: `${BASE}/bulk/active`,
-          method: "POST",
-          body: { ids, is_active },
-        } as FetchArgs),
+      ({
+        url: `${BASE}/bulk/active`,
+        method: "POST",
+        body: { ids, is_active },
+      } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
@@ -272,11 +272,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       Array<{ id: string; display_order: number }>
     >({
       query: (items) =>
-        ({
-          url: `${BASE}/bulk/reorder`,
-          method: "POST",
-          body: { items },
-        } as FetchArgs),
+      ({
+        url: `${BASE}/bulk/reorder`,
+        method: "POST",
+        body: { items },
+      } as FetchArgs),
       transformResponse: (): { ok: true } => ({ ok: true }),
       invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
@@ -287,11 +287,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       { id: string; is_active: boolean }
     >({
       query: ({ id, is_active }) =>
-        ({
-          url: `${BASE}/${encodeURIComponent(id)}/active`,
-          method: "PATCH",
-          body: { is_active },
-        } as FetchArgs),
+      ({
+        url: `${BASE}/${encodeURIComponent(id)}/active`,
+        method: "PATCH",
+        body: { is_active },
+      } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: (_r, _e, a) => [
@@ -306,11 +306,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       { id: string; show_on_homepage: boolean }
     >({
       query: ({ id, show_on_homepage }) =>
-        ({
-          url: `${BASE}/${encodeURIComponent(id)}/homepage`,
-          method: "PATCH",
-          body: { show_on_homepage },
-        } as FetchArgs),
+      ({
+        url: `${BASE}/${encodeURIComponent(id)}/homepage`,
+        method: "PATCH",
+        body: { show_on_homepage },
+      } as FetchArgs),
       transformResponse: (res: unknown): ProductAdmin =>
         normalizeAdminProduct(res as ApiProduct),
       invalidatesTags: (_r, _e, a) => [
@@ -325,11 +325,11 @@ export const productsAdminApi = baseApi.injectEndpoints({
       { id: string; lines: string[] }
     >({
       query: ({ id, lines }) =>
-        ({
-          url: `${BASE}/${encodeURIComponent(id)}/stock`,
-          method: "PUT",
-          body: { lines },
-        } as FetchArgs),
+      ({
+        url: `${BASE}/${encodeURIComponent(id)}/stock`,
+        method: "PUT",
+        body: { lines },
+      } as FetchArgs),
       transformResponse: (r: { updated_stock_quantity: number }) => r,
       invalidatesTags: (_r, _e, a) => [
         { type: "Product", id: a.id },

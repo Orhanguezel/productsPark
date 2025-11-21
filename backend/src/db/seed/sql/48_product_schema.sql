@@ -162,3 +162,29 @@ CREATE TABLE IF NOT EXISTS product_stock (
   KEY product_stock_is_used_idx (product_id, is_used),  -- 👈 eklendi
   KEY product_stock_order_item_id_idx (order_item_id)   -- 👈 eklendi
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- 1) product_stock kaydı olan ürünleri auto_stock olarak işaretle
+UPDATE products p
+JOIN (
+  SELECT DISTINCT product_id
+  FROM product_stock
+) ps ON ps.product_id = p.id
+SET
+  p.delivery_type        = 'auto_stock',
+  p.is_digital           = 1,
+  p.requires_shipping    = 0,
+  p.auto_delivery_enabled = 1;
+
+-- 2) auto_stock ürünlerin stock_quantity değerini, kullanılmamış stok adedi ile eşitle
+UPDATE products p
+JOIN (
+  SELECT
+    product_id,
+    COUNT(*) AS available_codes
+  FROM product_stock
+  WHERE is_used = 0
+  GROUP BY product_id
+) s ON s.product_id = p.id
+SET p.stock_quantity = s.available_codes
+WHERE p.delivery_type = 'auto_stock';

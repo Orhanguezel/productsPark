@@ -5,8 +5,7 @@ import { baseApi } from "../../baseApi";
 import type {
   OrderView,
   OrderItemView,
-  // Timeline tiplerini bu dosyadan da alıyoruz
-} from "../../../db/types/orders";
+} from "../../types/orders";
 
 // ------------------------------ local types ------------------------------
 export type OrderStatus =
@@ -19,9 +18,19 @@ export type OrderStatus =
   | "refunded"
   | "failed";
 
-export type PaymentStatus = "unpaid" | "paid" | "refunded" | "partially_refunded" | "failed";
+export type PaymentStatus =
+  | "unpaid"
+  | "paid"
+  | "refunded"
+  | "partially_refunded"
+  | "failed";
 
-export type FulfillmentStatus = "unfulfilled" | "partial" | "fulfilled" | "returned" | "cancelled";
+export type FulfillmentStatus =
+  | "unfulfilled"
+  | "partial"
+  | "fulfilled"
+  | "returned"
+  | "cancelled";
 
 export type ListParams = {
   q?: string;
@@ -39,9 +48,25 @@ export type ListParams = {
   include?: Array<"user">;
 };
 
-export type UpdateStatusBody = { status: OrderStatus; note?: string | null };
-export type RefundBody = { amount: number; reason?: string | null; note?: string | null };
-export type CancelBody = { reason?: string | null; refund?: boolean; note?: string | null };
+export type UpdateStatusBody = {
+  status: OrderStatus;
+  note?: string | null;
+  /** optional: payment_status da backend'de destekleniyorsa birlikte güncellenir */
+  payment_status?: PaymentStatus;
+};
+
+export type RefundBody = {
+  amount: number;
+  reason?: string | null;
+  note?: string | null;
+};
+
+export type CancelBody = {
+  reason?: string | null;
+  refund?: boolean;
+  note?: string | null;
+};
+
 export type FulfillmentBody = {
   tracking_number?: string | null;
   tracking_url?: string | null;
@@ -49,6 +74,7 @@ export type FulfillmentBody = {
   shipped_at?: string | null; // ISO
   status?: FulfillmentStatus;
 };
+
 export type AddNoteBody = { message: string };
 
 export type OrderTimelineEvent = {
@@ -61,11 +87,18 @@ export type OrderTimelineEvent = {
   created_at: string; // ISO
 };
 
-// ------------------------------ helpers ------------------------------
+export type ListOrderItemsGlobalParams = {
+  starts_at?: string;
+  ends_at?: string;
+  limit?: number;
+  offset?: number;
+};
+
 // ------------------------------ helpers ------------------------------
 type HttpParams = Record<string, string | number | boolean>;
 
-const clamp = (n: number, min = 1, max = 200) => Math.max(min, Math.min(max, n));
+const clamp = (n: number, min = 1, max = 200) =>
+  Math.max(min, Math.min(max, n));
 
 const normalizeListParams = (p?: ListParams): HttpParams | undefined => {
   if (!p) return undefined;
@@ -86,18 +119,24 @@ const normalizeListParams = (p?: ListParams): HttpParams | undefined => {
   return q;
 };
 
-
 const BASE_ADMIN = "/admin/orders";
 
 // ------------------------------ endpoints ------------------------------
 export const ordersAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listOrdersAdmin: b.query<OrderView[], ListParams | void>({
-      query: (params) => ({ url: `${BASE_ADMIN}`, params: normalizeListParams(params as ListParams | undefined) }),
-      transformResponse: (res: unknown): OrderView[] => (Array.isArray(res) ? (res as OrderView[]) : []),
+      query: (params) => ({
+        url: `${BASE_ADMIN}`,
+        params: normalizeListParams(params as ListParams | undefined),
+      }),
+      transformResponse: (res: unknown): OrderView[] =>
+        Array.isArray(res) ? (res as OrderView[]) : [],
       providesTags: (result) =>
         result
-          ? [...result.map((o) => ({ type: "Orders" as const, id: o.id })), { type: "Orders" as const, id: "LIST" }]
+          ? [
+              ...result.map((o) => ({ type: "Orders" as const, id: o.id })),
+              { type: "Orders" as const, id: "LIST" },
+            ]
           : [{ type: "Orders" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -110,45 +149,123 @@ export const ordersAdminApi = baseApi.injectEndpoints({
 
     listOrderItemsAdmin: b.query<OrderItemView[], string>({
       query: (id) => ({ url: `${BASE_ADMIN}/${id}/items` }),
-      transformResponse: (res: unknown): OrderItemView[] => (Array.isArray(res) ? (res as OrderItemView[]) : []),
+      transformResponse: (res: unknown): OrderItemView[] =>
+        Array.isArray(res) ? (res as OrderItemView[]) : [],
       providesTags: (_r, _e, id) => [{ type: "Orders", id: `ITEMS_${id}` }],
     }),
 
-    updateOrderStatusAdmin: b.mutation<OrderView, { id: string; body: UpdateStatusBody }>({
-      query: ({ id, body }) => ({ url: `${BASE_ADMIN}/${id}/status`, method: "PATCH", body }),
+    updateOrderStatusAdmin: b.mutation<
+      OrderView,
+      { id: string; body: UpdateStatusBody }
+    >({
+      query: ({ id, body }) => ({
+        url: `${BASE_ADMIN}/${id}/status`,
+        method: "PATCH",
+        body,
+      }),
       transformResponse: (res: unknown): OrderView => res as OrderView,
-      invalidatesTags: (_r, _e, arg) => [{ type: "Orders", id: arg.id }, { type: "Orders", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Orders", id: arg.id },
+        { type: "Orders", id: "LIST" },
+      ],
     }),
 
-    cancelOrderAdmin: b.mutation<OrderView, { id: string; body?: CancelBody }>({
-      query: ({ id, body }) => ({ url: `${BASE_ADMIN}/${id}/cancel`, method: "POST", body }),
+    cancelOrderAdmin: b.mutation<
+      OrderView,
+      { id: string; body?: CancelBody }
+    >({
+      query: ({ id, body }) => ({
+        url: `${BASE_ADMIN}/${id}/cancel`,
+        method: "POST",
+        body,
+      }),
       transformResponse: (res: unknown): OrderView => res as OrderView,
-      invalidatesTags: (_r, _e, arg) => [{ type: "Orders", id: arg.id }, { type: "Orders", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Orders", id: arg.id },
+        { type: "Orders", id: "LIST" },
+      ],
     }),
 
-    refundOrderAdmin: b.mutation<OrderView, { id: string; body: RefundBody }>({
-      query: ({ id, body }) => ({ url: `${BASE_ADMIN}/${id}/refund`, method: "POST", body }),
+    refundOrderAdmin: b.mutation<
+      OrderView,
+      { id: string; body: RefundBody }
+    >({
+      query: ({ id, body }) => ({
+        url: `${BASE_ADMIN}/${id}/refund`,
+        method: "POST",
+        body,
+      }),
       transformResponse: (res: unknown): OrderView => res as OrderView,
-      invalidatesTags: (_r, _e, arg) => [{ type: "Orders", id: arg.id }, { type: "Orders", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Orders", id: arg.id },
+        { type: "Orders", id: "LIST" },
+      ],
     }),
 
-    updateOrderFulfillmentAdmin: b.mutation<OrderView, { id: string; body: FulfillmentBody }>({
-      query: ({ id, body }) => ({ url: `${BASE_ADMIN}/${id}/fulfillment`, method: "PATCH", body }),
+    updateOrderFulfillmentAdmin: b.mutation<
+      OrderView,
+      { id: string; body: FulfillmentBody }
+    >({
+      query: ({ id, body }) => ({
+        url: `${BASE_ADMIN}/${id}/fulfillment`,
+        method: "PATCH",
+        body,
+      }),
       transformResponse: (res: unknown): OrderView => res as OrderView,
-      invalidatesTags: (_r, _e, arg) => [{ type: "Orders", id: arg.id }, { type: "Orders", id: "LIST" }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Orders", id: arg.id },
+        { type: "Orders", id: "LIST" },
+      ],
     }),
 
     listOrderTimelineAdmin: b.query<OrderTimelineEvent[], string>({
       query: (id) => ({ url: `${BASE_ADMIN}/${id}/timeline` }),
       transformResponse: (res: unknown): OrderTimelineEvent[] =>
         Array.isArray(res) ? (res as OrderTimelineEvent[]) : [],
-      providesTags: (_r, _e, id) => [{ type: "Orders", id: `TIMELINE_${id}` }],
+      providesTags: (_r, _e, id) => [
+        { type: "Orders", id: `TIMELINE_${id}` },
+      ],
     }),
 
-    addOrderNoteAdmin: b.mutation<{ ok: true }, { id: string; body: AddNoteBody }>({
-      query: ({ id, body }) => ({ url: `${BASE_ADMIN}/${id}/timeline`, method: "POST", body }),
+    addOrderNoteAdmin: b.mutation<
+      { ok: true },
+      { id: string; body: AddNoteBody }
+    >({
+      query: ({ id, body }) => ({
+        url: `${BASE_ADMIN}/${id}/timeline`,
+        method: "POST",
+        body,
+      }),
       transformResponse: (): { ok: true } => ({ ok: true }),
-      invalidatesTags: (_r, _e, arg) => [{ type: "Orders", id: `TIMELINE_${arg.id}` }],
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Orders", id: `TIMELINE_${arg.id}` },
+      ],
+    }),
+
+    deleteOrderAdmin: b.mutation<{ ok: true }, string>({
+      query: (id) => ({
+        url: `${BASE_ADMIN}/${id}`,
+        method: "DELETE",
+      }),
+      transformResponse: (): { ok: true } => ({ ok: true }),
+      invalidatesTags: (_r, _e, id) => [
+        { type: "Orders", id },
+        { type: "Orders", id: "LIST" },
+      ],
+    }),
+
+    listAllOrderItemsAdmin: b.query<
+      OrderItemView[],
+      ListOrderItemsGlobalParams | void
+    >({
+      query: (params) => ({
+        url: `${BASE_ADMIN}/items`,
+        params: params as Record<string, unknown> | undefined,
+      }),
+      transformResponse: (res: unknown): OrderItemView[] =>
+        Array.isArray(res) ? (res as OrderItemView[]) : [],
+      providesTags: [{ type: "Orders", id: "ITEMS_ALL" }],
+      keepUnusedDataFor: 60,
     }),
   }),
   overrideExisting: true,
@@ -164,4 +281,6 @@ export const {
   useUpdateOrderFulfillmentAdminMutation,
   useListOrderTimelineAdminQuery,
   useAddOrderNoteAdminMutation,
+  useDeleteOrderAdminMutation,
+  useListAllOrderItemsAdminQuery,
 } = ordersAdminApi;

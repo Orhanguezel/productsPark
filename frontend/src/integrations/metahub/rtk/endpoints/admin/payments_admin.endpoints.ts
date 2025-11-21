@@ -7,7 +7,7 @@ import {
   PaymentRow as PaymentAdmin,
   ApiPaymentRow as ApiPayment,
   PaymentEventRow as PaymentEvent,
-} from "../../../db/types/payments";
+} from "../../types/payments";
 import {
   normalizePaymentRow,
   normalizePaymentRows,
@@ -69,9 +69,9 @@ export const paymentsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "Payments" as const, id: p.id })),
-              { type: "Payments" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "Payments" as const, id: p.id })),
+            { type: "Payments" as const, id: "LIST" },
+          ]
           : [{ type: "Payments" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

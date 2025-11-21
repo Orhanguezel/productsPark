@@ -13,8 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 import type { Dispatch, SetStateAction } from "react";
-import type { SiteSettings } from "@/integrations/metahub/db/types/site";
-import type { PaymentProviderRow } from "@/integrations/metahub/db/types/payments";
+import type { SiteSettings } from "@/integrations/metahub/rtk/types/site";
+import type { PaymentProviderRow } from "@/integrations/metahub/rtk/types/payments";
 import {
   useListPaymentProvidersAdminQuery,
   useCreatePaymentProviderAdminMutation,
@@ -57,7 +57,7 @@ type PaparaSecretConfig = {
 };
 
 const asObject = <T extends Record<string, unknown> = Record<string, unknown>>(
-  v: unknown
+  v: unknown,
 ): T => {
   if (!v) return {} as T;
   if (typeof v === "object" && !Array.isArray(v)) return v as T;
@@ -100,7 +100,7 @@ export default function PaymentSettingsCard({
 
   const patchProvider = (
     provider: PaymentProviderRow,
-    patch: Partial<PaymentProviderRow>
+    patch: Partial<PaymentProviderRow>,
   ) => {
     if (!provider.id) return;
     updateProvider({ id: provider.id, body: patch });
@@ -109,7 +109,7 @@ export default function PaymentSettingsCard({
   const handleCreatePresetProvider = async (
     key: string,
     display_name: string,
-    defaults?: Partial<PaymentProviderRow>
+    defaults?: Partial<PaymentProviderRow>,
   ) => {
     await createProvider({
       key,
@@ -122,7 +122,7 @@ export default function PaymentSettingsCard({
 
   // ========== SiteSettings içindeki nested payment_methods için helper ==========
   const updatePaymentMethods = (
-    patch: Partial<NonNullable<SiteSettings["payment_methods"]>>
+    patch: Partial<NonNullable<SiteSettings["payment_methods"]>>,
   ) => {
     setSettings((prev) => ({
       ...prev,
@@ -148,25 +148,24 @@ export default function PaymentSettingsCard({
   const [paytrCommission, setPaytrCommission] = useState("0");
   const [paytrTestModeLocal, setPaytrTestModeLocal] = useState(true);
 
-useEffect(() => {
-  if (!paytr) return;
-  const pub = asObject<PaytrPublicConfig>(paytr.public_config);
-  const sec = asObject<PaytrSecretConfig>(paytr.secret_config);
+  useEffect(() => {
+    if (!paytr) return;
+    const pub = asObject<PaytrPublicConfig>(paytr.public_config);
+    const sec = asObject<PaytrSecretConfig>(paytr.secret_config);
 
-  setPaytrMerchantId(sec.merchant_id ?? "");
-  setPaytrMerchantKey(sec.merchant_key ?? "");
-  setPaytrMerchantSalt(sec.merchant_salt ?? "");
-  setPaytrCommission(
-    pub.commission != null ? String(pub.commission) : "0"
-  );
+    setPaytrMerchantId(sec.merchant_id ?? "");
+    setPaytrMerchantKey(sec.merchant_key ?? "");
+    setPaytrMerchantSalt(sec.merchant_salt ?? "");
+    setPaytrCommission(
+      pub.commission != null ? String(pub.commission) : "0",
+    );
 
-  const isTest =
-    pub.test_mode ??
-    (pub.mode ? pub.mode === "test" : true);
+    const isTest =
+      pub.test_mode ??
+      (pub.mode ? pub.mode === "test" : true);
 
-  setPaytrTestModeLocal(isTest);
-}, [paytr?.id, paytr?.public_config, paytr?.secret_config]);
-
+    setPaytrTestModeLocal(isTest);
+  }, [paytr?.id, paytr?.public_config, paytr?.secret_config]);
 
   // --- PayTR Havale ---
   const [paytrHavaleCommission, setPaytrHavaleCommission] = useState("0");
@@ -175,7 +174,7 @@ useEffect(() => {
     if (!paytrHavale) return;
     const pub = asObject<PaytrPublicConfig>(paytrHavale.public_config);
     setPaytrHavaleCommission(
-      pub.commission != null ? String(pub.commission) : "0"
+      pub.commission != null ? String(pub.commission) : "0",
     );
   }, [paytrHavale?.id, paytrHavale?.public_config]);
 
@@ -192,7 +191,7 @@ useEffect(() => {
     setShopierClientId(sec.client_id ?? "");
     setShopierClientSecret(sec.client_secret ?? "");
     setShopierCommission(
-      pub.commission != null ? String(pub.commission) : "0"
+      pub.commission != null ? String(pub.commission) : "0",
     );
   }, [shopier?.id, shopier?.public_config, shopier?.secret_config]);
 
@@ -257,11 +256,13 @@ useEffect(() => {
                       id="paytr_merchant_id"
                       type="text"
                       value={paytrMerchantId}
-                      onChange={(e) => setPaytrMerchantId(e.target.value)}
+                      onChange={(e) =>
+                        setPaytrMerchantId(e.target.value)
+                      }
                       onBlur={() => {
                         if (!paytr) return;
                         const sec = asObject<PaytrSecretConfig>(
-                          paytr.secret_config
+                          paytr.secret_config,
                         );
                         if (sec.merchant_id === paytrMerchantId) return;
                         patchProvider(paytr, {
@@ -279,11 +280,13 @@ useEffect(() => {
                       id="paytr_merchant_key"
                       type="password"
                       value={paytrMerchantKey}
-                      onChange={(e) => setPaytrMerchantKey(e.target.value)}
+                      onChange={(e) =>
+                        setPaytrMerchantKey(e.target.value)
+                      }
                       onBlur={() => {
                         if (!paytr) return;
                         const sec = asObject<PaytrSecretConfig>(
-                          paytr.secret_config
+                          paytr.secret_config,
                         );
                         if (sec.merchant_key === paytrMerchantKey) return;
                         patchProvider(paytr, {
@@ -296,16 +299,20 @@ useEffect(() => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="paytr_merchant_salt">Merchant Salt</Label>
+                    <Label htmlFor="paytr_merchant_salt">
+                      Merchant Salt
+                    </Label>
                     <Input
                       id="paytr_merchant_salt"
                       type="password"
                       value={paytrMerchantSalt}
-                      onChange={(e) => setPaytrMerchantSalt(e.target.value)}
+                      onChange={(e) =>
+                        setPaytrMerchantSalt(e.target.value)
+                      }
                       onBlur={() => {
                         if (!paytr) return;
                         const sec = asObject<PaytrSecretConfig>(
-                          paytr.secret_config
+                          paytr.secret_config,
                         );
                         if (sec.merchant_salt === paytrMerchantSalt) return;
                         patchProvider(paytr, {
@@ -327,7 +334,7 @@ useEffect(() => {
                       setPaytrTestModeLocal(checked);
                       if (!paytr) return;
                       const pub = asObject<PaytrPublicConfig>(
-                        paytr.public_config
+                        paytr.public_config,
                       );
                       patchProvider(paytr, {
                         public_config: {
@@ -352,7 +359,10 @@ useEffect(() => {
                       patchProvider(paytr, { is_active: checked })
                     }
                   />
-                  <Label htmlFor="paytr_enabled" className="font-medium">
+                  <Label
+                    htmlFor="paytr_enabled"
+                    className="font-medium"
+                  >
                     Kredi Kartı ile Ödeme (PayTR)
                   </Label>
                 </div>
@@ -369,13 +379,16 @@ useEffect(() => {
                       max="100"
                       step="0.01"
                       value={paytrCommission}
-                      onChange={(e) => setPaytrCommission(e.target.value)}
+                      onChange={(e) =>
+                        setPaytrCommission(e.target.value)
+                      }
                       onBlur={() => {
                         if (!paytr) return;
                         const pub = asObject<PaytrPublicConfig>(
-                          paytr.public_config
+                          paytr.public_config,
                         );
-                        const next = parseFloat(paytrCommission || "0") || 0;
+                        const next =
+                          parseFloat(paytrCommission || "0") || 0;
                         if (pub.commission === next) return;
                         patchProvider(paytr, {
                           public_config: {
@@ -403,10 +416,12 @@ useEffect(() => {
                           "PayTR Havale/EFT",
                           {
                             public_config: { mode: "test", commission: 0 },
-                          }
+                          },
                         );
                       } else {
-                        patchProvider(paytrHavale, { is_active: checked });
+                        patchProvider(paytrHavale, {
+                          is_active: checked,
+                        });
                       }
                     }}
                   />
@@ -436,10 +451,11 @@ useEffect(() => {
                       onBlur={() => {
                         if (!paytrHavale) return;
                         const pub = asObject<PaytrPublicConfig>(
-                          paytrHavale.public_config
+                          paytrHavale.public_config,
                         );
                         const next =
-                          parseFloat(paytrHavaleCommission || "0") || 0;
+                          parseFloat(paytrHavaleCommission || "0") ||
+                          0;
                         if (pub.commission === next) return;
                         patchProvider(paytrHavale, {
                           public_config: {
@@ -456,7 +472,7 @@ useEffect(() => {
               <p className="text-sm text-muted-foreground mt-4">
                 PayTR Bildirim URL:{" "}
                 <code className="bg-muted px-2 py-1 rounded">
-                  {origin}/functions/v1/paytr-callback
+                  {origin}/functions/paytr-callback
                 </code>
               </p>
             </>
@@ -500,7 +516,10 @@ useEffect(() => {
                     patchProvider(shopier, { is_active: checked })
                   }
                 />
-                <Label htmlFor="shopier_enabled" className="font-medium">
+                <Label
+                  htmlFor="shopier_enabled"
+                  className="font-medium"
+                >
                   Shopier ile Ödeme
                 </Label>
               </div>
@@ -509,15 +528,19 @@ useEffect(() => {
                 <div className="space-y-4 pt-2">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="shopier_client_id">Client ID</Label>
+                      <Label htmlFor="shopier_client_id">
+                        Client ID
+                      </Label>
                       <Input
                         id="shopier_client_id"
                         value={shopierClientId}
-                        onChange={(e) => setShopierClientId(e.target.value)}
+                        onChange={(e) =>
+                          setShopierClientId(e.target.value)
+                        }
                         onBlur={() => {
                           if (!shopier) return;
                           const sec = asObject<ShopierSecretConfig>(
-                            shopier.secret_config
+                            shopier.secret_config,
                           );
                           if (sec.client_id === shopierClientId) return;
                           patchProvider(shopier, {
@@ -543,7 +566,7 @@ useEffect(() => {
                         onBlur={() => {
                           if (!shopier) return;
                           const sec = asObject<ShopierSecretConfig>(
-                            shopier.secret_config
+                            shopier.secret_config,
                           );
                           if (sec.client_secret === shopierClientSecret)
                             return;
@@ -569,11 +592,13 @@ useEffect(() => {
                       max="100"
                       step="0.01"
                       value={shopierCommission}
-                      onChange={(e) => setShopierCommission(e.target.value)}
+                      onChange={(e) =>
+                        setShopierCommission(e.target.value)
+                      }
                       onBlur={() => {
                         if (!shopier) return;
                         const pub = asObject<ShopierPublicConfig>(
-                          shopier.public_config
+                          shopier.public_config,
                         );
                         const next =
                           parseFloat(shopierCommission || "0") || 0;
@@ -629,7 +654,10 @@ useEffect(() => {
                     patchProvider(papara, { is_active: checked })
                   }
                 />
-                <Label htmlFor="papara_enabled" className="font-medium">
+                <Label
+                  htmlFor="papara_enabled"
+                  className="font-medium"
+                >
                   Papara ile Ödeme
                 </Label>
               </div>
@@ -641,11 +669,13 @@ useEffect(() => {
                     id="papara_api_key"
                     type="password"
                     value={paparaApiKey}
-                    onChange={(e) => setPaparaApiKey(e.target.value)}
+                    onChange={(e) =>
+                      setPaparaApiKey(e.target.value)
+                    }
                     onBlur={() => {
                       if (!papara) return;
                       const sec = asObject<PaparaSecretConfig>(
-                        papara.secret_config
+                        papara.secret_config,
                       );
                       if (sec.api_key === paparaApiKey) return;
                       patchProvider(papara, {
@@ -666,6 +696,33 @@ useEffect(() => {
           )}
         </section>
 
+        {/* ==================== Cüzdan (Site içi bakiye) ==================== */}
+        <section className="space-y-4 border-b pb-6">
+          <h3 className="text-lg font-semibold">
+            Cüzdan (Site İçi Bakiye)
+          </h3>
+
+          <div className="space-y-3 pl-4 border-l-2 border-muted">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="wallet_enabled"
+                checked={settings.payment_methods?.wallet_enabled ?? false}
+                onCheckedChange={(checked) =>
+                  updatePaymentMethods({ wallet_enabled: checked })
+                }
+              />
+              <Label htmlFor="wallet_enabled" className="font-medium">
+                Cüzdan ile Ödeme
+              </Label>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Bu seçenek aktif olduğunda, müşteriler hesaplarındaki
+              cüzdan bakiyesini ödeme adımında kullanabilir.
+            </p>
+          </div>
+        </section>
+
         {/* ==================== Banka Havalesi / EFT (SiteSettings) ==================== */}
         <section className="space-y-4 border-b pb-6">
           <h3 className="text-lg font-semibold">Banka Havalesi / EFT</h3>
@@ -682,7 +739,10 @@ useEffect(() => {
                   }))
                 }
               />
-              <Label htmlFor="bank_transfer_enabled" className="font-medium">
+              <Label
+                htmlFor="bank_transfer_enabled"
+                className="font-medium"
+              >
                 Manuel Banka Havalesi ile Ödeme
               </Label>
             </div>
@@ -713,21 +773,11 @@ useEffect(() => {
 
         {/* ==================== Diğer Ödeme Metod Ayarları (SiteSettings.payment_methods) ==================== */}
         <section className="space-y-4 border-b pb-6">
-          <h3 className="text-lg font-semibold">Diğer Ödeme Metod Ayarları</h3>
+          <h3 className="text-lg font-semibold">
+            Diğer Ödeme Metod Ayarları
+          </h3>
 
           <div className="space-y-3 pl-4 border-l-2 border-muted">
-            {/* Cüzdan */}
-            <div className="flex items-center gap-2">
-              <Switch
-                id="wallet_enabled"
-                checked={settings.payment_methods?.wallet_enabled ?? false}
-                onCheckedChange={(checked) =>
-                  updatePaymentMethods({ wallet_enabled: checked })
-                }
-              />
-              <Label htmlFor="wallet_enabled">Cüzdan ile Ödeme</Label>
-            </div>
-
             {/* Havale detay */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center gap-2">
@@ -764,7 +814,8 @@ useEffect(() => {
                     <Input
                       id="pm_havale_account_holder"
                       value={
-                        settings.payment_methods?.havale_account_holder ?? ""
+                        settings.payment_methods
+                          ?.havale_account_holder ?? ""
                       }
                       onChange={(e) =>
                         updatePaymentMethods({
@@ -774,10 +825,14 @@ useEffect(() => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="pm_havale_bank_name">Banka Adı</Label>
+                    <Label htmlFor="pm_havale_bank_name">
+                      Banka Adı
+                    </Label>
                     <Input
                       id="pm_havale_bank_name"
-                      value={settings.payment_methods?.havale_bank_name ?? ""}
+                      value={
+                        settings.payment_methods?.havale_bank_name ?? ""
+                      }
                       onChange={(e) =>
                         updatePaymentMethods({
                           havale_bank_name: e.target.value,
@@ -799,7 +854,9 @@ useEffect(() => {
                     updatePaymentMethods({ eft_enabled: checked })
                   }
                 />
-                <Label htmlFor="pm_eft_enabled">EFT ile Ödeme (detay)</Label>
+              <Label htmlFor="pm_eft_enabled">
+                  EFT ile Ödeme (detay)
+                </Label>
               </div>
 
               {settings.payment_methods?.eft_enabled && (
@@ -823,7 +880,8 @@ useEffect(() => {
                     <Input
                       id="pm_eft_account_holder"
                       value={
-                        settings.payment_methods?.eft_account_holder ?? ""
+                        settings.payment_methods?.eft_account_holder ??
+                        ""
                       }
                       onChange={(e) =>
                         updatePaymentMethods({
@@ -833,10 +891,14 @@ useEffect(() => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="pm_eft_bank_name">Banka Adı</Label>
+                    <Label htmlFor="pm_eft_bank_name">
+                      Banka Adı
+                    </Label>
                     <Input
                       id="pm_eft_bank_name"
-                      value={settings.payment_methods?.eft_bank_name ?? ""}
+                      value={
+                        settings.payment_methods?.eft_bank_name ?? ""
+                      }
                       onChange={(e) =>
                         updatePaymentMethods({
                           eft_bank_name: e.target.value,
@@ -859,7 +921,8 @@ useEffect(() => {
           <div className="space-y-3 pl-4 border-l-2 border-muted">
             {providers.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Henüz tanımlı ödeme sağlayıcısı yok (seeddan gelmiyor olabilir).
+                Henüz tanımlı ödeme sağlayıcısı yok (seeddan gelmiyor
+                olabilir).
               </p>
             )}
 
@@ -877,7 +940,9 @@ useEffect(() => {
                     key={p.id}
                     className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto_auto] gap-3 items-center py-1 border-b last:border-b-0"
                   >
-                    <span className="truncate">{p.display_name}</span>
+                    <span className="truncate">
+                      {p.display_name}
+                    </span>
                     <span className="truncate text-xs text-muted-foreground">
                       {p.key}
                     </span>
@@ -898,7 +963,7 @@ useEffect(() => {
                         onClick={() => {
                           if (
                             window.confirm(
-                              `"${p.display_name}" sağlayıcısını silmek istediğine emin misin?`
+                              `"${p.display_name}" sağlayıcısını silmek istediğine emin misin?`,
                             )
                           ) {
                             deleteProvider(p.id);
@@ -922,12 +987,16 @@ useEffect(() => {
                 <Input
                   placeholder="Örn: my_custom_provider"
                   value={newProviderKey}
-                  onChange={(e) => setNewProviderKey(e.target.value)}
+                  onChange={(e) =>
+                    setNewProviderKey(e.target.value)
+                  }
                 />
                 <Input
                   placeholder="Görünen Ad"
                   value={newProviderName}
-                  onChange={(e) => setNewProviderName(e.target.value)}
+                  onChange={(e) =>
+                    setNewProviderName(e.target.value)
+                  }
                 />
                 <Button
                   size="sm"

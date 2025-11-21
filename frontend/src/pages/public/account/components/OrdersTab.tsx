@@ -15,7 +15,7 @@ import {
 
 import { useAuth } from "@/hooks/useAuth";
 import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
-import type { OrderView as Order } from "@/integrations/metahub/db/types/orders";
+import type { OrderView as Order } from "@/integrations/metahub/rtk/types/orders";
 
 const itemsPerPage = 10;
 
@@ -95,33 +95,32 @@ export function OrdersTab({ orders }: OrdersTabProps) {
                     ₺
                     {Number(
                       (order as any).final_amount ??
-                        (order as any).total_amount ??
-                        0
+                      (order as any).total_amount ??
+                      0
                     ).toFixed(2)}
                   </p>
                   <div className="text-sm flex flex-col gap-1">
                     <span
-                      className={`px-2 py-1 rounded text-xs ${
-                        order.status === "completed"
+                      className={`px-2 py-1 rounded text-xs ${order.status === "completed"
                           ? "bg-green-100 text-green-800"
                           : order.status === "pending"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : order.status === "processing"
-                          ? "bg-blue-100 text-blue-800"
-                          : order.status === "cancelled"
-                          ? "bg-gray-100 text-gray-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
+                            ? "bg-yellow-100 text-yellow-800"
+                            : order.status === "processing"
+                              ? "bg-blue-100 text-blue-800"
+                              : order.status === "cancelled"
+                                ? "bg-gray-100 text-gray-800"
+                                : "bg-gray-100 text-gray-800"
+                        }`}
                     >
                       {order.status === "completed"
                         ? "Tamamlandı"
                         : order.status === "pending"
-                        ? "Beklemede"
-                        : order.status === "processing"
-                        ? "İşleniyor"
-                        : order.status === "cancelled"
-                        ? "İptal Edildi"
-                        : order.status}
+                          ? "Beklemede"
+                          : order.status === "processing"
+                            ? "İşleniyor"
+                            : order.status === "cancelled"
+                              ? "İptal Edildi"
+                              : order.status}
                     </span>
 
                     {order.payment_status === "pending" && (

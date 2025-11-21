@@ -25,7 +25,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { FooterSection } from "@/integrations/metahub/db/types/footer";
+import type { FooterSection } from "@/integrations/metahub/rtk/types/footer";
 
 type Props = {
   sections: FooterSection[];

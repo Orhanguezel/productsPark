@@ -22,7 +22,7 @@ import {
 // 🔹 STORAGE: tekli create hook
 import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 
-import type { UpsertCategoryBody } from "@/integrations/metahub/db/types/categories";
+import type { UpsertCategoryBody } from "@/integrations/metahub/rtk/types/categories";
 
 /* helpers */
 const slugify = (v: string) =>
@@ -631,7 +631,7 @@ export default function CategoryForm() {
 
                   {formData.article_enabled && (
                     <>
-                      
+
 
                       <div className="space-y-2">
                         <Label>Makale İçeriği (HTML)</Label>
@@ -697,8 +697,8 @@ export default function CategoryForm() {
                     {loading
                       ? "Kaydediliyor..."
                       : isEdit
-                      ? "Güncelle"
-                      : "Oluştur"}
+                        ? "Güncelle"
+                        : "Oluştur"}
                   </Button>
                 </div>
               </form>

@@ -9,7 +9,6 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { metahub } from "@/integrations/metahub/client";
 import { useAuth } from "@/hooks/useAuth";
 
 import {
@@ -37,6 +36,24 @@ import {
 } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
 import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
 import { useCreatePaymentRequestMutation } from "@/integrations/metahub/rtk/endpoints/payment_requests.endpoints";
+
+// 🔗 Functions RTK
+import {
+  usePaytrGetTokenMutation,
+  usePaytrHavaleGetTokenMutation,
+  useShopierCreatePaymentMutation,
+  useSendEmailMutation,
+  useSendTelegramNotificationMutation,
+} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+
+// 🔗 RPC RTK
+import { useCallRpcMutation } from "@/integrations/metahub/rtk/endpoints/rpc.endpoints";
+
+// 🔗 Wallet RTK
+import { useGetMyWalletBalanceQuery } from "@/integrations/metahub/rtk/endpoints/wallet.endpoints";
+
+// 🔗 Cart RTK
+import { useDeleteCartItemMutation } from "@/integrations/metahub/rtk/endpoints/cart_items.endpoints";
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -66,12 +83,28 @@ const Checkout = () => {
   const { data: newPaymentRequestTelegramSetting } =
     useGetSiteSettingByKeyQuery("new_payment_request_telegram");
 
-  // ---- RTK: profile (wallet + phone) ----
+  // ---- RTK: profile (name + phone) ----
   const { data: profileData } = useGetMyProfileQuery();
+
+  // ---- RTK: wallet (balance) ----
+  const { data: walletBalanceData } = useGetMyWalletBalanceQuery();
 
   // ---- RTK: orders + payment_requests ----
   const [createOrder] = useCreateOrderMutation();
   const [createPaymentRequest] = useCreatePaymentRequestMutation();
+
+  // ---- RTK: functions hooks ----
+  const [paytrGetToken] = usePaytrGetTokenMutation();
+  const [paytrHavaleGetToken] = usePaytrHavaleGetTokenMutation();
+  const [shopierCreatePayment] = useShopierCreatePaymentMutation();
+  const [sendEmail] = useSendEmailMutation();
+  const [sendTelegramNotification] = useSendTelegramNotificationMutation();
+
+  // ---- RTK: generic RPC hook ----
+  const [callRpc] = useCallRpcMutation();
+
+  // ---- RTK: cart delete hook ----
+  const [deleteCartItem] = useDeleteCartItemMutation();
 
   // ----------------------------------------------------------
   // 1) İlk yükleme: checkoutData
@@ -116,7 +149,7 @@ const Checkout = () => {
   }, [authLoading, navigate]);
 
   // ----------------------------------------------------------
-  // 2) Profil bilgisi RTK → customer + wallet
+  // 2) Profil bilgisi RTK → customer info
   // ----------------------------------------------------------
   useEffect(() => {
     if (!user || !profileData) return;
@@ -124,8 +157,20 @@ const Checkout = () => {
     setCustomerName(profileData.full_name ?? "");
     setCustomerEmail(user.email ?? "");
     setCustomerPhone(profileData.phone ?? "");
-    setWalletBalance(profileData.wallet_balance ?? 0);
   }, [user, profileData]);
+
+  // ----------------------------------------------------------
+  // 2.b) Cüzdan bakiyesi (wallet endpoint + fallback profile)
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (!user) return;
+
+    if (walletBalanceData !== undefined) {
+      setWalletBalance(walletBalanceData);
+    } else if (profileData) {
+      setWalletBalance(profileData.wallet_balance ?? 0);
+    }
+  }, [user, walletBalanceData, profileData]);
 
   // ----------------------------------------------------------
   // 3) site_settings RTK → paymentMethods + komisyonlar
@@ -301,6 +346,55 @@ const Checkout = () => {
   };
 
   // ----------------------------------------------------------
+  // 4.b) Yardımcı: kupon kullanımı RPC ile arttır
+  // ----------------------------------------------------------
+  const incrementCouponUsage = async () => {
+    if (!checkoutData?.appliedCoupon) return;
+
+    try {
+      await callRpc({
+        name: "exec_sql",
+        args: {
+          sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${checkoutData.appliedCoupon.id}'`,
+        },
+      }).unwrap();
+    } catch (err) {
+      console.error("Coupon usage increment RPC error:", err);
+      // kupon sayacı patlasa bile siparişi bozmayalım
+    }
+  };
+
+  // ----------------------------------------------------------
+  // 4.c) Yardımcı: sepet temizleme (RTK + local)
+  // ----------------------------------------------------------
+  const clearCartAfterOrder = async () => {
+    if (!checkoutData) return;
+
+    try {
+      if (user) {
+        // Kullanıcıya ait cart_items ID’lerini sil
+        await Promise.all(
+          checkoutData.cartItems.map(async (ci) => {
+            if (!ci.id) return;
+            try {
+              await deleteCartItem(ci.id).unwrap();
+            } catch (err) {
+              console.error("Delete cart item error:", err);
+            }
+          })
+        );
+      } else {
+        // Guest sepeti localStorage'dan
+        localStorage.removeItem("guestCart");
+      }
+    } catch (cleanupError) {
+      console.error("Cart cleanup error:", cleanupError);
+    } finally {
+      sessionStorage.removeItem("checkoutData");
+    }
+  };
+
+  // ----------------------------------------------------------
   // 5) Ödeme handler'ları (HAVALE → PaymentInfo sayfası)
   // ----------------------------------------------------------
   const handleHavalePayment = async () => {
@@ -367,42 +461,38 @@ const Checkout = () => {
       const order = await createOrder(body).unwrap();
 
       if (checkoutData.appliedCoupon) {
-        await metahub.rpc("exec_sql", {
-          sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${checkoutData.appliedCoupon.id}'`,
-        });
+        await incrementCouponUsage();
       }
 
-      const { data: tokenData, error: tokenError } =
-        await metahub.functions.invoke("paytr-get-token", {
-          body: {
-            orderData: {
-              merchant_oid: orderNumber,
-              payment_amount: finalTotal,
-              final_amount: finalTotal,
-              order_id: order.id,
-              items: checkoutData.cartItems.map((item) => ({
-                product_name: item.products.name,
-                quantity: item.quantity,
-                total_price: item.products.price * item.quantity,
-              })),
-            },
-            customerInfo: {
-              name: customerName,
-              email: customerEmail,
-              phone: customerPhone || "05000000000",
-              address: "DİJİTAL ÜRÜN",
-            },
-          },
-        });
+      // 🔄 PayTR token – functions RTK üzerinden
+      const tokenResp = (await paytrGetToken({
+        orderData: {
+          merchant_oid: orderNumber,
+          payment_amount: finalTotal,
+          final_amount: finalTotal,
+          order_id: order.id,
+          items: checkoutData.cartItems.map((item) => ({
+            product_name: item.products.name,
+            quantity: item.quantity,
+            total_price: item.products.price * item.quantity,
+          })),
+        },
+        customerInfo: {
+          name: customerName,
+          email: customerEmail,
+          phone: customerPhone || "05000000000",
+          address: "DİJİTAL ÜRÜN",
+        },
+      } as any).unwrap()) as any;
 
-      if (tokenError || !tokenData?.success) {
-        throw new Error(tokenData?.error || "Token alınamadı");
+      if (!tokenResp?.success) {
+        throw new Error(tokenResp?.error || "Token alınamadı");
       }
 
-      console.log("PayTR token received:", tokenData.token);
+      console.log("PayTR token received:", tokenResp.token);
 
       navigate(
-        `/odeme-iframe?token=${tokenData.token}&order_id=${order.order_number}`
+        `/odeme-iframe?token=${tokenResp.token}&order_id=${order.order_number}`
       );
     } catch (error: any) {
       console.error("PayTR payment error:", error);
@@ -440,51 +530,47 @@ const Checkout = () => {
       const order = await createOrder(body).unwrap();
 
       if (checkoutData.appliedCoupon) {
-        await metahub.rpc("exec_sql", {
-          sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${checkoutData.appliedCoupon.id}'`,
-        });
+        await incrementCouponUsage();
       }
 
-      const { data: paymentData, error: paymentError } =
-        await metahub.functions.invoke("shopier-create-payment", {
-          body: {
-            orderData: {
-              merchant_oid: orderNumber,
-              user_id: user?.id || null,
-              total_amount: checkoutData.subtotal,
-              discount_amount: checkoutData.discount,
-              final_amount: finalTotal,
-              order_id: order.id,
-              items: checkoutData.cartItems.map((item) => ({
-                product_name: item.products.name,
-                quantity: item.quantity,
-                price: item.products.price,
-                total_price: item.products.price * item.quantity,
-              })),
-            },
-            customerInfo: {
-              name: customerName,
-              email: customerEmail,
-              phone: customerPhone || "05000000000",
-            },
-          },
-        });
+      // 🔄 Shopier – functions RTK
+      const paymentResp = (await shopierCreatePayment({
+        orderData: {
+          merchant_oid: orderNumber,
+          user_id: user?.id || null,
+          total_amount: checkoutData.subtotal,
+          discount_amount: checkoutData.discount,
+          final_amount: finalTotal,
+          order_id: order.id,
+          items: checkoutData.cartItems.map((item) => ({
+            product_name: item.products.name,
+            quantity: item.quantity,
+            price: item.products.price,
+            total_price: item.products.price * item.quantity,
+          })),
+        },
+        customerInfo: {
+          name: customerName,
+          email: customerEmail,
+          phone: customerPhone || "05000000000",
+        },
+      } as any).unwrap()) as any;
 
-      if (paymentError || !paymentData?.success) {
-        throw new Error(paymentData?.error || "Ödeme oluşturulamadı");
+      if (!paymentResp?.success) {
+        throw new Error(paymentResp?.error || "Ödeme oluşturulamadı");
       }
 
       console.log("Shopier payment form created");
 
       const form = document.createElement("form");
       form.method = "POST";
-      form.action = paymentData.form_action;
+      form.action = paymentResp.form_action;
 
-      Object.keys(paymentData.form_data).forEach((key) => {
+      Object.keys(paymentResp.form_data).forEach((key) => {
         const input = document.createElement("input");
         input.type = "hidden";
         input.name = key;
-        input.value = paymentData.form_data[key];
+        input.value = paymentResp.form_data[key];
         form.appendChild(input);
       });
 
@@ -523,42 +609,38 @@ const Checkout = () => {
       const order = await createOrder(body).unwrap();
 
       if (checkoutData.appliedCoupon) {
-        await metahub.rpc("exec_sql", {
-          sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${checkoutData.appliedCoupon.id}'`,
-        });
+        await incrementCouponUsage();
       }
 
-      const { data: tokenData, error: tokenError } =
-        await metahub.functions.invoke("paytr-havale-get-token", {
-          body: {
-            orderData: {
-              merchant_oid: orderNumber,
-              payment_amount: checkoutData.total,
-              final_amount: checkoutData.total,
-              order_id: order.id,
-              items: checkoutData.cartItems.map((item) => ({
-                product_name: item.products.name,
-                quantity: item.quantity,
-                total_price: item.products.price * item.quantity,
-              })),
-            },
-            customerInfo: {
-              name: customerName,
-              email: customerEmail,
-              phone: customerPhone || "05000000000",
-              address: "DİJİTAL ÜRÜN",
-            },
-          },
-        });
+      // 🔄 PayTR Havale – functions RTK
+      const tokenResp = (await paytrHavaleGetToken({
+        orderData: {
+          merchant_oid: orderNumber,
+          payment_amount: checkoutData.total,
+          final_amount: checkoutData.total,
+          order_id: order.id,
+          items: checkoutData.cartItems.map((item) => ({
+            product_name: item.products.name,
+            quantity: item.quantity,
+            total_price: item.products.price * item.quantity,
+          })),
+        },
+        customerInfo: {
+          name: customerName,
+          email: customerEmail,
+          phone: customerPhone || "05000000000",
+          address: "DİJİTAL ÜRÜN",
+        },
+      } as any).unwrap()) as any;
 
-      if (tokenError || !tokenData?.success) {
-        throw new Error(tokenData?.error || "Token alınamadı");
+      if (!tokenResp?.success) {
+        throw new Error(tokenResp?.error || "Token alınamadı");
       }
 
-      console.log("PayTR Havale token received:", tokenData.token);
+      console.log("PayTR Havale token received:", tokenResp.token);
 
       navigate(
-        `/odeme-iframe?token=${tokenData.token}&order_id=${order.order_number}&type=havale`
+        `/odeme-iframe?token=${tokenResp.token}&order_id=${order.order_number}&type=havale`
       );
     } catch (error: any) {
       console.error("PayTR Havale payment error:", error);
@@ -570,236 +652,204 @@ const Checkout = () => {
   };
 
   // ----------------------------------------------------------
-// 6) Ana submit
-// ----------------------------------------------------------
-const handleSubmit = async () => {
-  if (!checkoutData) return;
+  // 6) Ana submit
+  // ----------------------------------------------------------
+  const handleSubmit = async () => {
+    if (!checkoutData) return;
 
-  if (!customerName.trim()) {
-    toast.error("Lütfen ad soyad girin");
-    return;
-  }
+    if (!customerName.trim()) {
+      toast.error("Lütfen ad soyad girin");
+      return;
+    }
 
-  if (!customerEmail.trim()) {
-    toast.error("Lütfen e-posta adresinizi girin");
-    return;
-  }
+    if (!customerEmail.trim()) {
+      toast.error("Lütfen e-posta adresinizi girin");
+      return;
+    }
 
-  if (!customerPhone.trim()) {
-    toast.error("Lütfen telefon numaranızı girin");
-    return;
-  }
+    if (!customerPhone.trim()) {
+      toast.error("Lütfen telefon numaranızı girin");
+      return;
+    }
 
-  // Havale/EFT → PaymentInfo sayfası
-  if (selectedPayment === "havale" || selectedPayment === "eft") {
-    await handleHavalePayment();
-    return;
-  }
+    // Havale/EFT → PaymentInfo sayfası
+    if (selectedPayment === "havale" || selectedPayment === "eft") {
+      await handleHavalePayment();
+      return;
+    }
 
-  // PayTR kart
-  if (selectedPayment === "paytr") {
-    await handlePayTRPayment();
-    return;
-  }
+    // PayTR kart
+    if (selectedPayment === "paytr") {
+      await handlePayTRPayment();
+      return;
+    }
 
-  // PayTR havale
-  if (selectedPayment === "paytr_havale") {
-    await handlePayTRHavalePayment();
-    return;
-  }
+    // PayTR havale
+    if (selectedPayment === "paytr_havale") {
+      await handlePayTRHavalePayment();
+      return;
+    }
 
-  // Shopier
-  if (selectedPayment === "shopier") {
-    await handleShopierPayment();
-    return;
-  }
+    // Shopier
+    if (selectedPayment === "shopier") {
+      await handleShopierPayment();
+      return;
+    }
 
-  // Cüzdan bakiyesi kontrolü
-  if (selectedPayment === "wallet" && walletBalance < checkoutData.total) {
-    toast.error("Yetersiz cüzdan bakiyesi");
-    return;
-  }
+    // Cüzdan bakiyesi kontrolü
+    if (selectedPayment === "wallet" && walletBalance < checkoutData.total) {
+      toast.error("Yetersiz cüzdan bakiyesi");
+      return;
+    }
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const hasManualDelivery = checkoutData.cartItems.some(
-      (item) => item.products.delivery_type === "manual"
-    );
-    const hasApiDelivery = checkoutData.cartItems.some(
-      (item) => item.products.delivery_type === "api"
-    );
-    const hasFileDelivery = checkoutData.cartItems.some(
-      (item) =>
-        item.products.delivery_type === "auto_file" ||
-        item.products.delivery_type === "file"
-    );
-    const hasStockDelivery = checkoutData.cartItems.some(
-      (item) => item.products.delivery_type === "auto_stock"
-    );
+      const hasManualDelivery = checkoutData.cartItems.some(
+        (item) => item.products.delivery_type === "manual"
+      );
+      const hasApiDelivery = checkoutData.cartItems.some(
+        (item) => item.products.delivery_type === "api"
+      );
+      const hasFileDelivery = checkoutData.cartItems.some(
+        (item) =>
+          item.products.delivery_type === "auto_file" ||
+          item.products.delivery_type === "file"
+      );
+      const hasStockDelivery = checkoutData.cartItems.some(
+        (item) => item.products.delivery_type === "auto_stock"
+      );
 
-    let orderStatus = "pending";
-    if (selectedPayment === "wallet") {
-      if (hasApiDelivery) {
-        orderStatus = "processing";
-      } else if (hasManualDelivery) {
-        orderStatus = "processing";
-      } else if (hasFileDelivery || hasStockDelivery) {
-        orderStatus = "completed";
-      } else {
-        orderStatus = "completed";
+      let orderStatus = "pending";
+      if (selectedPayment === "wallet") {
+        if (hasApiDelivery) {
+          orderStatus = "processing";
+        } else if (hasManualDelivery) {
+          orderStatus = "processing";
+        } else if (hasFileDelivery || hasStockDelivery) {
+          orderStatus = "completed";
+        } else {
+          orderStatus = "completed";
+        }
       }
-    }
 
-    const orderNumber = `ORD${Date.now()}`;
-    const items = buildOrderItems();
+      const orderNumber = `ORD${Date.now()}`;
+      const items = buildOrderItems();
 
-    // 👇 BURASI: değişken camelCase, payload'da açıkça map ediyoruz
-    let paymentMethod: CreateOrderBody["payment_method"] = "wallet";
-    if (selectedPayment !== "wallet") {
-      paymentMethod = "bank_transfer";
-    }
+      // 👇 BURASI: değişken camelCase, payload'da açıkça map ediyoruz
+      let paymentMethod: CreateOrderBody["payment_method"] = "wallet";
+      if (selectedPayment !== "wallet") {
+        paymentMethod = "bank_transfer";
+      }
 
-    const body: CreateOrderBody = {
-      order_number: orderNumber,
-      payment_method: paymentMethod, // 👈 shorthand DEĞİL
-      payment_status: selectedPayment === "wallet" ? "paid" : "pending",
-      coupon_code: checkoutData.appliedCoupon?.code ?? undefined,
-      notes: checkoutData.notes ?? null,
-      items,
-      subtotal: checkoutData.subtotal,
-      discount: checkoutData.discount,
-      total: checkoutData.total,
-    };
+      const body: CreateOrderBody = {
+        order_number: orderNumber,
+        payment_method: paymentMethod, // 👈 shorthand DEĞİL
+        payment_status: selectedPayment === "wallet" ? "paid" : "pending",
+        coupon_code: checkoutData.appliedCoupon?.code ?? undefined,
+        notes: checkoutData.notes ?? null,
+        items,
+        subtotal: checkoutData.subtotal,
+        discount: checkoutData.discount,
+        total: checkoutData.total,
+      };
 
-    const order = await createOrder(body).unwrap();
+      const order = await createOrder(body).unwrap();
 
-    if (checkoutData.appliedCoupon) {
-      await metahub.rpc("exec_sql", {
-        sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${checkoutData.appliedCoupon.id}'`,
-      });
-    }
+      if (checkoutData.appliedCoupon) {
+        await incrementCouponUsage();
+      }
 
-    // Telegram new_order (RTK site_settings)
-    const isNewOrderTelegramEnabled =
-      newOrderTelegramSetting?.value === true ||
-      newOrderTelegramSetting?.value === "true";
+      // Telegram new_order (RTK site_settings)
+      const isNewOrderTelegramEnabled =
+        newOrderTelegramSetting?.value === true ||
+        newOrderTelegramSetting?.value === "true";
 
-    if (
-      selectedPayment === "wallet" ||
-      order.payment_status === "paid"
-    ) {
-      try {
-        if (isNewOrderTelegramEnabled) {
-          await metahub.functions.invoke("send-telegram-notification", {
-            body: {
+      if (
+        selectedPayment === "wallet" ||
+        order.payment_status === "paid"
+      ) {
+        try {
+          if (isNewOrderTelegramEnabled) {
+            await sendTelegramNotification({
               type: "new_order",
               orderId: order.id,
-            },
-          });
+            } as any).unwrap();
+          }
+        } catch (telegramError) {
+          console.error("Telegram notification error:", telegramError);
         }
-      } catch (telegramError) {
-        console.error("Telegram notification error:", telegramError);
       }
-    }
 
-    // Order received email – site_title RTK'dan
-    try {
-      const siteTitle =
-        (siteTitleSetting?.value as string) || "Dijital Market";
-
-      await metahub.functions.invoke("send-email", {
-        body: {
-          to: customerEmail,
-          template_key: "order_received",
-          variables: {
-            customer_name: customerName,
-            order_number: orderNumber,
-            final_amount: checkoutData.total.toString(),
-            status:
-              selectedPayment === "wallet"
-                ? "Ödendi"
-                : "Beklemede",
-            site_name: siteTitle,
-          },
-        },
-      });
-    } catch (emailError) {
-      console.error("Order received email error:", emailError);
-    }
-
-    // ⚠ order_items & auto-delivery FE'den çıkarıldı, BE tarafı ilgileniyor.
-
-    if (selectedPayment === "wallet" && user) {
-      await metahub
-        .from("profiles")
-        .update({ wallet_balance: walletBalance - checkoutData.total })
-        .eq("id", user.id);
-
-      await metahub.from("wallet_transactions").insert({
-        user_id: user.id,
-        order_id: order.id,
-        type: "debit",
-        amount: -checkoutData.total,
-        description: `Sipariş ödemesi - ${orderNumber}`,
-      });
-
-      if (user) {
-        await metahub.from("cart_items").delete().eq("user_id", user.id);
-      } else {
-        localStorage.removeItem("guestCart");
-      }
-      sessionStorage.removeItem("checkoutData");
-
-      navigate("/odeme-basarili");
-    } else {
-      // 👇 Burayı da aynı değişkenle güncelliyoruz
-      const amount = checkoutData.total;
-
-      const paymentReq = await createPaymentRequest({
-        order_id: order.id,
-        user_id: user?.id ?? null,
-        amount,
-        currency: "TRY",
-        payment_method: paymentMethod, // 👈 burada da paymentMethod
-        payment_proof: null,
-        status: "pending",
-      }).unwrap();
-
-      const isPaymentTelegramEnabled =
-        newPaymentRequestTelegramSetting?.value === true ||
-        newPaymentRequestTelegramSetting?.value === "true";
-
+      // Order received email – site_title RTK'dan
       try {
-        if (isPaymentTelegramEnabled && paymentReq) {
-          await metahub.functions.invoke("send-telegram-notification", {
-            body: {
+        const siteTitle =
+          (siteTitleSetting?.value as string) || "Dijital Market";
+
+        const statusText =
+          selectedPayment === "wallet" ? "Ödendi" : "Beklemede";
+
+        await sendEmail({
+          to: customerEmail,
+          subject: `${siteTitle} - Siparişiniz alındı (${orderNumber})`,
+          text: `Merhaba ${customerName},
+
+${siteTitle} üzerinden verdiğiniz ${orderNumber} numaralı siparişiniz alındı.
+
+Toplam tutar: ${checkoutData.total.toFixed(2)} TL.
+Ödeme durumu: ${statusText}.
+
+Teşekkürler.`,
+        }).unwrap();
+      } catch (emailError) {
+        console.error("Order received email error:", emailError);
+      }
+
+      // ⚠ order_items & auto-delivery FE'den çıkarıldı, BE tarafı ilgileniyor.
+
+      if (selectedPayment === "wallet" && user) {
+        // Cüzdan ile ödeme → başarılı sayfa
+        await clearCartAfterOrder();
+        navigate("/odeme-basarili");
+      } else {
+        // Banka/EFT vs. → ödeme bildirimi
+        const amount = checkoutData.total;
+
+        const paymentReq = await createPaymentRequest({
+          order_id: order.id,
+          user_id: user?.id ?? null,
+          amount,
+          currency: "TRY",
+          payment_method: paymentMethod, // 👈 burada da paymentMethod
+          payment_proof: null,
+          status: "pending",
+        }).unwrap();
+
+        const isPaymentTelegramEnabled =
+          newPaymentRequestTelegramSetting?.value === true ||
+          newPaymentRequestTelegramSetting?.value === "true";
+
+        try {
+          if (isPaymentTelegramEnabled && paymentReq) {
+            await sendTelegramNotification({
               type: "new_payment_request",
               paymentRequestId: paymentReq.id,
-            },
-          });
+            } as any).unwrap();
+          }
+        } catch (telegramError) {
+          console.error("Telegram notification error:", telegramError);
         }
-      } catch (telegramError) {
-        console.error("Telegram notification error:", telegramError);
-      }
 
-      if (user) {
-        await metahub.from("cart_items").delete().eq("user_id", user.id);
-      } else {
-        localStorage.removeItem("guestCart");
+        await clearCartAfterOrder();
+        navigate("/odeme-bildirimi");
       }
-      sessionStorage.removeItem("checkoutData");
-
-      navigate("/odeme-bildirimi");
+    } catch (error) {
+      console.error("Checkout error:", error);
+      toast.error("Sipariş oluşturulurken hata oluştu");
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Checkout error:", error);
-    toast.error("Sipariş oluşturulurken hata oluştu");
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   // ----------------------------------------------------------
   // 7) Render

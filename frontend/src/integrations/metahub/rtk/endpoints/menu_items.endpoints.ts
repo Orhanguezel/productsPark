@@ -2,7 +2,7 @@
 // FILE: src/integrations/metahub/rtk/endpoints/menu_items.endpoints.ts
 // =============================================================
 import { baseApi } from "../baseApi";
-import type { MenuItemRow, MenuPublicListParams } from "../../db/types/menu";
+import type { MenuItemRow, MenuPublicListParams } from "../types/menu";
 
 const BASE = "/menu_items";
 
@@ -37,9 +37,9 @@ export const menuItemsApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((i) => ({ type: "MenuItems" as const, id: i.id })),
-              { type: "MenuItems" as const, id: "LIST" },
-            ]
+            ...result.map((i) => ({ type: "MenuItems" as const, id: i.id })),
+            { type: "MenuItems" as const, id: "LIST" },
+          ]
           : [{ type: "MenuItems" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

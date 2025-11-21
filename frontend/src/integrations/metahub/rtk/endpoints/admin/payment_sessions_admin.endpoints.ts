@@ -6,7 +6,7 @@ import {
   PaymentSessionStatus,
   PaymentSessionRow as PaymentSessionAdmin,
   ApiPaymentSessionRow as ApiPaymentSession,
-} from "../../../db/types/payments";
+} from "../../types/payments";
 import {
   normalizePaymentSessionRow,
   normalizePaymentSessionRows,
@@ -36,13 +36,13 @@ const toFetchParams = (p?: ListSessionsParams): Record<string, unknown> =>
   !p
     ? {}
     : {
-        order_id: p.order_id,
-        provider_key: p.provider_key,
-        status: p.status,
-        limit: p.limit,
-        offset: p.offset,
-        q: p.q,
-      };
+      order_id: p.order_id,
+      provider_key: p.provider_key,
+      status: p.status,
+      limit: p.limit,
+      offset: p.offset,
+      q: p.q,
+    };
 
 export const paymentSessionsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
@@ -56,12 +56,12 @@ export const paymentSessionsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({
-                type: "PaymentSessionsAdmin" as const,
-                id: p.id,
-              })),
-              { type: "PaymentSessionsAdmin" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({
+              type: "PaymentSessionsAdmin" as const,
+              id: p.id,
+            })),
+            { type: "PaymentSessionsAdmin" as const, id: "LIST" },
+          ]
           : [{ type: "PaymentSessionsAdmin" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

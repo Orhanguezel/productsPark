@@ -1,7 +1,7 @@
 // FILE: src/integrations/metahub/rtk/endpoints/categories.endpoints.ts
 import { baseApi } from "../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
-import type { Category } from "../../db/types/categories";
+import type { Category } from "../types/categories";
 
 /* ================= utils (type-safe, any yok) ================= */
 type UnknownRec = Readonly<Record<string, unknown>>;
@@ -13,8 +13,8 @@ const toBool = (x: unknown, d = false): boolean => {
   if (typeof x === "boolean") return x;
   if (typeof x === "number") return x !== 0;
   const s = String(x ?? "").toLowerCase();
-  if (["1","true","yes","y","on","active","enabled"].includes(s)) return true;
-  if (["0","false","no","n","off","inactive","disabled"].includes(s)) return false;
+  if (["1", "true", "yes", "y", "on", "active", "enabled"].includes(s)) return true;
+  if (["0", "false", "no", "n", "off", "inactive", "disabled"].includes(s)) return false;
   return d;
 };
 
@@ -34,7 +34,7 @@ const pickStr = (o: unknown, keys: string[]) => {
 const pluckArray = (res: unknown): unknown[] => {
   if (Array.isArray(res)) return res;
   if (isObj(res)) {
-    for (const k of ["data","items","rows","result","categories"]) {
+    for (const k of ["data", "items", "rows", "result", "categories"]) {
       const v = res[k];
       if (Array.isArray(v)) return v;
     }
@@ -47,22 +47,22 @@ const normalizePublic = (c: unknown): Category => {
   return {
     id: toStr(o.id),
     name: toStr(o.name),
-    slug: toStr(pickStr(o, ["slug","category_slug","url_slug"]) ?? ""),
+    slug: toStr(pickStr(o, ["slug", "category_slug", "url_slug"]) ?? ""),
     description: (o.description ?? null) as string | null,
 
-    image_url: (pickStr(o, ["image_url","banner_image_url","featured_image","cover_image_url","image","imageUrl"]) ?? null),
-    image_asset_id: (pickStr(o, ["image_asset_id","featured_image_asset_id","asset_id","imageId"]) ?? null),
-    image_alt: (pickStr(o, ["image_alt","alt","alt_text","altText"]) ?? null),
+    image_url: (pickStr(o, ["image_url", "banner_image_url", "featured_image", "cover_image_url", "image", "imageUrl"]) ?? null),
+    image_asset_id: (pickStr(o, ["image_asset_id", "featured_image_asset_id", "asset_id", "imageId"]) ?? null),
+    image_alt: (pickStr(o, ["image_alt", "alt", "alt_text", "altText"]) ?? null),
 
     icon: (o.icon ?? null) as string | null,
-    parent_id: (pickStr(o, ["parent_id","parentId","parent"]) ?? null),
+    parent_id: (pickStr(o, ["parent_id", "parentId", "parent"]) ?? null),
 
     is_active: toBool(o.is_active ?? (o as UnknownRec).active ?? (o as UnknownRec).enabled, false),
     is_featured: toBool((o as UnknownRec).is_featured ?? (o as UnknownRec).featured ?? (o as UnknownRec).isFeatured, false),
     display_order: toNum(o.display_order ?? (o as UnknownRec).order ?? (o as UnknownRec).sort ?? 0),
 
-    seo_title: pickStr(o, ["seo_title","meta_title","title"]),
-    seo_description: pickStr(o, ["seo_description","meta_description"]),
+    seo_title: pickStr(o, ["seo_title", "meta_title", "title"]),
+    seo_description: pickStr(o, ["seo_description", "meta_description"]),
 
     article_enabled: (o.article_enabled == null ? null : toBool(o.article_enabled)),
     article_content: (o.article_content ?? null) as string | null,
@@ -112,9 +112,9 @@ export const categoriesApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((c) => ({ type: "Categories" as const, id: c.id })),
-              { type: "Categories" as const, id: "LIST" },
-            ]
+            ...result.map((c) => ({ type: "Categories" as const, id: c.id })),
+            { type: "Categories" as const, id: "LIST" },
+          ]
           : [{ type: "Categories" as const, id: "LIST" }],
     }),
     getCategoryById: builder.query<Category, string>({

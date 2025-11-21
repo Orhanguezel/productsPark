@@ -3,13 +3,17 @@
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
 import {
-  PaymentRequestRow as PaymentRequestAdmin,
-  ApiPaymentRequestRow as ApiPaymentRequestAdmin,
-} from "../../../db/types/payments";
+  PaymentRequestRow,
+  ApiPaymentRequestRow,
+} from "../../types/payments";
 import {
   normalizePaymentRequestRow,
   normalizePaymentRequestRows,
-} from "../../../db/normalizers/payments";
+} from "../../payments";
+
+// FE tarafında daha okunaklı isim
+export type PaymentRequestAdmin = PaymentRequestRow;
+export type ApiPaymentRequestAdmin = ApiPaymentRequestRow;
 
 export type ListAdminParams = {
   user_id?: string;
@@ -31,7 +35,8 @@ const toFetchParams = (p?: ListAdminParams): Record<string, unknown> =>
         limit: p.limit,
         offset: p.offset,
         q: p.q,
-        include: p.include && p.include.length ? p.include.join(",") : undefined,
+        include:
+          p.include && p.include.length ? p.include.join(",") : undefined,
       };
 
 export const paymentRequestsAdminApi = baseApi.injectEndpoints({
@@ -48,7 +53,8 @@ export const paymentRequestsAdminApi = baseApi.injectEndpoints({
         normalizePaymentRequestRows(res),
       providesTags: (result, _e, args) => {
         const base = [{ type: "PaymentRequestsAdmin" as const, id: "LIST" }];
-        const scoped: Array<{ type: "PaymentRequestsAdmin"; id: string }> = [];
+        const scoped: Array<{ type: "PaymentRequestsAdmin"; id: string }> =
+          [];
         if (args?.user_id)
           scoped.push({
             type: "PaymentRequestsAdmin",
@@ -79,7 +85,10 @@ export const paymentRequestsAdminApi = baseApi.injectEndpoints({
 
     updatePaymentRequestAdmin: b.mutation<
       PaymentRequestAdmin,
-      { id: string; body: Partial<Pick<PaymentRequestAdmin, "status" | "admin_note">> }
+      {
+        id: string;
+        body: Partial<Pick<PaymentRequestAdmin, "status" | "admin_note">>;
+      }
     >({
       query: ({ id, body }) => ({
         url: `/admin/payment_requests/${id}`,
@@ -96,7 +105,11 @@ export const paymentRequestsAdminApi = baseApi.injectEndpoints({
 
     setPaymentRequestStatusAdmin: b.mutation<
       PaymentRequestAdmin,
-      { id: string; status: PaymentRequestAdmin["status"]; admin_note?: string | null }
+      {
+        id: string;
+        status: PaymentRequestAdmin["status"];
+        admin_note?: string | null;
+      }
     >({
       query: ({ id, status, admin_note }) => ({
         url: `/admin/payment_requests/${id}/status`,

@@ -41,8 +41,8 @@ import {
 import { Plus, Save, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-import type { TopbarSetting } from "@/integrations/metahub/db/types/topbar";
-import type { Coupon } from "@/integrations/metahub/db/types/coupon";
+import type { TopbarSetting } from "@/integrations/metahub/rtk/types/topbar";
+import type { Coupon } from "@/integrations/metahub/rtk/types/coupon";
 
 import {
   useListTopbarAdminQuery,

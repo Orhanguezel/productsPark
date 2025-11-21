@@ -1,8 +1,15 @@
-import { baseApi } from "../../baseApi";
-import type { ApiTicketReply, TicketReply } from "../../../db/types/support";
+// =============================================================
+// FILE: src/integrations/metahub/rtk/endpoints/admin/ticket_replies_admin.endpoints.ts
+// =============================================================
 
-const asStr = (x: unknown) => (typeof x === "string" ? x : String(x ?? ""));
-const isTrue = (v: unknown) => v === true || v === 1 || v === "1" || v === "true";
+import { baseApi } from "../../baseApi";
+import type { ApiTicketReply, TicketReply } from "../../types/support";
+
+const asStr = (x: unknown): string =>
+  typeof x === "string" ? x : String(x ?? "");
+
+const isTrue = (v: unknown): boolean =>
+  v === true || v === 1 || v === "1" || v === "true";
 
 const normalizeReply = (r: ApiTicketReply): TicketReply => ({
   id: asStr(r.id),
@@ -15,13 +22,21 @@ const normalizeReply = (r: ApiTicketReply): TicketReply => ({
 
 export const ticketRepliesAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
+    /** GET /admin/ticket_replies/by-ticket/:ticketId */
     listTicketRepliesAdmin: b.query<TicketReply[], string>({
-      query: (ticketId) => ({ url: `/admin/ticket_replies/by-ticket/${ticketId}` }),
+      query: (ticketId) => ({
+        url: `/admin/ticket_replies/by-ticket/${ticketId}`,
+      }),
       transformResponse: (res: unknown): TicketReply[] =>
-        Array.isArray(res) ? (res as ApiTicketReply[]).map(normalizeReply) : [],
-      providesTags: (_r, _e, ticketId) => [{ type: "TicketReplies", id: `TICKET_${ticketId}` }],
+        Array.isArray(res)
+          ? (res as ApiTicketReply[]).map(normalizeReply)
+          : [],
+      providesTags: (_r, _e, ticketId) => [
+        { type: "TicketReplies", id: `TICKET_${ticketId}` },
+      ],
     }),
 
+    /** POST /admin/ticket_replies */
     createTicketReplyAdmin: b.mutation<
       TicketReply,
       { ticket_id: string; user_id?: string | null; message: string }
@@ -29,14 +44,22 @@ export const ticketRepliesAdminApi = baseApi.injectEndpoints({
       query: (body) => ({
         url: `/admin/ticket_replies`,
         method: "POST",
-        body, // BE admin hep is_admin = true yapıyor
+        body, // BE tarafı admin için is_admin = true ayarlıyor
       }),
-      transformResponse: (res: unknown): TicketReply => normalizeReply(res as ApiTicketReply),
-      invalidatesTags: (_r, _e, arg) => [{ type: "TicketReplies", id: `TICKET_${arg.ticket_id}` }],
+      transformResponse: (res: unknown): TicketReply =>
+        normalizeReply(res as ApiTicketReply),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "TicketReplies", id: `TICKET_${arg.ticket_id}` },
+        { type: "SupportTickets", id: "LIST" }, // admin ticket listesi de refetch olsun
+      ],
     }),
 
+    /** DELETE /admin/ticket_replies/:id */
     deleteTicketReplyAdmin: b.mutation<{ ok: true }, string>({
-      query: (id) => ({ url: `/admin/ticket_replies/${id}`, method: "DELETE" }),
+      query: (id) => ({
+        url: `/admin/ticket_replies/${id}`,
+        method: "DELETE",
+      }),
       transformResponse: () => ({ ok: true as const }),
       invalidatesTags: [{ type: "SupportTickets", id: "LIST" }],
     }),

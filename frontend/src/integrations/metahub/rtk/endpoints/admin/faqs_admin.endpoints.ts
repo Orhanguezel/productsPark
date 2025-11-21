@@ -2,7 +2,7 @@
 // FILE: src/integrations/metahub/rtk/endpoints/admin/faqs_admin.endpoints.ts
 // ---------------------------------------------------------------------
 import { baseApi } from "../../baseApi";
-import type { Faq, FaqListParams } from "@/integrations/metahub/db/types/faqs";
+import type { Faq, FaqListParams } from "@/integrations/metahub/rtk/types/faqs";
 
 export type UpsertFaqInput = {
   question: string;
@@ -47,18 +47,18 @@ export const faqsAdminApi = baseApi.injectEndpoints({
       query: (p) =>
         p
           ? {
-              url: "/admin/faqs",
-              params: toAdminQuery(p) as Record<string, unknown>,
-            }
+            url: "/admin/faqs",
+            params: toAdminQuery(p) as Record<string, unknown>,
+          }
           : {
-              url: "/admin/faqs",
-            },
+            url: "/admin/faqs",
+          },
       providesTags: (res) =>
         res && res.length
           ? [
-              ...res.map((row) => ({ type: "Faqs" as const, id: row.id })),
-              { type: "Faqs" as const, id: "LIST" },
-            ]
+            ...res.map((row) => ({ type: "Faqs" as const, id: row.id })),
+            { type: "Faqs" as const, id: "LIST" },
+          ]
           : [{ type: "Faqs" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -97,13 +97,13 @@ export const faqsAdminApi = baseApi.injectEndpoints({
       invalidatesTags: (res, _e, arg) =>
         res?.id
           ? [
-              { type: "Faqs" as const, id: res.id },
-              { type: "Faqs" as const, id: "LIST" },
-            ]
+            { type: "Faqs" as const, id: res.id },
+            { type: "Faqs" as const, id: "LIST" },
+          ]
           : [
-              { type: "Faqs" as const, id: arg.id },
-              { type: "Faqs" as const, id: "LIST" },
-            ],
+            { type: "Faqs" as const, id: arg.id },
+            { type: "Faqs" as const, id: "LIST" },
+          ],
     }),
 
     // DELETE /admin/faqs/:id

@@ -1,14 +1,11 @@
-// src/integrations/metahub/rtk/endpoints/ticket_replies.endpoints.ts
-
-import { baseApi} from "../baseApi";
-import type { ApiTicketReply, TicketReply } from "../../db/types/support";
-
-
+// =============================================================
+// FILE: src/integrations/metahub/rtk/endpoints/ticket_replies.endpoints.ts
+// =============================================================
+import { baseApi } from "../baseApi";
+import type { ApiTicketReply, TicketReply } from "../types/support";
 
 const isTrue = (v: unknown) =>
   v === true || v === 1 || v === "1" || v === "true";
-
-
 
 const normalizeReply = (r: ApiTicketReply): TicketReply => ({
   id: String(r.id),
@@ -21,18 +18,26 @@ const normalizeReply = (r: ApiTicketReply): TicketReply => ({
 
 export const ticketRepliesApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
-
     listTicketRepliesByTicket: b.query<TicketReply[], string>({
       query: (ticketId) => ({ url: `/ticket_replies/by-ticket/${ticketId}` }),
       transformResponse: (res: unknown): TicketReply[] =>
-        Array.isArray(res) ? (res as ApiTicketReply[]).map(normalizeReply) : [],
-      providesTags: (_r, _e, ticketId) => [{ type: "TicketReplies", id: `TICKET_${ticketId}` }],
+        Array.isArray(res)
+          ? (res as ApiTicketReply[]).map(normalizeReply)
+          : [],
+      providesTags: (_r, _e, ticketId) => [
+        { type: "TicketReplies", id: `TICKET_${ticketId}` },
+      ],
     }),
 
     /** Yeni yanıt oluştur (kullanıcı veya admin) */
     createTicketReply: b.mutation<
       TicketReply,
-      { ticket_id: string; user_id?: string | null; message: string; is_admin?: boolean }
+      {
+        ticket_id: string;
+        user_id?: string | null;
+        message: string;
+        is_admin?: boolean;
+      }
     >({
       query: (body) => ({
         url: `/ticket_replies`,
@@ -49,8 +54,12 @@ export const ticketRepliesApi = baseApi.injectEndpoints({
             : {}),
         },
       }),
-      transformResponse: (res: unknown): TicketReply => normalizeReply(res as ApiTicketReply),
-      invalidatesTags: (_r, _e, arg) => [{ type: "TicketReplies", id: `TICKET_${arg.ticket_id}` }],
+      transformResponse: (res: unknown): TicketReply =>
+        normalizeReply(res as ApiTicketReply),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "TicketReplies", id: `TICKET_${arg.ticket_id}` },
+        { type: "SupportTickets", id: "LIST" }, // 👈 public ticket listesi de yenilensin
+      ],
     }),
   }),
   overrideExisting: true,

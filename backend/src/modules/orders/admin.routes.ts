@@ -15,6 +15,7 @@ import {
   listOrderTimelineAdmin,
   addOrderNoteAdmin,
   deleteOrderAdmin,
+  listAllOrderItemsAdmin,
 } from "./admin.controller";
 
 const BASE = "/admin/orders";
@@ -26,6 +27,7 @@ export async function registerAdminOrders(app: FastifyInstance) {
   app.get(`${BASE}`, guard, listOrdersAdmin);
   app.get(`${BASE}/:id`, guard, getOrderAdminById);
   app.get(`${BASE}/:id/items`, guard, listOrderItemsAdmin);
+  app.get(`${BASE}/items`, guard, listAllOrderItemsAdmin);
 
   app.patch(`${BASE}/:id/status`, guard, updateOrderStatusAdmin);
   app.post(`${BASE}/:id/cancel`, guard, cancelOrderAdmin);

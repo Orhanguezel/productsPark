@@ -8,7 +8,7 @@ import type {
   UpsertTopbarBody,
   ApiTopbarAdminRow,
   BoolLike,
-} from "@/integrations/metahub/db/types/topbar";
+} from "@/integrations/metahub/rtk/types/topbar";
 
 const toBool = (v: unknown): boolean =>
   v === true || v === 1 || v === "1" || v === "true";
@@ -85,9 +85,9 @@ export const topbarAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((i) => ({ type: "TopbarSettings" as const, id: i.id })),
-              { type: "TopbarSettings" as const, id: "LIST" },
-            ]
+            ...result.map((i) => ({ type: "TopbarSettings" as const, id: i.id })),
+            { type: "TopbarSettings" as const, id: "LIST" },
+          ]
           : [{ type: "TopbarSettings" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

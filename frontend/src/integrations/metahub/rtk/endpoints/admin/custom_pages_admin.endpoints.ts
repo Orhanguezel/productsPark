@@ -6,7 +6,7 @@ import type { FetchArgs } from "@reduxjs/toolkit/query";
 import type {
   CustomPageView,
   UpsertCustomPageBody,
-} from "../../../db/types/customPages";
+} from "../../types/customPages";
 
 /* ---------- type guards ---------- */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -163,9 +163,9 @@ export const customPagesAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "CustomPages" as const, id: p.id })),
-              { type: "CustomPages" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "CustomPages" as const, id: p.id })),
+            { type: "CustomPages" as const, id: "LIST" },
+          ]
           : [{ type: "CustomPages" as const, id: "LIST" }],
     }),
 

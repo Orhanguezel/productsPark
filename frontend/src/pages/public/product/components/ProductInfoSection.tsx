@@ -93,16 +93,15 @@ const ProductInfoSection = ({
             {[...Array(5)].map((_, i) => (
               <Star
                 key={i}
-                className={`w-5 h-5 ${
-                  i < product.rating
+                className={`w-5 h-5 ${i < product.rating
                     ? "fill-yellow-400 text-yellow-400"
                     : "text-gray-300"
-                }`}
+                  }`}
               />
             ))}
           </div>
           <span className="text-sm text-muted-foreground">
-            ({product.review_count} Değerlendirme)
+            ({product.review_count} Satış)
           </span>
         </div>
       </div>
@@ -125,7 +124,7 @@ const ProductInfoSection = ({
             {Math.round(
               ((product.original_price - product.price) /
                 product.original_price) *
-                100
+              100
             )}{" "}
             İndirim
           </Badge>
@@ -223,8 +222,8 @@ const ProductInfoSection = ({
                       field.type === "text"
                         ? 130
                         : field.type === "phone"
-                        ? 15
-                        : undefined
+                          ? 15
+                          : undefined
                     }
                   />
                 ) : (

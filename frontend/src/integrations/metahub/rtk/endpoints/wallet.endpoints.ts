@@ -12,7 +12,7 @@ import type {
   ApiWalletTransaction,
   WalletTransaction,
   ListTxnParams,
-} from "@/integrations/metahub/db/types/wallet";
+} from "@/integrations/metahub/rtk/types/wallet";
 
 /* ---------------- helpers ---------------- */
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -114,9 +114,9 @@ export const walletApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((r) => ({ type: "WalletDepositRequests" as const, id: r.id })),
-              { type: "WalletDepositRequests" as const, id: "LIST" },
-            ]
+            ...result.map((r) => ({ type: "WalletDepositRequests" as const, id: r.id })),
+            { type: "WalletDepositRequests" as const, id: "LIST" },
+          ]
           : [{ type: "WalletDepositRequests" as const, id: "LIST" }],
       keepUnusedDataFor: 30,
     }),
@@ -171,9 +171,9 @@ export const walletApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((t) => ({ type: "WalletTransactions" as const, id: t.id })),
-              { type: "WalletTransactions" as const, id: "LIST" },
-            ]
+            ...result.map((t) => ({ type: "WalletTransactions" as const, id: t.id })),
+            { type: "WalletTransactions" as const, id: "LIST" },
+          ]
           : [{ type: "WalletTransactions" as const, id: "LIST" }],
       keepUnusedDataFor: 30,
     }),
@@ -209,9 +209,9 @@ export const walletApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((t) => ({ type: "WalletTransactions" as const, id: t.id })),
-              { type: "WalletTransactions" as const, id: "LIST" },
-            ]
+            ...result.map((t) => ({ type: "WalletTransactions" as const, id: t.id })),
+            { type: "WalletTransactions" as const, id: "LIST" },
+          ]
           : [{ type: "WalletTransactions" as const, id: "LIST" }],
       keepUnusedDataFor: 30,
     }),

@@ -8,7 +8,7 @@ import type {
   BlogPost,
   ListParams,
   UpsertBlogBody,
-} from "../../../db/types/blog";
+} from "../../types/blog";
 
 // ---------- helpers ----------
 const toNumber = (x: unknown): number => {
@@ -35,8 +35,8 @@ const toQueryParams = (params?: ListParams): QueryParams => {
       params.is_published === true
         ? 1
         : params.is_published === false
-        ? 0
-        : params.is_published;
+          ? 0
+          : params.is_published;
   }
   if (typeof params.limit === "number") qp.limit = params.limit;
   if (typeof params.offset === "number") qp.offset = params.offset;
@@ -94,9 +94,9 @@ export const blogAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "BlogPosts" as const, id: p.id })),
-              { type: "BlogPosts" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "BlogPosts" as const, id: p.id })),
+            { type: "BlogPosts" as const, id: "LIST" },
+          ]
           : [{ type: "BlogPosts" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -154,11 +154,11 @@ export const blogAdminApi = baseApi.injectEndpoints({
 
     togglePublishBlogPostAdmin: b.mutation<BlogPost, { id: string; is_published: boolean }>({
       query: ({ id, is_published }) =>
-        ({
-          url: `${BASE}/${id}/publish`,
-          method: "PATCH",
-          body: { is_published },
-        } as FetchArgs),
+      ({
+        url: `${BASE}/${id}/publish`,
+        method: "PATCH",
+        body: { is_published },
+      } as FetchArgs),
       transformResponse: (res: unknown): BlogPost =>
         normalizeBlogPost(res as ApiBlogPost),
       invalidatesTags: (_r, _e, arg) => [

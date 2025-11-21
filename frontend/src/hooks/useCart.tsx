@@ -1,6 +1,8 @@
-// src/hooks/useCart.ts
+// =============================================================
+// FILE: src/hooks/useCart.ts
+// =============================================================
+
 import { useEffect, useState, useCallback } from "react";
-import { metahub } from "@/integrations/metahub/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useListCartItemsQuery,
@@ -8,32 +10,6 @@ import {
 } from "@/integrations/metahub/rtk/endpoints/cart_items.endpoints";
 
 type GuestCartItem = { quantity?: number };
-
-// Realtime tipi (opsiyonel — mevcutsa kullanılır)
-type PostgresEvent = "*" | "INSERT" | "UPDATE" | "DELETE";
-type PostgresFilter = {
-  event: PostgresEvent;
-  schema: string;
-  table: string;
-  filter?: string;
-};
-
-interface RealtimeChannel {
-  on: (
-    event: "postgres_changes",
-    filter: PostgresFilter,
-    cb: () => void
-  ) => RealtimeChannel;
-  subscribe: () => unknown;
-}
-interface RealtimeClient {
-  channel: (name: string) => RealtimeChannel;
-  removeChannel: (ch: unknown) => void;
-}
-
-const isRealtimeClient = (x: unknown): x is RealtimeClient =>
-  typeof (x as { channel?: unknown }).channel === "function" &&
-  typeof (x as { removeChannel?: unknown }).removeChannel === "function";
 
 const isGuestCartArray = (x: unknown): x is GuestCartItem[] =>
   Array.isArray(x) &&
@@ -48,7 +24,7 @@ export const useCart = () => {
 
   const [cartCount, setCartCount] = useState(0);
 
-  // 🔹 RTK: Kullanıcıya ait cart_items (products ile birlikte)
+  // 🔹 RTK: Kullanıcıya ait cart_items (products join ile)
   const {
     data: userCartItems = [],
     isLoading: rtkLoading,
@@ -59,22 +35,29 @@ export const useCart = () => {
       with: "products",
     },
     {
-      skip: !user?.id, // misafir kullanıcıda request atma
-    }
+      // misafir kullanıcıda request atma
+      skip: !user?.id,
+    },
   );
 
   const fetchGuestCartCount = useCallback(() => {
     try {
-      const raw = localStorage.getItem("guestCart");
+      if (typeof window === "undefined") {
+        setCartCount(0);
+        return;
+      }
+
+      const raw = window.localStorage.getItem("guestCart");
       if (!raw) {
         setCartCount(0);
         return;
       }
+
       const parsed: unknown = JSON.parse(raw);
       const guestCart = isGuestCartArray(parsed) ? parsed : [];
       const total = guestCart.reduce<number>(
         (sum, it) => sum + (Number(it.quantity ?? 1) || 1),
-        0
+        0,
       );
       setCartCount(total);
     } catch (err) {
@@ -86,9 +69,11 @@ export const useCart = () => {
   // 🔹 Dışarıya expose edeceğimiz refetch
   const fetchCartCount = useCallback(async () => {
     if (!user?.id) {
+      // misafir
       fetchGuestCartCount();
       return;
     }
+    // auth user: RTK query'i refetch et
     await rtkRefetch();
   }, [user?.id, fetchGuestCartCount, rtkRefetch]);
 
@@ -106,6 +91,7 @@ export const useCart = () => {
       const opts = item.products?.quantity_options;
       const hasQuantityOptions = Array.isArray(opts) && opts.length > 0;
       const q = Number(item.quantity ?? 0);
+
       // quantity_options varsa her satırı 1 ürün gibi sayıyoruz
       return sum + (hasQuantityOptions ? 1 : q);
     }, 0);
@@ -113,50 +99,22 @@ export const useCart = () => {
     setCartCount(total);
   }, [user?.id, userCartItems, fetchGuestCartCount]);
 
-  // 🔹 Realtime + guestCartUpdated event
+  // 🔹 guestCartUpdated event ile misafir sepetini reaktif yap
   useEffect(() => {
-    if (user?.id) {
-      // İlk mount'ta RTK zaten request atıyor, biz sadece realtime kuruyoruz
-      let ch: RealtimeChannel | null = null;
-
-      if (isRealtimeClient(metahub)) {
-        ch = metahub
-          .channel("cart-changes")
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "cart_items",
-              filter: `user_id=eq.${user.id}`,
-            },
-            () => {
-              // DB tarafında değişiklik olunca RTK query'i tazele
-              fetchCartCount();
-            }
-          );
-        ch.subscribe();
-      }
-
-      return () => {
-        if (ch && isRealtimeClient(metahub)) {
-          try {
-            metahub.removeChannel(ch);
-          } catch (e) {
-            console.warn("removeChannel failed:", e);
-          }
-        }
-      };
-    } else {
-      // Misafir sepeti: custom event ile güncelle
+    if (!user?.id && typeof window !== "undefined") {
       fetchGuestCartCount();
 
       const onGuestCartUpdate = () => fetchGuestCartCount();
       window.addEventListener("guestCartUpdated", onGuestCartUpdate);
-      return () =>
+
+      return () => {
         window.removeEventListener("guestCartUpdated", onGuestCartUpdate);
+      };
     }
-  }, [user?.id, fetchCartCount, fetchGuestCartCount]);
+
+    // user varsa ekstra event’e gerek yok; RTK invalidation ile güncelleniyor
+    return;
+  }, [user?.id, fetchGuestCartCount]);
 
   // 🔹 loading: auth ise RTK loading, misafir ise direkt false
   const loading = user?.id ? rtkLoading : false;

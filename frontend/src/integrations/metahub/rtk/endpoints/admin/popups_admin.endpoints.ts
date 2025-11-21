@@ -7,7 +7,7 @@ import type {
   PopupAdminView,
   UnknownRow,
   DisplayFrequency,
-} from "../../../db/types/popup";
+} from "../../types/popup";
 
 // ---------- helpers ----------
 const str = (v: unknown): string =>
@@ -118,9 +118,9 @@ export const popupsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "Popups" as const, id: p.id })),
-              { type: "Popups" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "Popups" as const, id: p.id })),
+            { type: "Popups" as const, id: "LIST" },
+          ]
           : [{ type: "Popups" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -171,7 +171,7 @@ export const popupsAdminApi = baseApi.injectEndpoints({
               }
             )
           );
-        } catch {/* no-op */}
+        } catch {/* no-op */ }
       },
     }),
 

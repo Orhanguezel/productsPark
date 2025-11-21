@@ -8,7 +8,7 @@ import type {
   PublicApiCartItemProduct,
   PublicCartItem,
   PublicApiCartItem,
-} from "@/integrations/metahub/db/types/cart";
+} from "@/integrations/metahub/rtk/types/cart";
 
 /* utils */
 const toFiniteNumber = (x: unknown): number => {
@@ -49,8 +49,8 @@ const normalizeProduct = (
     typeof p.custom_fields === "string"
       ? tryJson<ReadonlyArray<Record<string, unknown>>>(p.custom_fields)
       : Array.isArray(p.custom_fields)
-      ? p.custom_fields
-      : null;
+        ? p.custom_fields
+        : null;
 
   return {
     id: p.id,
@@ -72,9 +72,9 @@ const normalizeProduct = (
     category_id: p.category_id ?? null,
     categories: p.categories
       ? {
-          id: p.categories.id ?? "",
-          name: p.categories.name ?? "",
-        }
+        id: p.categories.id ?? "",
+        name: p.categories.name ?? "",
+      }
       : null,
   };
 };
@@ -114,12 +114,12 @@ export const cartItemsApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((i) => ({
-                type: "CartItem" as const,
-                id: i.id,
-              })),
-              { type: "CartItems" as const, id: "LIST" },
-            ]
+            ...result.map((i) => ({
+              type: "CartItem" as const,
+              id: i.id,
+            })),
+            { type: "CartItems" as const, id: "LIST" },
+          ]
           : [{ type: "CartItems" as const, id: "LIST" }],
     }),
 
@@ -150,9 +150,9 @@ export const cartItemsApi = baseApi.injectEndpoints({
       invalidatesTags: (result) =>
         result
           ? [
-              { type: "CartItem" as const, id: result.id },
-              { type: "CartItems" as const, id: "LIST" },
-            ]
+            { type: "CartItem" as const, id: result.id },
+            { type: "CartItems" as const, id: "LIST" },
+          ]
           : [{ type: "CartItems" as const, id: "LIST" }],
     }),
 

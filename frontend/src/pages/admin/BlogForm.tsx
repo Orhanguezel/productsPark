@@ -8,7 +8,7 @@ import {
   useUpdateBlogPostAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/blog_admin.endpoints";
 import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
-import type { UpsertBlogBody } from "@/integrations/metahub/db/types/blog";
+import type { UpsertBlogBody } from "@/integrations/metahub/rtk/types/blog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -552,8 +552,8 @@ export default function BlogForm() {
                     {loading
                       ? "Kaydediliyor..."
                       : isEdit
-                      ? "Güncelle"
-                      : "Oluştur"}
+                        ? "Güncelle"
+                        : "Oluştur"}
                   </Button>
                 </div>
               </form>

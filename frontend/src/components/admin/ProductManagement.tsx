@@ -50,7 +50,7 @@ import type {
   CategoryRow,
   UpsertProductBody,
   PatchProductBody,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 type FormState = {
   name: string;
@@ -64,7 +64,7 @@ type FormState = {
   description: string;
   is_active: boolean;
   show_on_homepage: boolean;
-  review_count: number;
+  review_count: number; // 🔹 Artık: Yorum/Satış sayısı
 };
 
 const initialFormState: FormState = {
@@ -133,7 +133,7 @@ export const ProductManagement = () => {
         description: formData.description || null,
         is_active: !!formData.is_active,
         show_on_homepage: !!formData.show_on_homepage,
-        review_count: Number(formData.review_count ?? 0),
+        review_count: Number(formData.review_count ?? 0), // 🔹 yorum sayısı
       };
 
       if (editingProduct) {
@@ -317,7 +317,9 @@ export const ProductManagement = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="review_count">Satış Sayısı</Label>
+                  <Label htmlFor="review_count">
+                    Yorum / Satış Sayısı
+                  </Label>
                   <Input
                     id="review_count"
                     type="number"
@@ -385,22 +387,22 @@ export const ProductManagement = () => {
                 (c: CategoryRow) =>
                   c.id === formData.category_id && !!(c as any).is_featured
               ) && (
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="show_on_homepage"
-                    checked={formData.show_on_homepage}
-                    onCheckedChange={(checked) =>
-                      setFormData({
-                        ...formData,
-                        show_on_homepage: checked,
-                      })
-                    }
-                  />
-                  <Label htmlFor="show_on_homepage">
-                    Bu Ürünü Anasayfada Göster (Kategori öne çıkan)
-                  </Label>
-                </div>
-              )}
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="show_on_homepage"
+                      checked={formData.show_on_homepage}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          show_on_homepage: checked,
+                        })
+                      }
+                    />
+                    <Label htmlFor="show_on_homepage">
+                      Bu Ürünü Anasayfada Göster (Kategori öne çıkan)
+                    </Label>
+                  </div>
+                )}
               <div className="flex gap-2 justify-end">
                 <Button
                   type="button"

@@ -7,7 +7,7 @@ import type {
 } from "@reduxjs/toolkit/query";
 import { metahubTags } from "./tags";
 import { tokenStore } from "@/integrations/metahub/core/token";
-import { BASE_URL as DB_BASE_URL } from "@/integrations/metahub/db/from/constants";
+import { BASE_URL as DB_BASE_URL } from "@/integrations/metahub/rtk/constants";
 
 /** ---------- Base URL resolve ---------- */
 function trimSlash(x: string) { return x.replace(/\/+$/, ""); }

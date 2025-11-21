@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import UsedStockList from "./UsedStockList";
-import type { ProductAdmin } from "@/integrations/metahub/db/types/products";
+import type { ProductAdmin } from "@/integrations/metahub/rtk/types/products";
 
 // ProductForm ile aynı tip:
 export type ApiProvider = { id: string; name: string };

@@ -17,7 +17,7 @@ export const rpcApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     callRpc: b.mutation<{ result: unknown }, { name: string; args?: unknown }>({
       query: ({ name, args }) => ({
-        url: `/rest/v1/rpc/${encodeURIComponent(name)}`,
+        url: `/rest/rpc/${encodeURIComponent(name)}`,
         method: "POST",
         body: args ?? {},
       }),

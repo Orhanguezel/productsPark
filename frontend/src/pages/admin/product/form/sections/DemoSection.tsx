@@ -7,7 +7,7 @@ import React, { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import type { ProductAdmin } from "@/integrations/metahub/db/types/products";
+import type { ProductAdmin } from "@/integrations/metahub/rtk/types/products";
 
 type Props = {
   formData: Partial<ProductAdmin>;

@@ -1,9 +1,39 @@
+// =============================================================
+// FILE: src/modules/functions/functions.controller.ts
+// =============================================================
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { sendMailRaw } from "@/modules/mail/service";
 
-/** Shopier — FE beklediği shape: { success, form_action, form_data } */
+/* -------------------- küçük yardımcılar -------------------- */
+
+function getBaseUrl(req: FastifyRequest): string {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const hostHeader = req.headers.host;
+
+  const proto =
+    (typeof forwardedProto === "string" && forwardedProto.length > 0
+      ? forwardedProto
+      : req.protocol) || "http";
+
+  const hostSource =
+    (typeof forwardedHost === "string" && forwardedHost.length > 0
+      ? forwardedHost
+      : hostHeader) || "localhost:8081";
+
+  const host = Array.isArray(hostSource) ? hostSource[0] : hostSource;
+
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
+/* ==================================================================
+   SHOPIER
+   FE beklediği shape: { success, form_action, form_data }
+   ================================================================== */
+
 export async function shopierCreatePayment(
   _req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   const oid = `SHP_${Date.now()}`;
   // Stub veriler
@@ -18,7 +48,7 @@ export async function shopierCreatePayment(
 
 export async function shopierCallback(
   _req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   return reply.send({ success: true });
 }
@@ -27,31 +57,118 @@ export async function shopierCallback(
    EMAIL SERVİSLERİ
    ================================================================== */
 
-import { sendMailRaw } from "@/modules/mail/service";
-
 type SendEmailBody = {
   to?: string;
+
+  // klasik
   subject?: string;
   html?: string;
   text?: string;
+
+  // template tabanlı
+  template_key?: string;
+  variables?: Record<string, unknown>;
 };
 
+/** Basit template motoru:
+ *  - Şimdilik sadece "order_received" için özel metin,
+ *  - Diğer template_key’ler için generic fallback.
+ */
+function buildTemplatedEmail(
+  template_key: string,
+  variables: Record<string, unknown> | undefined,
+): { subject?: string; html?: string; text?: string } {
+  const v = (variables || {}) as Record<string, unknown>;
+
+  if (template_key === "order_received") {
+    const customer_name =
+      (v.customer_name as string | undefined) ?? "Müşteri";
+    const order_number =
+      (v.order_number as string | undefined) ?? "—";
+    const final_amount =
+      (v.final_amount as string | number | undefined) ?? "0.00";
+    const status = (v.status as string | undefined) ?? "İşleniyor";
+    const site_name =
+      (v.site_name as string | undefined) ?? "Platform";
+
+    const subject = `${site_name} – Siparişiniz alındı (#${order_number})`;
+
+    const html = `
+      <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
+        <h2 style="font-size:18px;margin-bottom:8px;">Merhaba ${customer_name},</h2>
+        <p style="margin:0 0 12px 0;">
+          #${order_number} numaralı siparişiniz başarıyla alındı.
+        </p>
+        <p style="margin:0 0 8px 0;">
+          Sipariş tutarı: <strong>${final_amount}</strong><br/>
+          Durum: <strong>${status}</strong>
+        </p>
+        <p style="margin-top:16px;">
+          En kısa sürede işleme alınacaktır.<br/>
+          <strong>${site_name} Ekibi</strong>
+        </p>
+      </div>
+    `;
+
+    const text = [
+      `Merhaba ${customer_name},`,
+      "",
+      `#${order_number} numaralı siparişiniz başarıyla alındı.`,
+      `Tutar: ${final_amount}`,
+      `Durum: ${status}`,
+      "",
+      `En kısa sürede işleme alınacaktır.`,
+      `${site_name} Ekibi`,
+    ].join("\n");
+
+    return { subject, html, text };
+  }
+
+  // Diğer template’ler için generic fallback
+  const subject = template_key;
+  const text = `Template: ${template_key}\n\n${JSON.stringify(
+    variables ?? {},
+    null,
+    2,
+  )}`;
+  const html = `<pre>${text}</pre>`;
+  return { subject, html, text };
+}
+
 /** Genel amaçlı e-posta gönderimi
- *  - Body: { to, subject, html?, text? }
+ *  - Body:
+ *     - klasik: { to, subject, html?, text? }
+ *     - template: { to, template_key, variables }
  *  - SMTP / from bilgisi mail servisinden (site_settings) geliyor
  */
-export async function sendEmail(req: FastifyRequest, reply: FastifyReply) {
+export async function sendEmail(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
   const body = (req.body as SendEmailBody) || {};
-  const { to, subject, html, text } = body;
+  let { to, subject, html, text, template_key, variables } = body;
 
-  if (!to || !subject) {
+  if (!to) {
     return reply
       .code(400)
-      .send({ success: false, error: "missing_to_or_subject" });
+      .send({ success: false, error: "missing_to" });
+  }
+
+  // Template tabanlı istek:
+  if (template_key) {
+    const tpl = buildTemplatedEmail(template_key, variables);
+    subject = subject || tpl.subject;
+    html = html || tpl.html;
+    text = text || tpl.text;
+  }
+
+  if (!subject) {
+    return reply
+      .code(400)
+      .send({ success: false, error: "missing_subject" });
   }
 
   try {
-    // HTML yoksa text’i kullan, text yoksa HTML’den kaba plain-text üret
     const plain =
       text ||
       (html
@@ -65,10 +182,13 @@ export async function sendEmail(req: FastifyRequest, reply: FastifyReply) {
       text: plain,
     });
 
-    req.log.info({ to, subject }, "send-email success");
+    req.log.info({ to, subject, template_key }, "send-email success");
     return reply.send({ success: true });
   } catch (err) {
-    req.log.error({ err, to, subject }, "send-email failed");
+    req.log.error(
+      { err, to, subject, template_key },
+      "send-email failed",
+    );
     return reply
       .code(500)
       .send({ success: false, error: "send_email_failed" });
@@ -85,11 +205,10 @@ type ManualDeliveryEmailBody = {
 
 /** Manuel teslimat maili
  *  - Body: { to, customer_name?, order_number?, delivery_content, site_name? }
- *  - SMTP ayarları + from bilgisi yine mail servisinden geliyor
  */
 export async function manualDeliveryEmail(
   req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   const body = (req.body as ManualDeliveryEmailBody) || {};
   const { to, customer_name, order_number, delivery_content, site_name } =
@@ -98,7 +217,10 @@ export async function manualDeliveryEmail(
   if (!to || !delivery_content) {
     return reply
       .code(400)
-      .send({ success: false, error: "missing_to_or_delivery_content" });
+      .send({
+        success: false,
+        error: "missing_to_or_delivery_content",
+      });
   }
 
   const safeSiteName = site_name || "Dijital Market";
@@ -107,6 +229,14 @@ export async function manualDeliveryEmail(
   const subject = order_number
     ? `${safeSiteName} – Sipariş Teslimatı (#${order_number})`
     : `${safeSiteName} – Sipariş Teslimatı`;
+
+  const escapedContent = delivery_content
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .replace(/\n/g, "<br/>");
 
   const html = `
     <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
@@ -117,13 +247,7 @@ export async function manualDeliveryEmail(
           : `<p style="margin:0 0 12px 0;">Siparişinizin teslimat detayları aşağıdadır:</p>`
       }
       <div style="margin:16px 0;padding:12px;border-radius:8px;background:#f9fafb;white-space:pre-wrap;">
-        ${delivery_content
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;")
-          .replace(/\n/g, "<br/>")}
+        ${escapedContent}
       </div>
       <p style="margin-top:16px;">
         İyi günlerde kullanmanız dileğiyle,<br/>
@@ -139,7 +263,7 @@ export async function manualDeliveryEmail(
       ? `#${order_number} numaralı siparişinizin teslimat detayları aşağıdadır:`
       : `Siparişinizin teslimat detayları aşağıdadır:`,
     "",
-    delivery_content || "",
+    delivery_content,
     "",
     `İyi günlerde kullanmanız dileğiyle,`,
     `${safeSiteName} Ekibi`,
@@ -155,32 +279,41 @@ export async function manualDeliveryEmail(
 
     req.log.info(
       { to, order_number },
-      "manual-delivery-email sent successfully"
+      "manual-delivery-email sent successfully",
     );
     return reply.send({ success: true });
   } catch (err) {
-    req.log.error({ err, to, order_number }, "manual-delivery-email failed");
+    req.log.error(
+      { err, to, order_number },
+      "manual-delivery-email failed",
+    );
     return reply
       .code(500)
-      .send({ success: false, error: "manual_delivery_email_failed" });
+      .send({
+        success: false,
+        error: "manual_delivery_email_failed",
+      });
   }
 }
+
+/* ==================================================================
+   TELEGRAM / SMM / TURKPIN STUB’LARI
+   ================================================================== */
 
 /** Telegram — sade başarı cevabı (şimdilik stub) */
 export async function sendTelegramNotification(
   req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
-  const { chat_id, text } =
-    (req.body as { chat_id?: string; text?: string }) || {};
-  req.log.info({ chat_id, text }, "telegram stub");
+  const body = (req.body as Record<string, unknown>) || {};
+  req.log.info(body, "telegram stub");
   return reply.send({ success: true });
 }
 
 /** SMM / Tedarikçi stub */
 export async function smmApiOrder(
   req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   req.log.info({ body: req.body }, "smm-api-order stub");
   return reply.send({
@@ -192,16 +325,61 @@ export async function smmApiOrder(
 
 export async function smmApiStatus(
   req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   req.log.info({ body: req.body }, "smm-api-status stub");
   return reply.send({ success: true, status: "completed" });
 }
 
-/** Turkpin stub */
+/** Turkpin stub — oyun listesi */
+export async function turkpinGameList(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const body = (req.body as Record<string, unknown>) || {};
+  req.log.info(body, "turkpin-game-list stub");
+
+  // Şimdilik boş liste dönüyoruz
+  return reply.send({
+    success: true,
+    games: [],
+  });
+}
+
+/** Turkpin stub — ürün listesi */
+export async function turkpinProductList(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const body = (req.body as Record<string, unknown>) || {};
+  req.log.info(body, "turkpin-product-list stub");
+
+  return reply.send({
+    success: true,
+    products: [],
+  });
+}
+
+/** Turkpin stub — bakiye */
+export async function turkpinBalance(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const body = (req.body as Record<string, unknown>) || {};
+  req.log.info(body, "turkpin-balance stub");
+
+  // FE tarafında BalanceResult tipine göre bunu daha sonra gerçek API'ye göre güncellersin
+  return reply.send({
+    success: true,
+    balance: 0,
+    currency: "TRY",
+  });
+}
+
+/** Turkpin stub — create order (zaten vardı, koruyoruz) */
 export async function turkpinCreateOrder(
   req: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   req.log.info({ body: req.body }, "turkpin-create-order stub");
   return reply.send({
@@ -209,4 +387,81 @@ export async function turkpinCreateOrder(
     order_id: `TP_${Date.now()}`,
     status: "ok",
   });
+}
+
+/* ==================================================================
+   Kullanıcı sipariş silme fonksiyonu (stub)
+   ================================================================== */
+
+type DeleteUserOrdersBody = {
+  email?: string;
+};
+
+export async function deleteUserOrders(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const body = (req.body as DeleteUserOrdersBody) || {};
+  const email = body.email?.trim();
+
+  if (!email) {
+    return reply
+      .code(400)
+      .send({ success: false, error: "missing_email" });
+  }
+
+  // Şimdilik sadece loglayıp stub cevabı dönüyoruz.
+  // İleride gerçek silme logic'i orders modülüne entegre edebilirsin.
+  req.log.info({ email }, "delete-user-orders stub");
+
+  return reply.send({
+    success: true,
+    message: `Orders for ${email} would be deleted (stub).`,
+  });
+}
+
+/* ==================================================================
+   Sitemap (XML) – /functions/sitemap
+   ================================================================== */
+
+export async function sitemap(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const base = getBaseUrl(req);
+
+  // Şimdilik statik birkaç URL; ileride products/categories’den dinamik üretebilirsin.
+  const urls: Array<{
+    path: string;
+    changefreq: "daily" | "weekly" | "monthly";
+    priority: number;
+  }> = [
+    { path: "/", changefreq: "daily", priority: 1.0 },
+    { path: "/urunler", changefreq: "daily", priority: 0.9 },
+    { path: "/kampanyalar", changefreq: "weekly", priority: 0.7 },
+    { path: "/hakkimizda", changefreq: "monthly", priority: 0.5 },
+    { path: "/iletisim", changefreq: "monthly", priority: 0.5 },
+  ];
+
+  const xmlBody =
+    urls
+      .map((u) => {
+        const loc = `${base}${u.path}`;
+        return [
+          "  <url>",
+          `    <loc>${loc}</loc>`,
+          `    <changefreq>${u.changefreq}</changefreq>`,
+          `    <priority>${u.priority.toFixed(1)}</priority>`,
+          "  </url>",
+        ].join("\n");
+      })
+      .join("\n") + "\n";
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
+${xmlBody}</urlset>`;
+
+  return reply
+    .type("application/xml; charset=utf-8")
+    .send(xml);
 }

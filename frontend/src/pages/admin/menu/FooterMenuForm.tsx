@@ -10,8 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import type { MenuItemAdmin } from "@/integrations/metahub/db/types/menu";
-import type { FooterSection } from "@/integrations/metahub/db/types/footer";
+import type { MenuItemAdmin } from "@/integrations/metahub/rtk/types/menu";
+import type { FooterSection } from "@/integrations/metahub/rtk/types/footer";
 import { availableIcons, type IconName } from "./icons";
 
 type Page = { id: string; title: string; slug: string };

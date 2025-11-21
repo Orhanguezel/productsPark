@@ -2,7 +2,7 @@
 // FILE: src/pages/public/components/ProductsHero.tsx
 // =============================================================
 import { Badge } from "@/components/ui/badge";
-import type { CategoryRow } from "@/integrations/metahub/db/types/categories";
+import type { CategoryRow } from "@/integrations/metahub/rtk/types/categories";
 
 type CategoryWithMeta = CategoryRow & {
   badges?: Array<{ text: string; active: boolean }>;

@@ -4,7 +4,7 @@
 // -------------------------------------------------------------
 import { baseApi } from "../baseApi";
 import type { FetchArgs } from "@reduxjs/toolkit/query";
-import type { ProductFaqRow } from "@/integrations/metahub/db/types/products";
+import type { ProductFaqRow } from "@/integrations/metahub/rtk/types/products";
 
 type ListFaqsParams = {
   product_id?: string;

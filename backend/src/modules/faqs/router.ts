@@ -1,3 +1,5 @@
+// src/modules/faqs/router.ts
+
 import type { FastifyInstance } from "fastify";
 import {
   listFaqsPublic,

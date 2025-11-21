@@ -9,13 +9,13 @@ import {
 
 export async function registerRpc(app: FastifyInstance) {
   app.post<{ Body: AssignItemsBody }>(
-    '/rest/v1/rpc/assign_stock_to_order',
+    '/rest/rpc/assign_stock_to_order',
     { preHandler: [requireAuth] },
     assignStockByItems,
   );
 
   app.post<{ Body: AssignOrderIdBody }>(
-    '/rest/v1/rpc/assign_stock_to_existing_order',
+    '/rest/rpc/assign_stock_to_existing_order',
     { preHandler: [requireAuth] },
     assignStockByOrderId,
   );

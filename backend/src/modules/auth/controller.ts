@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/modules/auth/controller.ts
+// FILE: src/modules/controller.ts
 // =============================================================
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import "@fastify/cookie";
@@ -33,6 +33,7 @@ import {
   notifications,
   type NotificationInsert,
 } from "@/modules/notifications/schema";
+import { z } from "zod";
 
 export type Role = "admin" | "moderator" | "user";
 
@@ -40,6 +41,7 @@ interface JWTPayload {
   sub: string;
   email?: string;
   role?: Role;
+  purpose?: "password_reset";
   iat?: number;
   exp?: number;
 }
@@ -254,6 +256,17 @@ export function parseAdminEmailAllowlist(): Set<string> {
     .forEach((e: string) => set.add(e));
   return set;
 }
+
+/* -------------------- Password reset body şemaları -------------------- */
+
+const passwordResetRequestBody = z.object({
+  email: z.string().trim().email(),
+});
+
+const passwordResetConfirmBody = z.object({
+  token: z.string().min(10),
+  password: z.string().min(6),
+});
 
 /* ================================= CONTROLLER ================================ */
 
@@ -481,6 +494,148 @@ export function makeAuthController(app: FastifyInstance) {
       });
     },
 
+    /* ------------------------------ PASSWORD RESET ------------------------------ */
+
+    // POST /auth/password-reset/request
+    passwordResetRequest: async (
+      req: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const parsed = passwordResetRequestBody.safeParse(req.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ success: false, error: "invalid_body" });
+      }
+
+      const email = parsed.data.email.toLowerCase();
+      const u =
+        (
+          await db
+            .select()
+            .from(users)
+            .where(eq(users.email, email))
+            .limit(1)
+        )[0] ?? null;
+
+      // Kullanıcı yoksa bile "success" dönüyoruz (account enumeration engellemek için)
+      if (!u) {
+        return reply.send({
+          success: true,
+          message:
+            "Eğer bu e-posta ile bir hesap varsa, şifre sıfırlama bağlantısı gönderildi.",
+        });
+      }
+
+      // Parola sıfırlama token (JWT) – 1 saat geçerli
+      const resetToken = jwt.sign(
+        {
+          sub: u.id,
+          email: u.email ?? undefined,
+          purpose: "password_reset" as const,
+        },
+        { expiresIn: "1h" },
+      );
+
+      // FE bu token'ı mail template'inde kullanacak.
+      // (İstersen burada doğrudan mail servisini de tetikleyebilirsin.)
+      return reply.send({
+        success: true,
+        token: resetToken,
+      });
+    },
+
+    // POST /auth/password-reset/confirm
+    passwordResetConfirm: async (
+      req: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const parsed = passwordResetConfirmBody.safeParse(req.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ success: false, error: "invalid_body" });
+      }
+
+      const { token, password } = parsed.data;
+
+      let payload: JWTPayload;
+      try {
+        payload = jwt.verify(token);
+      } catch {
+        return reply
+          .status(400)
+          .send({ success: false, error: "invalid_or_expired_token" });
+      }
+
+      if (payload.purpose !== "password_reset" || !payload.sub) {
+        return reply
+          .status(400)
+          .send({ success: false, error: "invalid_token_payload" });
+      }
+
+      const u =
+        (
+          await db
+            .select()
+            .from(users)
+            .where(eq(users.id, payload.sub))
+            .limit(1)
+        )[0] ?? null;
+      if (!u) {
+        return reply
+          .status(404)
+          .send({ success: false, error: "user_not_found" });
+      }
+
+      const password_hash = await argonHash(password);
+
+      // Tüm refresh token'ları revoke et (güvenlik için)
+      await db
+        .update(refresh_tokens)
+        .set({ revoked_at: new Date() })
+        .where(eq(refresh_tokens.user_id, u.id));
+
+      await db
+        .update(users)
+        .set({ password_hash, updated_at: new Date() })
+        .where(eq(users.id, u.id));
+
+      // Şifre değiştiyse notification + mail (update() ile aynı mantık)
+      try {
+        const notif: NotificationInsert = {
+          id: randomUUID(),
+          user_id: u.id,
+          title: "Şifreniz güncellendi",
+          message:
+            "Hesap şifreniz başarıyla değiştirildi. Bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.",
+          type: "password_changed",
+          is_read: false,
+          created_at: new Date(),
+        };
+        await db.insert(notifications).values(notif);
+      } catch (err) {
+        req.log.error({ err }, "password_change_notification_failed");
+      }
+
+      const targetEmail = u.email;
+      if (targetEmail) {
+        const nameFromEmail = targetEmail.split("@")[0];
+        void sendPasswordChangedMail({
+          to: targetEmail,
+          user_name: nameFromEmail,
+          site_name: "Dijital Market",
+        }).catch((err) => {
+          req.log.error({ err }, "password_change_mail_failed");
+        });
+      }
+
+      return reply.send({
+        success: true,
+        message: "Parolanız başarıyla güncellendi.",
+      });
+    },
+
     /* ------------------------------ ME / STATUS / UPDATE / LOGOUT ------------------------------ */
     me: async (req: FastifyRequest, reply: FastifyReply) => {
       const token = bearerFrom(req);
@@ -579,7 +734,7 @@ export function makeAuthController(app: FastifyInstance) {
             title: "Şifreniz güncellendi",
             message:
               "Hesap şifreniz başarıyla değiştirildi. Bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.",
-            type: "password_changed", // notifications.type enum'una bunu eklemen gerekebilir
+            type: "password_changed",
             is_read: false,
             created_at: new Date(),
           };
@@ -852,4 +1007,6 @@ export function makeAuthController(app: FastifyInstance) {
       return reply.send({ ok: true });
     },
   };
+  
+
 }

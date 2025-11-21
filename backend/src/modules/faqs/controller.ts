@@ -1,3 +1,4 @@
+// src/modules/faqs/controller.ts
 import type { RouteHandler } from "fastify";
 import { listFaqs, getFaqById, getFaqBySlug } from "./repository";
 import { faqListQuerySchema, type FaqListQuery } from "./validation";

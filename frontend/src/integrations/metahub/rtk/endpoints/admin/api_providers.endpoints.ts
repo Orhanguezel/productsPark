@@ -5,7 +5,7 @@ import { baseApi } from "../../baseApi";
 import type {
   ApiProvider,
   ApiProviderBalanceResponse,
-} from "../../../db/types/apiProviders";
+} from "../../types/apiProviders";
 
 type ListParams = {
   activeOnly?: boolean;
@@ -92,12 +92,12 @@ export const apiProvidersApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((x) => ({
-                type: "ApiProviders" as const,
-                id: x.id,
-              })),
-              { type: "ApiProviders" as const, id: "LIST" },
-            ]
+            ...result.map((x) => ({
+              type: "ApiProviders" as const,
+              id: x.id,
+            })),
+            { type: "ApiProviders" as const, id: "LIST" },
+          ]
           : [{ type: "ApiProviders" as const, id: "LIST" }],
     }),
 

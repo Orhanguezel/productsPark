@@ -2,7 +2,7 @@
 // FILE: src/integrations/metahub/rtk/endpoints/admin/payment_providers_admin.endpoints.ts
 // -------------------------------------------------------------
 import { baseApi } from "../../baseApi";
-import { PaymentProviderRow as PaymentProviderAdmin } from "../../../db/types/payments";
+import { PaymentProviderRow as PaymentProviderAdmin } from "../../types/payments";
 
 type BoolLike = boolean | 0 | 1 | "0" | "1" | "true" | "false" | null | undefined;
 const toBool = (v: BoolLike): boolean => {
@@ -63,9 +63,9 @@ export const paymentProvidersAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "PaymentProvidersAdmin" as const, id: p.id })),
-              { type: "PaymentProvidersAdmin" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "PaymentProvidersAdmin" as const, id: p.id })),
+            { type: "PaymentProvidersAdmin" as const, id: "LIST" },
+          ]
           : [{ type: "PaymentProvidersAdmin" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),
@@ -96,8 +96,8 @@ export const paymentProvidersAdminApi = baseApi.injectEndpoints({
       transformResponse: (res: unknown) => {
         const ok =
           typeof res === "object" &&
-          res !== null &&
-          typeof (res as Record<string, unknown>).success === "boolean"
+            res !== null &&
+            typeof (res as Record<string, unknown>).success === "boolean"
             ? (res as Record<string, unknown>).success
             : true;
         return { success: ok as boolean };

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { OrderView, OrderItemView } from "@/integrations/metahub/db/types/orders";
+import type { OrderView, OrderItemView } from "@/integrations/metahub/rtk/types/orders";
 import {
   useListOrdersAdminQuery,
   useListOrderItemsAdminQuery,

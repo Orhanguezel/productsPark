@@ -7,7 +7,7 @@ import type {
   MenuItemAdmin,
   MenuAdminListParams,
   UpsertMenuItemBody,
-} from "../../../db/types/menu";
+} from "../../types/menu";
 
 /** Utils */
 const toNum = (x: unknown): number => (typeof x === "number" ? x : Number(x ?? 0));
@@ -84,9 +84,9 @@ export const menuAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((i) => ({ type: "MenuItems" as const, id: i.id })),
-              { type: "MenuItems" as const, id: "LIST" },
-            ]
+            ...result.map((i) => ({ type: "MenuItems" as const, id: i.id })),
+            { type: "MenuItems" as const, id: "LIST" },
+          ]
           : [{ type: "MenuItems" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

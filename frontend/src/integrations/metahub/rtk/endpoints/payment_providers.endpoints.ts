@@ -3,7 +3,7 @@
 // (PUBLIC) /payment_providers ve /payment_providers/:key
 // -------------------------------------------------------------
 import { baseApi } from "../baseApi";
-import type { PaymentProviderKey, PaymentProviderRow } from "../../db/types/payments";
+import type { PaymentProviderKey, PaymentProviderRow } from "../types/payments";
 
 type BoolLike = boolean | 0 | 1 | "0" | "1" | "true" | "false" | null | undefined;
 
@@ -16,11 +16,11 @@ const toBool = (v: BoolLike): boolean => {
 
 const parseJsonMaybe = <T extends Record<string, unknown> = Record<string, unknown>>(val: unknown): T => {
   if (val == null) return {} as T;
-if (typeof val === "object") return val as T;
-if (typeof val === "string") {
-  try { return (JSON.parse(val) ?? {}) as T; } catch { return {} as T; }
-}
-return {} as T;
+  if (typeof val === "object") return val as T;
+  if (typeof val === "string") {
+    try { return (JSON.parse(val) ?? {}) as T; } catch { return {} as T; }
+  }
+  return {} as T;
 
 };
 
@@ -80,9 +80,9 @@ export const paymentProvidersApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "PaymentProviders" as const, id: p.id })),
-              { type: "PaymentProviders" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "PaymentProviders" as const, id: p.id })),
+            { type: "PaymentProviders" as const, id: "LIST" },
+          ]
           : [{ type: "PaymentProviders" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

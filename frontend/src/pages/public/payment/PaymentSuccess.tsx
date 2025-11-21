@@ -1,11 +1,14 @@
+// =============================================================
+// FILE: src/pages/account/components/PaymentSuccess.tsx
+// =============================================================
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, Loader2 } from "lucide-react";
-import { metahub } from "@/integrations/metahub/client";
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
@@ -14,40 +17,60 @@ const PaymentSuccess = () => {
 
   useEffect(() => {
     const processShopierCallback = async () => {
-      // Check if this is a Shopier callback
-      const platformOrderId = searchParams.get('platform_order_id');
-      const status = searchParams.get('status');
-      const paymentId = searchParams.get('payment_id');
-      const signature = searchParams.get('signature');
-      const randomNr = searchParams.get('random_nr');
-      const apiKey = searchParams.get('API_key');
+      // Shopier callback parametreleri
+      const platformOrderId = searchParams.get("platform_order_id");
+      const status = searchParams.get("status");
+      const paymentId = searchParams.get("payment_id");
+      const signature = searchParams.get("signature");
+      const randomNr = searchParams.get("random_nr");
+      const apiKey = searchParams.get("API_key");
 
       if (platformOrderId && status && paymentId && signature) {
-        console.log('Shopier callback received', { platformOrderId, status });
-
-        // Call edge function to verify and process
-        const { error } = await metahub.functions.invoke('shopier-callback', {
-          body: {
-            platform_order_id: platformOrderId,
-            status,
-            payment_id: paymentId,
-            signature,
-            random_nr: randomNr,
-            API_key: apiKey,
-          },
+        console.log("Shopier callback received", {
+          platformOrderId,
+          status,
         });
 
-        if (error) {
-          console.error('Shopier callback error:', error);
+        try {
+          // Backend'deki /functions/shopier-callback endpoint'ine POST at
+          const res = await fetch("/functions/shopier-callback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              platform_order_id: platformOrderId,
+              status,
+              payment_id: paymentId,
+              signature,
+              random_nr: randomNr,
+              API_key: apiKey,
+            }),
+          });
+
+          if (!res.ok) {
+            console.error(
+              "Shopier callback error: HTTP",
+              res.status,
+              res.statusText
+            );
+          } else {
+            const data = await res.json().catch(() => null);
+            console.log("Shopier callback response:", data);
+          }
+        } catch (error) {
+          console.error("Shopier callback error:", error);
         }
       }
 
+      // Local state + storage temizliği
       setProcessing(false);
-      // Clear any checkout data
-      sessionStorage.removeItem('checkoutData');
+      sessionStorage.removeItem("checkoutData");
+      sessionStorage.removeItem("havalepaymentData");
+      localStorage.removeItem("guestCart");
     };
 
-    processShopierCallback();
+    void processShopierCallback();
   }, [searchParams]);
 
   if (processing) {
@@ -79,16 +102,16 @@ const PaymentSuccess = () => {
               <h1 className="text-3xl font-bold mb-4">Ödeme Başarılı!</h1>
 
               <p className="text-muted-foreground mb-8">
-                Siparişiniz başarıyla oluşturuldu. Ödemeniz alındı ve siparişiniz işleme alındı.
+                Siparişiniz başarıyla oluşturuldu. Ödemeniz alındı ve
+                siparişiniz işleme alındı.
               </p>
 
               <div className="bg-muted p-4 rounded-lg mb-8 text-sm">
                 <p className="mb-2">
-                  Sipariş detaylarınızı ve aktivasyon kodlarınızı hesabınızdan görüntüleyebilirsiniz.
+                  Sipariş detaylarınızı ve aktivasyon kodlarınızı hesabınızdan
+                  görüntüleyebilirsiniz.
                 </p>
-                <p>
-                  E-posta adresinize sipariş onay maili gönderildi.
-                </p>
+                <p>E-posta adresinize sipariş onay maili gönderildi.</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center">

@@ -1,10 +1,12 @@
+// src/integrations/metahub/rtk/endpoints/admin/support_admin.endpoints.ts
+
 import { baseApi } from "../../baseApi";
 import type {
   SupportTicket,
   SupportTicketStatus,
   SupportTicketPriority,
   ApiSupportTicket,
-} from "../../../db/types/support";
+} from "../../types/support";
 
 /** Helpers (normalize) */
 const asStr = (x: unknown) => (typeof x === "string" ? x : String(x ?? ""));

@@ -2,7 +2,7 @@
 // FILE: src/hooks/useAuth.ts
 // =============================================================
 
-import type { User } from "@/integrations/metahub/core/types";
+import type { User } from "@/integrations/metahub/rtk/types/users";
 
 import {
   useGetSessionQuery,
@@ -12,7 +12,7 @@ import {
 
 type UseAuthReturn = {
   user: User | null;
-  session: null;        
+  session: null;
   loading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;

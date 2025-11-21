@@ -46,7 +46,7 @@ import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoint
 import type {
   ProductAdmin,
   CategoryRow,
-} from "@/integrations/metahub/db/types/products";
+} from "@/integrations/metahub/rtk/types/products";
 
 const formatTRY = (n: number) =>
   new Intl.NumberFormat("tr-TR", {

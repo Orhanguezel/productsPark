@@ -1,6 +1,6 @@
 // src/integrations/metahub/core/types.ts
 
-export type UserRole = import("@/integrations/metahub/db/types/users").UserRoleName;
+export type UserRole = import("@/integrations/metahub/rtk/types/users").UserRoleName;
 
 export type UserMetadata = {
   full_name?: string | null;

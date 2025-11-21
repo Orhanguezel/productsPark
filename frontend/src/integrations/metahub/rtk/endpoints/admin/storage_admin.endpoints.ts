@@ -7,7 +7,7 @@ import type {
   StorageAsset,
   StorageUpdateInput,
   StorageListQuery,
-} from "@/integrations/metahub/db/types/storage";
+} from "@/integrations/metahub/rtk/types/storage";
 
 type ListResponse = { items: StorageAsset[]; total: number };
 
@@ -29,9 +29,9 @@ type BulkCreateResponse = {
 const listTags = (items?: StorageAsset[]) =>
   items && items.length
     ? [
-        { type: "Storage" as const, id: "LIST" as const },
-        ...items.map((r) => ({ type: "Storage" as const, id: r.id })),
-      ]
+      { type: "Storage" as const, id: "LIST" as const },
+      ...items.map((r) => ({ type: "Storage" as const, id: r.id })),
+    ]
     : [{ type: "Storage" as const, id: "LIST" as const }];
 
 // Backend query tipini Record<string, string | number>’e çevir
@@ -136,9 +136,9 @@ export const storageAdminApi = baseApi.injectEndpoints({
       invalidatesTags: (res) =>
         res
           ? [
-              { type: "Storage", id: res.id },
-              { type: "Storage", id: "LIST" },
-            ]
+            { type: "Storage", id: res.id },
+            { type: "Storage", id: "LIST" },
+          ]
           : [{ type: "Storage", id: "LIST" }],
     }),
 

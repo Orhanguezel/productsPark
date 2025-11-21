@@ -28,6 +28,18 @@ export async function registerAuth(app: FastifyInstance) {
     c.refresh,
   );
 
+  // Şifre sıfırlama
+  app.post(
+    `${BASE}/password-reset/request`,
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    c.passwordResetRequest,
+  );
+  app.post(
+    `${BASE}/password-reset/confirm`,
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    c.passwordResetConfirm,
+  );
+
   // Google (ID token flow)
   app.post(
     `${BASE}/google`,
@@ -52,4 +64,5 @@ export async function registerAuth(app: FastifyInstance) {
 
   // Logout
   app.post(`${BASE}/logout`, c.logout);
+  
 }

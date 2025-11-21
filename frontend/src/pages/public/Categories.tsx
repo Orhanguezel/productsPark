@@ -7,7 +7,7 @@ import Footer from "@/components/layout/Footer";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import type { Category } from "@/integrations/metahub/db/types/categories";
+import type { Category } from "@/integrations/metahub/rtk/types/categories";
 import { useSeoSettings } from "@/hooks/useSeoSettings";
 import { useListCategoriesQuery } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
 
@@ -27,8 +27,8 @@ const colorMap: Record<string, string> = {
 function parseBoolParam(v: string | null): boolean | undefined {
   if (v == null) return undefined;
   const s = v.toLowerCase();
-  if (["1","true","yes","y","on"].includes(s)) return true;
-  if (["0","false","no","n","off"].includes(s)) return false;
+  if (["1", "true", "yes", "y", "on"].includes(s)) return true;
+  if (["0", "false", "no", "n", "off"].includes(s)) return false;
   return undefined;
 }
 
@@ -47,8 +47,8 @@ export default function Categories() {
   // only=main/sub override: BE'ye net sinyal göndermek için parent_id paramı belirle
   const parent_id =
     only === "main" ? null :
-    only === "sub" ? "__non_null__" : // BE: özel bir değer yoksa FE filtreleyecek
-    parentInUrl ?? undefined;
+      only === "sub" ? "__non_null__" : // BE: özel bir değer yoksa FE filtreleyecek
+        parentInUrl ?? undefined;
 
   const { data = [], isFetching } = useListCategoriesQuery(
     {
@@ -89,19 +89,19 @@ export default function Categories() {
   const itemListSchema =
     mainCats.length > 0
       ? {
-          "@context": "https://schema.org/",
-          "@type": "ItemList",
-          itemListElement: mainCats.map((category, index) => ({
-            "@type": "ListItem",
-            position: index + 1,
-            item: {
-              "@type": "Thing",
-              name: category.name,
-              url: `${window.location.origin}/kategoriler/${category.slug}`,
-              description: category.description || "",
-            },
-          })),
-        }
+        "@context": "https://schema.org/",
+        "@type": "ItemList",
+        itemListElement: mainCats.map((category, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          item: {
+            "@type": "Thing",
+            name: category.name,
+            url: `${window.location.origin}/kategoriler/${category.slug}`,
+            description: category.description || "",
+          },
+        })),
+      }
       : null;
 
   return (

@@ -1,5 +1,4 @@
 // src/components/layout/Footer.tsx
-import { useEffect, useState, useCallback } from "react";
 import {
   FacebookIcon,
   TwitterIcon,
@@ -9,134 +8,114 @@ import {
   Phone,
   MapPin,
 } from "lucide-react";
-import { metahub } from "@/integrations/metahub/client";
 
-interface MenuItem {
-  id: string;
-  title: string;
-  url: string;
-  is_active: boolean;
-  section_id: string | null;
-}
+import {
+  useListMenuItemsQuery,
+} from "@/integrations/metahub/rtk/endpoints/menu_items.endpoints";
+import type { MenuItemRow } from "@/integrations/metahub/rtk/types/menu";
 
-interface FooterSection {
-  id: string;
-  title: string;
-  display_order: number;
-  is_active: boolean;
-}
+import {
+  useGetSiteSettingByKeyQuery,
+  type JsonLike,
+} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 
-type SettingRow = { key: string; value: unknown };
+import {
+  useListFooterSectionsQuery,
+} from "@/integrations/metahub/rtk/endpoints/footer_sections.endpoints";
+import type { FooterSection as FooterSectionModel } from "@/integrations/metahub/rtk/types/footer";
+
+/* ---------- helpers ---------- */
+
+const toStr = (v: JsonLike | undefined, fallback: string): string => {
+  if (typeof v === "string" && v.trim() !== "") return v;
+  return fallback;
+};
+
+const DEFAULT_SOCIAL_LINKS = {
+  facebook: "#",
+  twitter: "#",
+  instagram: "#",
+  youtube: "#",
+};
+
+const DEFAULT_FOOTER_SETTINGS = {
+  company_name: "Dijital Market",
+  description:
+    "Güvenilir dijital ürün satış platformu. En uygun fiyatlarla lisans, hesap, yazılım ve daha fazlası.",
+  copyright: "© 2024 Dijital Market. Tüm hakları saklıdır.",
+  email: "destek@dijitalmarket.com",
+  phone: "+90 555 123 45 67",
+  address: "Atatürk Cad. No:123\nİstanbul, Türkiye",
+};
+
+/* ---------- component ---------- */
 
 const Footer = () => {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [footerSections, setFooterSections] = useState<FooterSection[]>([]);
-  const [socialLinks, setSocialLinks] = useState({
-    facebook: "#",
-    twitter: "#",
-    instagram: "#",
-    youtube: "#",
-  });
-  const [footerSettings, setFooterSettings] = useState({
-    company_name: "Dijital Market",
-    description:
-      "Güvenilir dijital ürün satış platformu. En uygun fiyatlarla lisans, hesap, yazılım ve daha fazlası.",
-    copyright: "© 2024 Dijital Market. Tüm hakları saklıdır.",
-    email: "destek@dijitalmarket.com",
-    phone: "+90 555 123 45 67",
-    address: "Atatürk Cad. No:123\nİstanbul, Türkiye",
+  // RTK: footer menü item’ları (location: footer)
+  const { data: menuItemsData = [] } = useListMenuItemsQuery({
+    location: "footer",
+    is_active: true,
+    order: "order_num",
   });
 
-  const fetchMenuItems = useCallback(async () => {
-    const { data, error } = await metahub
-      .from<MenuItem>("menu_items")
-      .select("id, title, url, is_active, section_id")
-      .eq("location", "footer")
-      .eq("is_active", true)
-      .order("order_num", { ascending: true });
+  const menuItems: MenuItemRow[] = menuItemsData.filter(
+    (i) => i.is_active && (i.location === "footer" || i.location == null),
+  );
 
-    if (!error && data) setMenuItems(data);
-  }, []);
+  // RTK: footer_sections (public)
+  const { data: footerSectionsData = [] } = useListFooterSectionsQuery({
+    is_active: true,
+    order: "asc",
+  });
 
-  const fetchFooterSections = useCallback(async () => {
-    const { data, error } = await metahub
-      .from<FooterSection>("footer_sections")
-      .select("*")
-      .eq("is_active", true);
-    if (!error && data) setFooterSections(data);
-  }, []);
+  const footerSections: FooterSectionModel[] = footerSectionsData;
 
-  const fetchSocialLinks = useCallback(async () => {
-    try {
-      const { data } = await metahub
-        .from<SettingRow>("site_settings")
-        .select("key, value")
-        .in("key", ["facebook_url", "twitter_url", "instagram_url", "youtube_url"]);
+  // RTK: site_settings – sosyal linkler
+  const { data: facebookSetting } = useGetSiteSettingByKeyQuery("facebook_url");
+  const { data: twitterSetting } = useGetSiteSettingByKeyQuery("twitter_url");
+  const { data: instagramSetting } = useGetSiteSettingByKeyQuery("instagram_url");
+  const { data: youtubeSetting } = useGetSiteSettingByKeyQuery("youtube_url");
 
-      if (data) {
-        setSocialLinks({
-          facebook: String(data.find((s) => s.key === "facebook_url")?.value ?? "#"),
-          twitter: String(data.find((s) => s.key === "twitter_url")?.value ?? "#"),
-          instagram: String(data.find((s) => s.key === "instagram_url")?.value ?? "#"),
-          youtube: String(data.find((s) => s.key === "youtube_url")?.value ?? "#"),
-        });
-      }
-    } catch (e) {
-      console.error("Error fetching social links:", e);
-    }
-  }, []);
+  const socialLinks = {
+    facebook: toStr(facebookSetting?.value, DEFAULT_SOCIAL_LINKS.facebook),
+    twitter: toStr(twitterSetting?.value, DEFAULT_SOCIAL_LINKS.twitter),
+    instagram: toStr(instagramSetting?.value, DEFAULT_SOCIAL_LINKS.instagram),
+    youtube: toStr(youtubeSetting?.value, DEFAULT_SOCIAL_LINKS.youtube),
+  };
 
-  const fetchFooterSettings = useCallback(async () => {
-    try {
-      const { data } = await metahub
-        .from<SettingRow>("site_settings")
-        .select("key, value")
-        .in("key", [
-          "footer_company_name",
-          "footer_description",
-          "footer_copyright",
-          "footer_email",
-          "footer_phone",
-          "footer_address",
-        ]);
+  // RTK: site_settings – footer metinleri
+  const { data: companyNameSetting } =
+    useGetSiteSettingByKeyQuery("footer_company_name");
+  const { data: descriptionSetting } =
+    useGetSiteSettingByKeyQuery("footer_description");
+  const { data: copyrightSetting } =
+    useGetSiteSettingByKeyQuery("footer_copyright");
+  const { data: emailSetting } =
+    useGetSiteSettingByKeyQuery("footer_email");
+  const { data: phoneSetting } =
+    useGetSiteSettingByKeyQuery("footer_phone");
+  const { data: addressSetting } =
+    useGetSiteSettingByKeyQuery("footer_address");
 
-      if (data) {
-        setFooterSettings({
-          company_name: String(
-            data.find((s) => s.key === "footer_company_name")?.value ?? "Dijital Market"
-          ),
-          description: String(
-            data.find((s) => s.key === "footer_description")?.value ??
-              "Güvenilir dijital ürün satış platformu. En uygun fiyatlarla lisans, hesap, yazılım ve daha fazlası."
-          ),
-          copyright: String(
-            data.find((s) => s.key === "footer_copyright")?.value ??
-              "© 2024 Dijital Market. Tüm hakları saklıdır."
-          ),
-          email: String(
-            data.find((s) => s.key === "footer_email")?.value ?? "destek@dijitalmarket.com"
-          ),
-          phone: String(
-            data.find((s) => s.key === "footer_phone")?.value ?? "+90 555 123 45 67"
-          ),
-          address: String(
-            data.find((s) => s.key === "footer_address")?.value ??
-              "Atatürk Cad. No:123\nİstanbul, Türkiye"
-          ),
-        });
-      }
-    } catch (e) {
-      console.error("Error fetching footer settings:", e);
-    }
-  }, []);
+  const footerSettings = {
+    company_name: toStr(
+      companyNameSetting?.value,
+      DEFAULT_FOOTER_SETTINGS.company_name,
+    ),
+    description: toStr(
+      descriptionSetting?.value,
+      DEFAULT_FOOTER_SETTINGS.description,
+    ),
+    copyright: toStr(
+      copyrightSetting?.value,
+      DEFAULT_FOOTER_SETTINGS.copyright,
+    ),
+    email: toStr(emailSetting?.value, DEFAULT_FOOTER_SETTINGS.email),
+    phone: toStr(phoneSetting?.value, DEFAULT_FOOTER_SETTINGS.phone),
+    address: toStr(addressSetting?.value, DEFAULT_FOOTER_SETTINGS.address),
+  };
 
-  useEffect(() => {
-    void fetchMenuItems();
-    void fetchFooterSections();
-    void fetchSocialLinks();
-    void fetchFooterSettings();
-  }, [fetchMenuItems, fetchFooterSections, fetchSocialLinks, fetchFooterSettings]);
-
+  // section_id’si olmayan menü item’ları
   const orphanItems = menuItems.filter((i) => !i.section_id);
 
   return (
@@ -196,16 +175,23 @@ const Footer = () => {
 
           {/* Dynamic Footer Sections */}
           {footerSections.map((section) => {
-            const sectionItems = menuItems.filter((item) => item.section_id === section.id);
+            const sectionItems = menuItems.filter(
+              (item) => item.section_id === section.id,
+            );
             if (sectionItems.length === 0) return null;
 
             return (
               <div key={section.id}>
-                <h3 className="font-semibold mb-4 text-foreground">{section.title}</h3>
+                <h3 className="font-semibold mb-4 text-foreground">
+                  {section.title}
+                </h3>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   {sectionItems.map((item) => (
                     <li key={item.id}>
-                      <a href={item.url} className="hover:text-primary transition-smooth">
+                      <a
+                        href={item.url}
+                        className="hover:text-primary transition-smooth"
+                      >
                         {item.title}
                       </a>
                     </li>
@@ -215,14 +201,19 @@ const Footer = () => {
             );
           })}
 
-           {/* İsteğe bağlı: bölümsüz linkleri ayrı bir sütunda göster */}
+          {/* Bölümsüz linkler */}
           {orphanItems.length > 0 && (
             <div>
-              <h3 className="font-semibold mb-4 text-foreground">Bağlantılar</h3>
+              <h3 className="font-semibold mb-4 text-foreground">
+                Bağlantılar
+              </h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 {orphanItems.map((item) => (
                   <li key={item.id}>
-                    <a href={item.url} className="hover:text-primary transition-smooth">
+                    <a
+                      href={item.url}
+                      className="hover:text-primary transition-smooth"
+                    >
                       {item.title}
                     </a>
                   </li>
@@ -237,7 +228,10 @@ const Footer = () => {
             <ul className="space-y-3 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
                 <Mail className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <a href={`mailto:${footerSettings.email}`} className="hover:text-primary transition-smooth">
+                <a
+                  href={`mailto:${footerSettings.email}`}
+                  className="hover:text-primary transition-smooth"
+                >
                   {footerSettings.email}
                 </a>
               </li>
@@ -252,7 +246,9 @@ const Footer = () => {
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span style={{ whiteSpace: "pre-line" }}>{footerSettings.address}</span>
+                <span style={{ whiteSpace: "pre-line" }}>
+                  {footerSettings.address}
+                </span>
               </li>
             </ul>
           </div>

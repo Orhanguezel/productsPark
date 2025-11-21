@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Dispatch, SetStateAction } from "react";
-import type { SiteSettings } from "@/integrations/metahub/db/types/site";
+import type { SiteSettings } from "@/integrations/metahub/rtk/types/site";
 
 type Props = {
   settings: SiteSettings;

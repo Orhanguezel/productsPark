@@ -6,8 +6,8 @@ import type {
   SiteSettingRow,
   SettingValue,
   ValueType,
-} from "@/integrations/metahub/db/types/site";
-import { normalizeSettingValue } from "@/integrations/metahub/db/normalizers/site";
+} from "@/integrations/metahub/rtk/types/site";
+import { normalizeSettingValue } from "@/integrations/metahub/rtk/site";
 
 export type SiteSetting = SiteSettingRow; // FE tek modelden beslensin
 
@@ -59,10 +59,10 @@ export const siteSettingsAdminApi = baseApi.injectEndpoints({
           sort && order
             ? `${sort}.${order}`
             : sort
-            ? `${sort}.asc`
-            : order
-            ? `key.${order}`
-            : undefined;
+              ? `${sort}.asc`
+              : order
+                ? `key.${order}`
+                : undefined;
 
         return {
           url: ADMIN_BASE,
@@ -78,12 +78,12 @@ export const siteSettingsAdminApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((s) => ({
-                type: "SiteSettings" as const,
-                id: s.key,
-              })),
-              { type: "SiteSettings" as const, id: "LIST" },
-            ]
+            ...result.map((s) => ({
+              type: "SiteSettings" as const,
+              id: s.key,
+            })),
+            { type: "SiteSettings" as const, id: "LIST" },
+          ]
           : [{ type: "SiteSettings" as const, id: "LIST" }],
       keepUnusedDataFor: 60,
     }),

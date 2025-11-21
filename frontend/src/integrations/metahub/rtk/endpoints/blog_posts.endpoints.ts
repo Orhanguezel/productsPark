@@ -7,7 +7,7 @@ import type {
   ApiBlogPost,
   BlogPost,
   ListParams,
-} from "../../db/types/blog";
+} from "../types/blog";
 
 /** helpers */
 const toBool = (x: unknown): boolean =>
@@ -65,8 +65,8 @@ export const blogPostsApi = baseApi4.injectEndpoints({
             params.is_published === true
               ? 1
               : params.is_published === false
-              ? 0
-              : params.is_published;
+                ? 0
+                : params.is_published;
         }
         return { url: "/blog_posts", params: qp } as FetchArgs;
       },
@@ -75,9 +75,9 @@ export const blogPostsApi = baseApi4.injectEndpoints({
       providesTags: (result) =>
         result
           ? [
-              ...result.map((p) => ({ type: "BlogPost" as const, id: p.id })),
-              { type: "BlogPosts" as const, id: "LIST" },
-            ]
+            ...result.map((p) => ({ type: "BlogPost" as const, id: p.id })),
+            { type: "BlogPosts" as const, id: "LIST" },
+          ]
           : [{ type: "BlogPosts" as const, id: "LIST" }],
     }),
 

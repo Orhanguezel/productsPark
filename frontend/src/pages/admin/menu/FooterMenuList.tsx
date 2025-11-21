@@ -30,8 +30,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { MenuItemAdmin } from "@/integrations/metahub/db/types/menu";
-import type { FooterSection } from "@/integrations/metahub/db/types/footer";
+import type { MenuItemAdmin } from "@/integrations/metahub/rtk/types/menu";
+import type { FooterSection } from "@/integrations/metahub/rtk/types/footer";
 import { availableIcons } from "./icons";
 
 type Props = {

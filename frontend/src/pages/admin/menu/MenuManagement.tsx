@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { metahub } from "@/integrations/metahub/client";
 
 import HeaderMenuForm from "./HeaderMenuForm";
 import FooterMenuForm from "./FooterMenuForm";
@@ -34,8 +33,15 @@ import {
   useReorderFooterSectionsAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/footer_sections_admin.endpoints";
 
-import type { MenuItemAdmin } from "@/integrations/metahub/db/types/menu";
-import type { FooterSection, UpsertFooterSectionBody } from "@/integrations/metahub/db/types/footer";
+import {
+  useListCustomPagesAdminQuery,
+} from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
+
+import type { MenuItemAdmin } from "@/integrations/metahub/rtk/types/menu";
+import type {
+  FooterSection,
+  UpsertFooterSectionBody,
+} from "@/integrations/metahub/rtk/types/footer";
 
 type Page = { id: string; title: string; slug: string };
 
@@ -64,14 +70,21 @@ export default function MenuManagementPage() {
   const [deleteSection] = useDeleteFooterSectionAdminMutation();
   const [reorderSections] = useReorderFooterSectionsAdminMutation();
 
-  // PAGES (published)
-  const [pages, setPages] = useState<Page[]>([]);
-  useEffect(() => {
-    (async () => {
-      const res = await metahub.from("custom_pages").select("id, title, slug").eq("is_published", true);
-      if (!res.error) setPages((res.data ?? []) as Page[]);
-    })();
-  }, []);
+  // CUSTOM PAGES (published) – RTK admin endpoint
+  const {
+    data: customPages = [],
+    isLoading: pagesLoading,
+  } = useListCustomPagesAdminQuery();
+
+  const pages: Page[] = useMemo(
+    () =>
+      (customPages || []).map((p) => ({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+      })),
+    [customPages]
+  );
 
   // ===== Normalize (location'a asla dokunma) =====
   const normalizedMenu = useMemo(() => {
@@ -110,16 +123,21 @@ export default function MenuManagementPage() {
   const [editingItem, setEditingItem] = useState<MenuItemAdmin | null>(null);
   const [editingSection, setEditingSection] = useState<FooterSection | null>(null);
 
-  const loading = menuLoading || sectionsLoading;
+  const loading = menuLoading || sectionsLoading || pagesLoading;
 
   // ===== Actions: MENU ITEMS =====
-  async function handleUpsertHeaderItem(body: Omit<MenuItemAdmin, "id" | "display_order">) {
+  async function handleUpsertHeaderItem(
+    body: Omit<MenuItemAdmin, "id" | "display_order">
+  ) {
     try {
       if (editingItem) {
         await updateMenuItem({ id: editingItem.id, body }).unwrap();
         toast.success("Menü öğesi güncellendi");
       } else {
-        await createMenuItem({ ...body, display_order: headerItems.length }).unwrap();
+        await createMenuItem({
+          ...body,
+          display_order: headerItems.length,
+        }).unwrap();
         toast.success("Menü öğesi eklendi");
       }
       setEditingItem(null);
@@ -129,13 +147,18 @@ export default function MenuManagementPage() {
     }
   }
 
-  async function handleUpsertFooterItem(body: Omit<MenuItemAdmin, "id" | "display_order">) {
+  async function handleUpsertFooterItem(
+    body: Omit<MenuItemAdmin, "id" | "display_order">
+  ) {
     try {
       if (editingItem) {
         await updateMenuItem({ id: editingItem.id, body }).unwrap();
         toast.success("Menü öğesi güncellendi");
       } else {
-        await createMenuItem({ ...body, display_order: footerItems.length }).unwrap();
+        await createMenuItem({
+          ...body,
+          display_order: footerItems.length,
+        }).unwrap();
         toast.success("Menü öğesi eklendi");
       }
       setEditingItem(null);
@@ -184,7 +207,12 @@ export default function MenuManagementPage() {
   }
 
   async function handleDeleteSection(id: string) {
-    if (!confirm("Bu bölümü silmek istediğinizden emin misiniz? Bölüme ait menü öğeleri bölümsüz olacaktır.")) return;
+    if (
+      !confirm(
+        "Bu bölümü silmek istediğinizden emin misiniz? Bölüme ait menü öğeleri bölümsüz olacaktır."
+      )
+    )
+      return;
     try {
       await deleteSection(id).unwrap();
       toast.success("Bölüm silindi");
@@ -216,15 +244,24 @@ export default function MenuManagementPage() {
         {/* ===== HEADER ===== */}
         <TabsContent value="header" className="mt-6 space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => { setEditingItem(null); setOpenHeaderForm(true); }}>
-              <Plus className="mr-2 h-4 w-4" />Yeni Header Öğesi
+            <Button
+              onClick={() => {
+                setEditingItem(null);
+                setOpenHeaderForm(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Yeni Header Öğesi
             </Button>
           </div>
 
           <HeaderMenuList
             items={headerItems}
             onReorder={handleReorderMenu}
-            onEdit={(i) => { setEditingItem(i); setOpenHeaderForm(true); }}
+            onEdit={(i) => {
+              setEditingItem(i);
+              setOpenHeaderForm(true);
+            }}
             onDelete={handleDeleteItem}
           />
 
@@ -235,7 +272,9 @@ export default function MenuManagementPage() {
             initial={editingItem ?? undefined}
             selectedItem={editingItem ?? undefined}
             defaultOrder={headerItems.length}
-            onClose={() => { setOpenHeaderForm(false); }}
+            onClose={() => {
+              setOpenHeaderForm(false);
+            }}
             onSubmit={handleUpsertHeaderItem}
           />
         </TabsContent>
@@ -245,18 +284,34 @@ export default function MenuManagementPage() {
           <FooterSectionList
             sections={footerSections}
             onReorder={handleReorderSections}
-            onEdit={(s) => { setEditingSection(s); setOpenSectionForm(true); }}
+            onEdit={(s) => {
+              setEditingSection(s);
+              setOpenSectionForm(true);
+            }}
             onDelete={handleDeleteSection}
             headerRight={
-              <Button size="sm" onClick={() => { setEditingSection(null); setOpenSectionForm(true); }}>
-                <Plus className="mr-2 h-4 w-4" />Yeni Bölüm
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingSection(null);
+                  setOpenSectionForm(true);
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Yeni Bölüm
               </Button>
             }
           />
 
           <div className="flex justify-end">
-            <Button onClick={() => { setEditingItem(null); setOpenFooterForm(true); }}>
-              <Plus className="mr-2 h-4 w-4" />Yeni Footer Öğesi
+            <Button
+              onClick={() => {
+                setEditingItem(null);
+                setOpenFooterForm(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Yeni Footer Öğesi
             </Button>
           </div>
 
@@ -264,7 +319,10 @@ export default function MenuManagementPage() {
             sections={footerSections}
             items={footerItems}
             onReorder={handleReorderMenu}
-            onEdit={(i) => { setEditingItem(i); setOpenFooterForm(true); }}
+            onEdit={(i) => {
+              setEditingItem(i);
+              setOpenFooterForm(true);
+            }}
             onDelete={handleDeleteItem}
           />
 
@@ -276,16 +334,20 @@ export default function MenuManagementPage() {
             initial={editingItem ?? undefined}
             selectedItem={editingItem ?? undefined}
             defaultOrder={footerItems.length}
-            onClose={() => { setOpenFooterForm(false); }}
+            onClose={() => {
+              setOpenFooterForm(false);
+            }}
             onSubmit={handleUpsertFooterItem}
           />
 
           <FooterSectionForm
             open={openSectionForm}
             loading={loading}
-            initial={editingSection}
+            initial={editingSection ?? undefined}
             defaultOrder={footerSections.length}
-            onClose={() => { setOpenSectionForm(false); }}
+            onClose={() => {
+              setOpenSectionForm(false);
+            }}
             onSubmit={handleUpsertSection}
           />
         </TabsContent>

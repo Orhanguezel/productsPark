@@ -7,37 +7,48 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  Pagination, PaginationContent, PaginationItem, PaginationLink,
-  PaginationNext, PaginationPrevious,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useAuth } from "@/hooks/useAuth";
 import { MessageSquare, Send } from "lucide-react";
 import { toast } from "sonner";
-import { metahub } from "@/integrations/metahub/client";
 
 import {
   useListSupportTicketsQuery,
   useCreateSupportTicketMutation,
-  // useUpdateSupportTicketMutation, // KALDIRILDI
 } from "@/integrations/metahub/rtk/endpoints/support_tickets.endpoints";
 import {
   useListTicketRepliesByTicketQuery,
   useCreateTicketReplyMutation,
 } from "@/integrations/metahub/rtk/endpoints/ticket_replies.endpoints";
+import { useSendTelegramNotificationMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
 
 import type {
   SupportTicket,
   SupportTicketPriority,
   SupportTicketStatus,
   TicketReply,
-} from "@/integrations/metahub/db/types/support";
+} from "@/integrations/metahub/rtk/types/support";
 
 /* --------- Status/Priority sözlükleri (admin ile birebir) --------- */
 
@@ -50,11 +61,16 @@ const STATUS_TEXT: Record<SupportTicketStatus, string> = {
 
 const statusBadge = (s: SupportTicketStatus | string) => {
   switch (s) {
-    case "open": return "bg-blue-100 text-blue-800";
-    case "in_progress": return "bg-amber-100 text-amber-800";
-    case "waiting_response": return "bg-purple-100 text-purple-800";
-    case "closed": return "bg-gray-100 text-gray-800";
-    default: return "bg-gray-100 text-gray-800";
+    case "open":
+      return "bg-blue-100 text-blue-800";
+    case "in_progress":
+      return "bg-amber-100 text-amber-800";
+    case "waiting_response":
+      return "bg-purple-100 text-purple-800";
+    case "closed":
+      return "bg-gray-100 text-gray-800";
+    default:
+      return "bg-gray-100 text-gray-800";
   }
 };
 
@@ -67,11 +83,16 @@ const PRIORITY_TEXT: Record<SupportTicketPriority, string> = {
 
 const priorityBadge = (p: SupportTicketPriority | string) => {
   switch (p) {
-    case "urgent": return "bg-red-100 text-red-800";
-    case "high": return "bg-orange-100 text-orange-800";
-    case "medium": return "bg-yellow-100 text-yellow-800";
-    case "low": return "bg-green-100 text-green-800";
-    default: return "bg-gray-100 text-gray-800";
+    case "urgent":
+      return "bg-red-100 text-red-800";
+    case "high":
+      return "bg-orange-100 text-orange-800";
+    case "medium":
+      return "bg-yellow-100 text-yellow-800";
+    case "low":
+      return "bg-green-100 text-green-800";
+    default:
+      return "bg-gray-100 text-gray-800";
   }
 };
 
@@ -109,7 +130,9 @@ const Support = () => {
     isLoading: ticketsLoading,
     refetch: refetchTickets,
   } = useListSupportTicketsQuery(
-    user ? { user_id: user.id, sort: "created_at", order: "desc" } : ({} as any),
+    user
+      ? { user_id: user.id, sort: "created_at", order: "desc" }
+      : ({} as any),
     { skip: !user }
   );
 
@@ -125,11 +148,16 @@ const Support = () => {
     data: replies = [],
     isFetching: repliesLoading,
     refetch: refetchReplies,
-  } = useListTicketRepliesByTicketQuery(selectedId ?? "", { skip: !selectedId });
+  } = useListTicketRepliesByTicketQuery(selectedId ?? "", {
+    skip: !selectedId,
+  });
 
   // Mutations
-  const [createTicket, { isLoading: creating }] = useCreateSupportTicketMutation();
-  const [createReply, { isLoading: sendingReply }] = useCreateTicketReplyMutation();
+  const [createTicket, { isLoading: creating }] =
+    useCreateSupportTicketMutation();
+  const [createReply, { isLoading: sendingReply }] =
+    useCreateTicketReplyMutation();
+  const [sendTelegramNotification] = useSendTelegramNotificationMutation();
 
   // Ticket kartına tıklama
   const handleTicketClick = (t: SupportTicket) => {
@@ -151,26 +179,25 @@ const Support = () => {
       }).unwrap();
 
       toast.success("Ticket oluşturuldu");
-      setNewTicket({ subject: "", message: "", priority: "medium", category: "" });
+      setNewTicket({
+        subject: "",
+        message: "",
+        priority: "medium",
+        category: "",
+      });
       setShowNewTicket(false);
       await refetchTickets();
       setSelectedId(created.id);
 
-      // Opsiyonel Telegram bildirimi
+      // Opsiyonel Telegram bildirimi (RTK mutation)
       try {
-        const telegram = await metahub.functions.invoke<{ success?: boolean; error?: string }>(
-          "send-telegram-notification",
-          {
-            body: {
-              type: "new_ticket",
-              ticketId: created.id,
-              userName: user.email ?? "Kullanıcı",
-            },
-          }
-        );
-        if (telegram.error) console.error("Telegram notification error:", telegram.error);
+        await sendTelegramNotification({
+          type: "new_ticket",
+          ticketId: created.id,
+          userName: user.email ?? "Kullanıcı",
+        }).unwrap();
       } catch (te) {
-        console.error("Telegram invoke exception:", te);
+        console.error("Telegram notification error:", te);
       }
     } catch (err) {
       console.error(err);
@@ -190,7 +217,6 @@ const Support = () => {
         is_admin: false,
       }).unwrap();
 
-      // Statü değişimini BE otomatik yapıyor (RBAC dostu). FE PATCH etmez.
       toast.success("Yanıt gönderildi");
       setReplyMessage("");
       await Promise.all([refetchReplies(), refetchTickets()]);
@@ -237,16 +263,28 @@ const Support = () => {
                     <CardTitle>Yeni Ticket Oluştur</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <form onSubmit={handleCreateTicket} className="space-y-4">
+                    <form
+                      onSubmit={handleCreateTicket}
+                      className="space-y-4"
+                    >
                       <div className="space-y-2">
-                        <Label htmlFor="subject">Konu * ({newTicket.subject.length}/80)</Label>
+                        <Label htmlFor="subject">
+                          Konu * ({newTicket.subject.length}/80)
+                        </Label>
                         <Input
                           id="subject"
                           value={newTicket.subject}
                           onChange={(e) => {
                             const v = e.target.value;
-                            if (v.length <= 80) setNewTicket((s) => ({ ...s, subject: v }));
-                            else toast.error("Konu 80 karakterden uzun olamaz");
+                            if (v.length <= 80)
+                              setNewTicket((s) => ({
+                                ...s,
+                                subject: v,
+                              }));
+                            else
+                              toast.error(
+                                "Konu 80 karakterden uzun olamaz"
+                              );
                           }}
                           required
                           placeholder="Sorun başlığı"
@@ -255,14 +293,23 @@ const Support = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="category">Kategori ({newTicket.category.length}/40)</Label>
+                        <Label htmlFor="category">
+                          Kategori ({newTicket.category.length}/40)
+                        </Label>
                         <Input
                           id="category"
                           value={newTicket.category}
                           onChange={(e) => {
                             const v = e.target.value;
-                            if (v.length <= 40) setNewTicket((s) => ({ ...s, category: v }));
-                            else toast.error("Kategori 40 karakterden uzun olamaz");
+                            if (v.length <= 40)
+                              setNewTicket((s) => ({
+                                ...s,
+                                category: v,
+                              }));
+                            else
+                              toast.error(
+                                "Kategori 40 karakterden uzun olamaz"
+                              );
                           }}
                           placeholder="Ürün, Ödeme, Teknik vb."
                           maxLength={40}
@@ -274,7 +321,11 @@ const Support = () => {
                         <Select
                           value={newTicket.priority}
                           onValueChange={(value) =>
-                            setNewTicket((s) => ({ ...s, priority: value as SupportTicketPriority }))
+                            setNewTicket((s) => ({
+                              ...s,
+                              priority:
+                                value as SupportTicketPriority,
+                            }))
                           }
                         >
                           <SelectTrigger>
@@ -290,14 +341,23 @@ const Support = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="message">Mesaj * ({newTicket.message.length}/2000)</Label>
+                        <Label htmlFor="message">
+                          Mesaj * ({newTicket.message.length}/2000)
+                        </Label>
                         <Textarea
                           id="message"
                           value={newTicket.message}
                           onChange={(e) => {
                             const v = e.target.value;
-                            if (v.length <= 2000) setNewTicket((s) => ({ ...s, message: v }));
-                            else toast.error("Mesaj 2000 karakterden uzun olamaz");
+                            if (v.length <= 2000)
+                              setNewTicket((s) => ({
+                                ...s,
+                                message: v,
+                              }));
+                            else
+                              toast.error(
+                                "Mesaj 2000 karakterden uzun olamaz"
+                              );
                           }}
                           required
                           placeholder="Sorununuzu detaylıca açıklayın"
@@ -307,8 +367,14 @@ const Support = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        <Button type="submit" className="flex-1" disabled={creating}>
-                          {creating ? "Oluşturuluyor..." : "Oluştur"}
+                        <Button
+                          type="submit"
+                          className="flex-1"
+                          disabled={creating}
+                        >
+                          {creating
+                            ? "Oluşturuluyor..."
+                            : "Oluştur"}
                         </Button>
                         <Button
                           type="button"
@@ -326,7 +392,9 @@ const Support = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Ticket Listesi</CardTitle>
-                  <CardDescription>Tüm destek talepleriniz ({tickets.length})</CardDescription>
+                  <CardDescription>
+                    Tüm destek talepleriniz ({tickets.length})
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -340,27 +408,44 @@ const Support = () => {
                           <Card
                             key={ticket.id}
                             className={`cursor-pointer hover:bg-accent ${
-                              selectedId === ticket.id ? "bg-accent" : ""
+                              selectedId === ticket.id
+                                ? "bg-accent"
+                                : ""
                             }`}
                             onClick={() => handleTicketClick(ticket)}
                           >
                             <CardContent className="p-4">
                               <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-semibold">{ticket.subject}</h3>
-                                <Badge className={statusBadge(ticket.status)}>
+                                <h3 className="font-semibold">
+                                  {ticket.subject}
+                                </h3>
+                                <Badge
+                                  className={statusBadge(
+                                    ticket.status
+                                  )}
+                                >
                                   {STATUS_TEXT[ticket.status]}
                                 </Badge>
                               </div>
                               <div className="flex gap-2">
-                                <Badge variant="outline" className={priorityBadge(ticket.priority)}>
+                                <Badge
+                                  variant="outline"
+                                  className={priorityBadge(
+                                    ticket.priority
+                                  )}
+                                >
                                   {PRIORITY_TEXT[ticket.priority]}
                                 </Badge>
                                 {ticket.category && (
-                                  <Badge variant="outline">{ticket.category}</Badge>
+                                  <Badge variant="outline">
+                                    {ticket.category}
+                                  </Badge>
                                 )}
                               </div>
                               <p className="text-xs text-muted-foreground mt-2">
-                                {new Date(ticket.created_at).toLocaleDateString("tr-TR")}
+                                {new Date(
+                                  ticket.created_at
+                                ).toLocaleDateString("tr-TR")}
                               </p>
                             </CardContent>
                           </Card>
@@ -378,12 +463,18 @@ const Support = () => {
                             href="#"
                             onClick={(e) => {
                               e.preventDefault();
-                              setCurrentPage((p) => Math.max(1, p - 1));
+                              setCurrentPage((p) =>
+                                Math.max(1, p - 1)
+                              );
                             }}
                           />
                         </PaginationItem>
                         {Array.from(
-                          { length: Math.ceil(tickets.length / itemsPerPage) },
+                          {
+                            length: Math.ceil(
+                              tickets.length / itemsPerPage
+                            ),
+                          },
                           (_, i) => i + 1
                         ).map((page) => (
                           <PaginationItem key={page}>
@@ -405,7 +496,12 @@ const Support = () => {
                             onClick={(e) => {
                               e.preventDefault();
                               setCurrentPage((p) =>
-                                Math.min(Math.ceil(tickets.length / itemsPerPage), p + 1)
+                                Math.min(
+                                  Math.ceil(
+                                    tickets.length / itemsPerPage
+                                  ),
+                                  p + 1
+                                )
                               );
                             }}
                           />
@@ -426,14 +522,24 @@ const Support = () => {
                       <div>
                         <CardTitle>{selectedTicket.subject}</CardTitle>
                         <CardDescription>
-                          {new Date(selectedTicket.created_at).toLocaleString("tr-TR")}
+                          {new Date(
+                            selectedTicket.created_at
+                          ).toLocaleString("tr-TR")}
                         </CardDescription>
                       </div>
                       <div className="flex gap-2">
-                        <Badge className={statusBadge(selectedTicket.status)}>
+                        <Badge
+                          className={statusBadge(
+                            selectedTicket.status
+                          )}
+                        >
                           {STATUS_TEXT[selectedTicket.status]}
                         </Badge>
-                        <Badge className={priorityBadge(selectedTicket.priority)}>
+                        <Badge
+                          className={priorityBadge(
+                            selectedTicket.priority
+                          )}
+                        >
                           {PRIORITY_TEXT[selectedTicket.priority]}
                         </Badge>
                       </div>
@@ -443,13 +549,17 @@ const Support = () => {
                   <CardContent className="space-y-4">
                     {/* Original Message */}
                     <div className="bg-muted p-4 rounded-lg">
-                      <p className="text-sm whitespace-pre-wrap">{selectedTicket.message}</p>
+                      <p className="text-sm whitespace-pre-wrap">
+                        {selectedTicket.message}
+                      </p>
                     </div>
 
                     {/* Replies */}
                     <div className="space-y-4">
                       {repliesLoading ? (
-                        <div className="text-sm text-muted-foreground">Yanıtlar yükleniyor…</div>
+                        <div className="text-sm text-muted-foreground">
+                          Yanıtlar yükleniyor…
+                        </div>
                       ) : replies.length === 0 ? (
                         <div className="text-sm text-muted-foreground">
                           Henüz yanıt yok
@@ -459,18 +569,26 @@ const Support = () => {
                           <div
                             key={reply.id}
                             className={`p-4 rounded-lg ${
-                              reply.is_admin ? "bg-primary/10" : "bg-muted"
+                              reply.is_admin
+                                ? "bg-primary/10"
+                                : "bg-muted"
                             }`}
                           >
                             <div className="flex justify-between items-start mb-2">
                               <p className="font-semibold text-sm">
-                                {reply.is_admin ? "Destek Ekibi" : "Siz"}
+                                {reply.is_admin
+                                  ? "Destek Ekibi"
+                                  : "Siz"}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(reply.created_at).toLocaleString("tr-TR")}
+                                {new Date(
+                                  reply.created_at
+                                ).toLocaleString("tr-TR")}
                               </p>
                             </div>
-                            <p className="text-sm whitespace-pre-wrap">{reply.message}</p>
+                            <p className="text-sm whitespace-pre-wrap">
+                              {reply.message}
+                            </p>
                           </div>
                         ))
                       )}
@@ -481,15 +599,23 @@ const Support = () => {
                       <div className="flex gap-2">
                         <Textarea
                           value={replyMessage}
-                          onChange={(e) => setReplyMessage(e.target.value)}
+                          onChange={(e) =>
+                            setReplyMessage(e.target.value)
+                          }
                           placeholder="Yanıtınızı yazın..."
                           rows={3}
                         />
                         <Button
                           onClick={handleSendReply}
                           size="icon"
-                          disabled={sendingReply || !replyMessage.trim()}
-                          title={!replyMessage.trim() ? "Mesaj yazın" : "Gönder"}
+                          disabled={
+                            sendingReply || !replyMessage.trim()
+                          }
+                          title={
+                            !replyMessage.trim()
+                              ? "Mesaj yazın"
+                              : "Gönder"
+                          }
                         >
                           <Send className="h-4 w-4" />
                         </Button>
@@ -502,7 +628,9 @@ const Support = () => {
                   <CardContent className="flex items-center justify-center py-16">
                     <div className="text-center">
                       <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-muted-foreground">Görüntülemek için bir ticket seçin</p>
+                      <p className="text-muted-foreground">
+                        Görüntülemek için bir ticket seçin
+                      </p>
                     </div>
                   </CardContent>
                 </Card>

@@ -1,7 +1,7 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/from/special.apiProviders.ts
 // =============================================================
-import { BASE_URL } from "./constants";
+import { BASE_URL } from "../../rtk/constants";
 import { buildAuthHeaders, extractArray, joinUrl, readJson, toQS } from "./http";
 import type { FetchResult, FromPromise, SelectOpts } from "./types";
 import type { TableRow } from "../types";

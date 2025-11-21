@@ -5,7 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ArrowLeft, Send } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,7 +25,10 @@ import {
 } from "@/integrations/metahub/rtk/endpoints/admin/ticket_replies_admin.endpoints";
 import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
 
-import type { SupportTicketStatus, SupportTicketPriority } from "@/integrations/metahub/db/types/support";
+import type {
+  SupportTicketStatus,
+  SupportTicketPriority,
+} from "@/integrations/metahub/rtk/types/support";
 
 const statusText: Record<SupportTicketStatus, string> = {
   open: "Açık",
@@ -27,26 +36,37 @@ const statusText: Record<SupportTicketStatus, string> = {
   waiting_response: "Yanıt bekliyor",
   closed: "Kapalı",
 };
+
 const statusBadge = (s: SupportTicketStatus) => {
   switch (s) {
-    case "open": return "bg-blue-100 text-blue-800";
-    case "in_progress": return "bg-amber-100 text-amber-800";
-    case "waiting_response": return "bg-purple-100 text-purple-800";
-    case "closed": return "bg-gray-100 text-gray-800";
+    case "open":
+      return "bg-blue-100 text-blue-800";
+    case "in_progress":
+      return "bg-amber-100 text-amber-800";
+    case "waiting_response":
+      return "bg-purple-100 text-purple-800";
+    case "closed":
+      return "bg-gray-100 text-gray-800";
   }
 };
+
 const priorityText: Record<SupportTicketPriority, string> = {
   low: "Düşük",
   medium: "Orta",
   high: "Yüksek",
   urgent: "Acil",
 };
+
 const priorityBadge = (p: SupportTicketPriority) => {
   switch (p) {
-    case "urgent": return "bg-red-500";
-    case "high": return "bg-orange-500";
-    case "medium": return "bg-yellow-500";
-    case "low": return "bg-green-500";
+    case "urgent":
+      return "bg-red-500";
+    case "high":
+      return "bg-orange-500";
+    case "medium":
+      return "bg-yellow-500";
+    case "low":
+      return "bg-green-500";
   }
 };
 
@@ -54,20 +74,31 @@ export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: ticket, isLoading, refetch: refetchTicket } =
-    useGetSupportTicketAdminByIdQuery(id!, { skip: !id });
+  const {
+    data: ticket,
+    isLoading,
+    refetch: refetchTicket,
+  } = useGetSupportTicketAdminByIdQuery(id!, { skip: !id });
 
-  const { data: replies = [], refetch: refetchReplies, isLoading: isRepliesLoading } =
-    useListTicketRepliesAdminQuery(id!, { skip: !id });
+  const {
+    data: replies = [],
+    refetch: refetchReplies,
+    isLoading: isRepliesLoading,
+  } = useListTicketRepliesAdminQuery(id!, { skip: !id });
 
-  const [updateTicket, { isLoading: isUpdating }] = useUpdateSupportTicketAdminMutation();
-  const [createReply, { isLoading: isSending }] = useCreateTicketReplyAdminMutation();
+  const [updateTicket, { isLoading: isUpdating }] =
+    useUpdateSupportTicketAdminMutation();
+  const [createReply, { isLoading: isSending }] =
+    useCreateTicketReplyAdminMutation();
 
   // === Ticket sahibinin ismi/emaili ===
   const ownerId = ticket?.user_id ?? null;
-  const { data: ownerMini = [] } = useListUsersAdminMiniQuery(ownerId ? [ownerId] : [], {
-    skip: !ownerId,
-  });
+  const { data: ownerMini = [] } = useListUsersAdminMiniQuery(
+    ownerId ? [ownerId] : [],
+    {
+      skip: !ownerId,
+    }
+  );
   const owner = ownerMini[0];
   const ownerLabel = useMemo(() => {
     if (!owner) return ownerId ?? "-";
@@ -90,8 +121,18 @@ export default function TicketDetail() {
   const handleSendReply = async () => {
     if (!id || !replyMessage.trim()) return;
     try {
-      await createReply({ ticket_id: id, message: replyMessage.trim() }).unwrap();
+      // Admin reply → BE tarafında:
+      //  - ticket_replies kaydı oluşturuluyor
+      //  - ticket.status = "waiting_response" yapılıyor
+      await createReply({
+        ticket_id: id,
+        message: replyMessage.trim(),
+        // user_id göndermiyoruz; admin reply olduğu için BE is_admin=true + user_id=null kaydediyor
+      }).unwrap();
+
+      // Detay sayfası ve cevap listesi güncellensin
       await Promise.all([refetchReplies(), refetchTicket()]);
+
       setReplyMessage("");
       toast.success("Cevap gönderildi");
     } catch {
@@ -110,7 +151,9 @@ export default function TicketDetail() {
   if (!ticket) {
     return (
       <AdminLayout title="Ticket Detayı">
-        <div className="flex items-center justify-center py-8">Ticket bulunamadı</div>
+        <div className="flex items-center justify-center py-8">
+          Ticket bulunamadı
+        </div>
       </AdminLayout>
     );
   }
@@ -129,12 +172,16 @@ export default function TicketDetail() {
             {/* Başlık + durum seçici satırı */}
             <div className="flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
               <div className="space-y-2 min-w-0">
-                <CardTitle className="break-words [overflow-wrap:anywhere]">
+                <CardTitle className="break-words overflow-wrap:anywhere">
                   {ticket.subject}
                 </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className={statusBadge(ticket.status)}>{statusText[ticket.status]}</Badge>
-                  <Badge className={priorityBadge(ticket.priority)}>{priorityText[ticket.priority]}</Badge>
+                  <Badge className={statusBadge(ticket.status)}>
+                    {statusText[ticket.status]}
+                  </Badge>
+                  <Badge className={priorityBadge(ticket.priority)}>
+                    {priorityText[ticket.priority]}
+                  </Badge>
                   <span className="text-sm text-muted-foreground">
                     {ticket.category ?? "Genel"}
                   </span>
@@ -143,7 +190,9 @@ export default function TicketDetail() {
 
               <Select
                 value={ticket.status}
-                onValueChange={(v) => handleStatusChange(v as SupportTicketStatus)}
+                onValueChange={(v) =>
+                  handleStatusChange(v as SupportTicketStatus)
+                }
                 disabled={isUpdating}
               >
                 <SelectTrigger className="w-[200px] shrink-0">
@@ -162,7 +211,7 @@ export default function TicketDetail() {
           <CardContent className="space-y-4">
             <div className="max-w-full">
               <p className="text-sm font-medium">Kullanıcı:</p>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words overflow-wrap:anywhere">
                 {ownerLabel}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -172,7 +221,7 @@ export default function TicketDetail() {
 
             <div className="max-w-full">
               <p className="text-sm font-medium mb-2">Mesaj:</p>
-              <p className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              <p className="text-sm whitespace-pre-wrap break-words overflow-wrap:anywhere">
                 {ticket.message}
               </p>
             </div>
@@ -185,24 +234,30 @@ export default function TicketDetail() {
           </CardHeader>
           <CardContent className="space-y-4">
             {isRepliesLoading ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Yükleniyor...</p>
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Yükleniyor...
+              </p>
             ) : replies.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Henüz cevap yok</p>
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Henüz cevap yok
+              </p>
             ) : (
               replies.map((reply) => (
                 <div
                   key={reply.id}
-                  className={`p-4 rounded-lg w-full max-w-full overflow-hidden ${reply.is_admin ? "bg-primary/10" : "bg-muted"}`}
+                  className={`p-4 rounded-lg w-full max-w-full overflow-hidden ${
+                    reply.is_admin ? "bg-primary/10" : "bg-muted"
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-2 gap-4">
-                    <p className="text-sm font-medium break-words [overflow-wrap:anywhere]">
-                      {reply.is_admin ? "Admin" : (reply.user_id ?? "Kullanıcı")}
+                    <p className="text-sm font-medium break-words overflow-wrap:anywhere">
+                      {reply.is_admin ? "Admin" : reply.user_id ?? "Kullanıcı"}
                     </p>
                     <p className="text-xs text-muted-foreground shrink-0">
                       {new Date(reply.created_at).toLocaleString("tr-TR")}
                     </p>
                   </div>
-                  <p className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  <p className="text-sm whitespace-pre-wrap break-words overflow-wrap:anywhere">
                     {reply.message}
                   </p>
                 </div>
@@ -218,7 +273,11 @@ export default function TicketDetail() {
                   rows={4}
                   className="w-full"
                 />
-                <Button onClick={handleSendReply} disabled={isSending || !replyMessage.trim()} className="w-full sm:w-auto">
+                <Button
+                  onClick={handleSendReply}
+                  disabled={isSending || !replyMessage.trim()}
+                  className="w-full sm:w-auto"
+                >
                   <Send className="mr-2 h-4 w-4" />
                   {isSending ? "Gönderiliyor..." : "Cevap Gönder"}
                 </Button>

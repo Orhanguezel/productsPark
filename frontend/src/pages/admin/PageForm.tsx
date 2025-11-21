@@ -22,7 +22,7 @@ import {
   useUpdateCustomPageAdminMutation,
 } from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
 import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
-import type { UpsertCustomPageBody } from "@/integrations/metahub/db/types/customPages";
+import type { UpsertCustomPageBody } from "@/integrations/metahub/rtk/types/customPages";
 
 /* ---------------- helpers ---------------- */
 const slugify = (v: string) =>
@@ -161,8 +161,8 @@ export default function PageForm() {
     formData.slug.trim().length === 0
       ? "Slug boş olamaz"
       : existingSlugs.has(formData.slug.trim())
-      ? "Bu slug zaten kullanılıyor"
-      : "";
+        ? "Bu slug zaten kullanılıyor"
+        : "";
 
   // SEO snippet veri seti
   const seoTitle = (formData.meta_title || formData.title || "").trim();
@@ -657,8 +657,8 @@ export default function PageForm() {
                     {loading
                       ? "Kaydediliyor..."
                       : isEdit
-                      ? "Güncelle"
-                      : "Oluştur"}
+                        ? "Güncelle"
+                        : "Oluştur"}
                   </Button>
                 </div>
               </form>

@@ -7,7 +7,7 @@ import {
   useListPublicFakeOrdersQuery,
   useGetPublicRandomFakeOrderQuery,
 } from "@/integrations/metahub/rtk/endpoints/fake_notifications.endpoints";
-import type { FakeOrderNotification } from "@/integrations/metahub/db/types/fakeNotifications";
+import type { FakeOrderNotification } from "@/integrations/metahub/rtk/types/fakeNotifications";
 
 export function FakeOrderNotification() {
   const { data: settings } = useGetPublicFakeNotificationSettingsQuery(); // ⬅️ değişti

@@ -1,7 +1,7 @@
 // =============================================================
 // FILE: src/integrations/metahub/db/from/qb/ops/updateOp.ts
 // =============================================================
-import { BASE_URL } from "../../constants";
+import { BASE_URL } from "../../../../rtk/constants";
 import { buildAuthHeaders, joinUrl } from "../../http";
 import { normalizeTableRows } from "../../../normalizeTables";
 import { parseBodyToRows } from "../parser";
@@ -97,7 +97,7 @@ export async function runUpdate<TRow>(
 
   // ✅ /orders update → /admin/orders/:id/status yönlendirmesi
   if (built.path === "/orders") {
-    const idFromUrl   = extractIdFromUrl(requestUrl);
+    const idFromUrl = extractIdFromUrl(requestUrl);
     const idFromQuery = extractIdFromSearch(requestUrl);
     const id = idFromUrl || idFromQuery;
 
@@ -112,9 +112,9 @@ export async function runUpdate<TRow>(
         // BE zod: { status, note } -> güvenli body gönder
         const safe: Record<string, unknown> = {};
         if (prePayload.status !== undefined) safe.status = prePayload.status;
-        if (prePayload.note   !== undefined) safe.note   = prePayload.note;
+        if (prePayload.note !== undefined) safe.note = prePayload.note;
         bodyPayload = safe;
-      } catch { /* no-op */}
+      } catch { /* no-op */ }
     }
   }
 
@@ -167,7 +167,7 @@ export async function runUpdate<TRow>(
         requestUrl = u.toString();
 
         const safe: Record<string, unknown> = {};
-        if (prePayload.status     !== undefined) safe.status     = prePayload.status;
+        if (prePayload.status !== undefined) safe.status = prePayload.status;
         if (prePayload.admin_note !== undefined) safe.admin_note = prePayload.admin_note;
         bodyPayload = safe;
       } catch {/* no-op */ }
