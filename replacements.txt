@@ -1,3 +1,0 @@
-regex:([0-9]{12,}-[a-zA-Z0-9_]{10,}\.apps\.googleusercontent\.com)==>__REDACTED_GOOGLE_CLIENT_ID__
-regex:(GOCSPX-[A-Za-z0-9_-]{20,})==>__REDACTED_GOOGLE_CLIENT_SECRET__
-regex:(sk_test_[A-Za-z0-9]{10,})==>__REDACTED_STRIPE_TEST_KEY__
