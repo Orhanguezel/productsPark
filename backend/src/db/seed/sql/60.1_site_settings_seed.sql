@@ -142,14 +142,14 @@ NOW(3), NOW(3)),
 -- GOOGLE OAUTH / reCAPTCHA
 -- ------------------------------------------------------------------
 ('11111111-2222-3333-4444-555555555555', 'google_client_id',     '__REDACTED_GOOGLE_CLIENT_ID__', NOW(3), NOW(3)),
-('22222222-3333-4444-5555-666666666666', 'google_client_secret', '__REDACTED_GOOGLE_CLIENT_SECRET__', NOW(3), NOW(3)),
+('22222222-3333-4444-5555-666666666666', 'google_client_secret', 'xxxxx', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- CLOUDINARY / DOSYA YÜKLEME
 -- ------------------------------------------------------------------
 ('aaaacccc-dddd-eeee-ffff-000000000001', 'cloudinary_cloud_name',      'dbozv7wqd', NOW(3), NOW(3)),
 ('aaaacccc-dddd-eeee-ffff-000000000002', 'cloudinary_api_key',         '644676135993432', NOW(3), NOW(3)),
-('aaaacccc-dddd-eeee-ffff-000000000003', 'cloudinary_api_secret',      'C2VWxsJ5j0jZpcxOhvuTOTKhaMo', NOW(3), NOW(3)),
+('aaaacccc-dddd-eeee-ffff-000000000003', 'cloudinary_api_secret',      'xxxxx', NOW(3), NOW(3)),
 ('aaaacccc-dddd-eeee-ffff-000000000004', 'cloudinary_folder',          'uploads', NOW(3), NOW(3)),
 ('aaaacccc-dddd-eeee-ffff-000000000005', 'cloudinary_unsigned_preset', 'unsigned-upload', NOW(3), NOW(3)),
 
