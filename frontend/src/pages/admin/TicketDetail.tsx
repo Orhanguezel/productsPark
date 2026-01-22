@@ -18,17 +18,16 @@ import { toast } from "sonner";
 import {
   useGetSupportTicketAdminByIdQuery,
   useUpdateSupportTicketAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/support_admin.endpoints";
-import {
   useListTicketRepliesAdminQuery,
   useCreateTicketReplyAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/ticket_replies_admin.endpoints";
-import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
+  useAdminListQuery,
+} from '@/integrations/hooks';
+
 
 import type {
   SupportTicketStatus,
   SupportTicketPriority,
-} from "@/integrations/metahub/rtk/types/support";
+} from "@/integrations/types";
 
 const statusText: Record<SupportTicketStatus, string> = {
   open: "Açık",
@@ -93,11 +92,9 @@ export default function TicketDetail() {
 
   // === Ticket sahibinin ismi/emaili ===
   const ownerId = ticket?.user_id ?? null;
-  const { data: ownerMini = [] } = useListUsersAdminMiniQuery(
-    ownerId ? [ownerId] : [],
-    {
-      skip: !ownerId,
-    }
+  const { data: ownerMini = [] } = useAdminListQuery(
+    { q: ownerId ?? '' },
+    { skip: !ownerId }
   );
   const owner = ownerMini[0];
   const ownerLabel = useMemo(() => {

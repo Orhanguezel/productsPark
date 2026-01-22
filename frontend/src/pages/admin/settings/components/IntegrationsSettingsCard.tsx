@@ -1,58 +1,94 @@
-// =============================================================
-// FILE: src/pages/admin/settings/components/IntegrationsSettingsCard.tsx
-// =============================================================
-"use client";
+'use client';
 
-import type { Dispatch, SetStateAction, ChangeEvent } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import type { SiteSettings } from "@/integrations/metahub/rtk/types/site";
+// =============================================================
+// FINAL — Integrations Settings Card (parent SettingsPage compatible)
+// - Accepts ANY parent settings model (T)
+// - Safe read/write via Record<string, unknown>
+// - no SiteSettings import
+// - exactOptionalPropertyTypes friendly
+// =============================================================
 
-type Props = {
-  settings: SiteSettings;
-  setSettings: Dispatch<SetStateAction<SiteSettings>>;
+import * as React from 'react';
+import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+
+/* ------------------------------------------------------------------ */
+/* Keys used by this card (must exist in site_settings keys)           */
+/* ------------------------------------------------------------------ */
+
+const INTEGRATION_KEYS = [
+  'facebook_pixel_id',
+
+  'google_client_id',
+  'google_client_secret',
+
+  'cloudinary_cloud_name',
+  'cloudinary_folder',
+  'cloudinary_api_key',
+  'cloudinary_api_secret',
+  'cloudinary_unsigned_preset',
+
+  'facebook_url',
+  'twitter_url',
+  'instagram_url',
+  'linkedin_url',
+  'discord_webhook_url',
+] as const;
+
+type IntegrationKey = (typeof INTEGRATION_KEYS)[number];
+
+/* ------------------------------------------------------------------ */
+/* Props (generic)                                                    */
+/* ------------------------------------------------------------------ */
+
+type Props<T> = {
+  settings: T;
+  setSettings: Dispatch<SetStateAction<T>>;
 };
 
-export default function IntegrationsSettingsCard({ settings, setSettings }: Props) {
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+const toStr = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
+
+export default function IntegrationsSettingsCard<T>({ settings, setSettings }: Props<T>) {
+  const dyn = settings as unknown as Record<string, unknown>;
+
   const handleChange =
-    (key: keyof SiteSettings) =>
-      (e: ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setSettings((prev) => ({
-          ...prev,
-          [key]: value,
-        }));
-      };
+    (key: IntegrationKey) =>
+    (e: ChangeEvent<HTMLInputElement>): void => {
+      const value = e.target.value;
+
+      setSettings((prev) => {
+        const out = { ...(prev as unknown as Record<string, unknown>) };
+        out[key] = value;
+        return out as unknown as T;
+      });
+    };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Analitik, OAuth & Entegrasyonlar</CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-8">
         {/* Google Analytics & Facebook Pixel */}
         <section className="space-y-3">
-          <h3 className="font-semibold text-sm text-muted-foreground">
-            Analytics
-          </h3>
+          <h3 className="font-semibold text-sm text-muted-foreground">Analytics</h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="google_analytics_id">Google Analytics ID</Label>
-              <Input
-                id="google_analytics_id"
-                placeholder="G-XXXXXXXXXX"
-                value={settings.google_analytics_id ?? ""}
-                onChange={handleChange("google_analytics_id")}
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="facebook_pixel_id">Facebook Pixel ID</Label>
               <Input
                 id="facebook_pixel_id"
                 placeholder="XXXXXXXXXXXXXXX"
-                value={settings.facebook_pixel_id ?? ""}
-                onChange={handleChange("facebook_pixel_id")}
+                value={toStr(dyn.facebook_pixel_id)}
+                onChange={handleChange('facebook_pixel_id')}
               />
             </div>
           </div>
@@ -60,146 +96,156 @@ export default function IntegrationsSettingsCard({ settings, setSettings }: Prop
 
         {/* Google OAuth */}
         <section className="space-y-3">
-          <h3 className="font-semibold text-sm text-muted-foreground">
-            Google OAuth (Giriş)
-          </h3>
+          <h3 className="font-semibold text-sm text-muted-foreground">Google OAuth (Giriş)</h3>
+
           <p className="text-xs text-muted-foreground">
-            Buradaki değerler <code>site_settings</code> tablosundan okunur ve
-            backend&apos;de Google ile giriş için kullanılır.
+            Buradaki değerler <code>site_settings</code> tablosundan okunur ve backend&apos;de
+            Google ile giriş için kullanılır.
           </p>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="google_client_id">Google Client ID</Label>
               <Input
                 id="google_client_id"
                 placeholder="4400....apps.googleusercontent.com"
-                value={settings.google_client_id ?? ""}
-                onChange={handleChange("google_client_id")}
+                value={toStr(dyn.google_client_id)}
+                onChange={handleChange('google_client_id')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="google_client_secret">Google Client Secret</Label>
               <Input
                 id="google_client_secret"
                 type="password"
                 placeholder="GOCSPX-..."
-                value={settings.google_client_secret ?? ""}
-                onChange={handleChange("google_client_secret")}
+                value={toStr(dyn.google_client_secret)}
+                onChange={handleChange('google_client_secret')}
               />
             </div>
           </div>
         </section>
 
-        {/* Cloudinary / Dosya Yükleme */}
+        {/* Cloudinary */}
         <section className="space-y-3">
           <h3 className="font-semibold text-sm text-muted-foreground">
             Cloudinary (Dosya Yükleme)
           </h3>
+
           <p className="text-xs text-muted-foreground">
-            Bu ayarlar storage servisinde kullanılır. Boş bırakılırsa env
-            değişkenlerine fallback yapılır.
+            Bu ayarlar storage servisinde kullanılır. Boş bırakılırsa env değişkenlerine fallback
+            yapılır.
           </p>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="cloudinary_cloud_name">Cloud Name</Label>
               <Input
                 id="cloudinary_cloud_name"
                 placeholder="my-cloud-name"
-                value={settings.cloudinary_cloud_name ?? ""}
-                onChange={handleChange("cloudinary_cloud_name")}
+                value={toStr(dyn.cloudinary_cloud_name)}
+                onChange={handleChange('cloudinary_cloud_name')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="cloudinary_folder">Varsayılan Klasör</Label>
               <Input
                 id="cloudinary_folder"
                 placeholder="products"
-                value={settings.cloudinary_folder ?? ""}
-                onChange={handleChange("cloudinary_folder")}
+                value={toStr(dyn.cloudinary_folder)}
+                onChange={handleChange('cloudinary_folder')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="cloudinary_api_key">API Key</Label>
               <Input
                 id="cloudinary_api_key"
                 placeholder="xxxxxxxx"
-                value={settings.cloudinary_api_key ?? ""}
-                onChange={handleChange("cloudinary_api_key")}
+                value={toStr(dyn.cloudinary_api_key)}
+                onChange={handleChange('cloudinary_api_key')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="cloudinary_api_secret">API Secret</Label>
               <Input
                 id="cloudinary_api_secret"
                 type="password"
                 placeholder="yyyyyy"
-                value={settings.cloudinary_api_secret ?? ""}
-                onChange={handleChange("cloudinary_api_secret")}
+                value={toStr(dyn.cloudinary_api_secret)}
+                onChange={handleChange('cloudinary_api_secret')}
               />
             </div>
+
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="cloudinary_unsigned_preset">
-                Unsigned Upload Preset
-              </Label>
+              <Label htmlFor="cloudinary_unsigned_preset">Unsigned Upload Preset</Label>
               <Input
                 id="cloudinary_unsigned_preset"
                 placeholder="unsigned-upload"
-                value={settings.cloudinary_unsigned_preset ?? ""}
-                onChange={handleChange("cloudinary_unsigned_preset")}
+                value={toStr(dyn.cloudinary_unsigned_preset)}
+                onChange={handleChange('cloudinary_unsigned_preset')}
               />
             </div>
           </div>
         </section>
 
-        {/* Sosyal Medya & Diğer */}
+        {/* Social */}
         <section className="space-y-3">
           <h3 className="font-semibold text-sm text-muted-foreground">
             Sosyal Medya & Diğer Entegrasyonlar
           </h3>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="facebook_url">Facebook URL</Label>
               <Input
                 id="facebook_url"
                 placeholder="https://facebook.com/..."
-                value={settings.facebook_url ?? ""}
-                onChange={handleChange("facebook_url")}
+                value={toStr(dyn.facebook_url)}
+                onChange={handleChange('facebook_url')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="twitter_url">Twitter(X) URL</Label>
               <Input
                 id="twitter_url"
                 placeholder="https://x.com/..."
-                value={settings.twitter_url ?? ""}
-                onChange={handleChange("twitter_url")}
+                value={toStr(dyn.twitter_url)}
+                onChange={handleChange('twitter_url')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="instagram_url">Instagram URL</Label>
               <Input
                 id="instagram_url"
                 placeholder="https://instagram.com/..."
-                value={settings.instagram_url ?? ""}
-                onChange={handleChange("instagram_url")}
+                value={toStr(dyn.instagram_url)}
+                onChange={handleChange('instagram_url')}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="linkedin_url">LinkedIn URL</Label>
               <Input
                 id="linkedin_url"
                 placeholder="https://linkedin.com/company/..."
-                value={settings.linkedin_url ?? ""}
-                onChange={handleChange("linkedin_url")}
+                value={toStr(dyn.linkedin_url)}
+                onChange={handleChange('linkedin_url')}
               />
             </div>
+
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="discord_webhook_url">Discord Webhook URL</Label>
               <Input
                 id="discord_webhook_url"
                 placeholder="https://discord.com/api/webhooks/..."
-                value={settings.discord_webhook_url ?? ""}
-                onChange={handleChange("discord_webhook_url")}
+                value={toStr(dyn.discord_webhook_url)}
+                onChange={handleChange('discord_webhook_url')}
               />
             </div>
           </div>

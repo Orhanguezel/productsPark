@@ -18,7 +18,7 @@ import {
   listAllOrderItemsAdmin,
 } from "./admin.controller";
 
-const BASE = "/admin/orders";
+const BASE = "/orders";
 
 export async function registerAdminOrders(app: FastifyInstance) {
   // Sadece admin kullanıcılar erişebilsin

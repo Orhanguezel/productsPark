@@ -18,7 +18,7 @@ import {
   useCreateEmailTemplateAdminMutation,
   useUpdateEmailTemplateAdminMutation,
   useDeleteEmailTemplateAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints";
+} from "@/integrations/hooks";
 
 type FormState = {
   key: string;

@@ -9,7 +9,7 @@ import {
   adminReorderMenuItems,
 } from './admin.controller';
 
-const BASE = '/admin/menu_items';
+const BASE = '/menu_items';
 
 export async function registerMenuItemsAdmin(app: FastifyInstance) {
   app.get(`${BASE}`, { preHandler: [requireAuth] }, adminListMenuItems);

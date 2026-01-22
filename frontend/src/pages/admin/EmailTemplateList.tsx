@@ -21,9 +21,9 @@ import { toast } from "sonner";
 import {
   useListEmailTemplatesAdminQuery,
   useDeleteEmailTemplateAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints";
+} from "@/integrations/hooks";
 
-import type { EmailTemplateView } from "@/integrations/metahub/rtk/types/email";
+import type { EmailTemplateAdminView } from '@/integrations/types';
 
 export default function EmailTemplateList() {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ export default function EmailTemplateList() {
     }
   }, [isError, error]);
 
-  const templates: EmailTemplateView[] = data ?? [];
+  const templates: EmailTemplateAdminView[] = data ?? [];
 
   const handleDelete = async (id: string) => {
     const ok = window.confirm("Bu şablonu silmek istediğinizden emin misiniz?");

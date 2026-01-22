@@ -1,0 +1,818 @@
+{
+	"info": {
+		"_postman_id": "c2b6b2f9-5a7b-4c91-9bb1-2c6f0e1b7b0a",
+		"name": "productsPark — Telegram (Admin) — TESTED",
+		"description": "Telegram module (Admin): inbound list, autoreply get/update, admin tools (test/send/event). Includes positive + negative validation tests. Uses Bearer {{adminToken}}.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 - Setup / Helpers",
+			"item": [
+				{
+					"name": "Check Admin Token (GET /admin/telegram/autoreply)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Has adminToken', function () {",
+									"  const t = pm.environment.get('adminToken') || pm.collectionVariables.get('adminToken');",
+									"  pm.expect(t && String(t).trim().length > 10).to.be.true;",
+									"});",
+									"",
+									"pm.test('HTTP 200 or 403', function () {",
+									"  pm.expect([200, 403]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Response has enabled/mode/template', function () {",
+									"    pm.expect(json).to.have.property('enabled');",
+									"    pm.expect(json).to.have.property('mode');",
+									"    pm.expect(json).to.have.property('template');",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "10 - Admin Telegram Tools",
+			"item": [
+				{
+					"name": "Test Message (ok) — POST /admin/telegram/test",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chat_id\": \"{{telegramChatIdOverride}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/test",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"test"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Generic Send (ok) — POST /admin/telegram/send",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 201', function () {",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Manual Telegram Send\",\n  \"message\": \"Hello from productsPark Postman test.\",\n  \"type\": \"test\",\n  \"chat_id\": \"{{telegramChatIdOverride}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/send",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"send"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Event Send (new_ticket) — POST /admin/telegram/event",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 201', function () {",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event\": \"new_ticket\",\n  \"chat_id\": \"{{telegramChatIdOverride}}\",\n  \"data\": {\n    \"user_name\": \"{{testUserName}}\",\n    \"subject\": \"{{testTicketSubject}}\",\n    \"priority\": \"{{testTicketPriority}}\",\n    \"message\": \"{{testTicketMessage}}\",\n    \"created_at\": \"{{nowIso}}\",\n    \"category\": \"support\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/event",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"event"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Event Send (ticket_replied) — POST /admin/telegram/event",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 201', function () {",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event\": \"ticket_replied\",\n  \"chat_id\": \"{{telegramChatIdOverride}}\",\n  \"data\": {\n    \"user_name\": \"{{testUserName}}\",\n    \"subject\": \"{{testTicketSubject}}\",\n    \"priority\": \"{{testTicketPriority}}\",\n    \"message\": \"Reply: {{testTicketReplyMessage}}\",\n    \"created_at\": \"{{nowIso}}\",\n    \"category\": \"support\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/event",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"event"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "20 - AutoReply (Admin)",
+			"item": [
+				{
+					"name": "Get AutoReply — GET /admin/telegram/autoreply",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response shape', function () {",
+									"  pm.expect(json).to.have.property('enabled');",
+									"  pm.expect(json).to.have.property('mode');",
+									"  pm.expect(json).to.have.property('template');",
+									"});",
+									"",
+									"pm.collectionVariables.set('autoReplyEnabled', String(json.enabled));",
+									"pm.collectionVariables.set('autoReplyTemplate', String(json.template || ''));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update AutoReply (enable=true) — POST /admin/telegram/autoreply",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": true,\n  \"template\": \"{{autoReplyTemplateNew}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update AutoReply (validation error) — POST /admin/telegram/autoreply (expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 400', function () {",
+									"  pm.response.to.have.status(400);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('validation_error', function () {",
+									"  pm.expect(json).to.have.property('error');",
+									"  pm.expect(json.error).to.have.property('message', 'validation_error');",
+									"  pm.expect(json.error).to.have.property('details');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": true,\n  \"template\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "30 - Inbound (Admin)",
+			"item": [
+				{
+					"name": "List Inbound (default) — GET /admin/telegram/inbound",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response shape (items + next_cursor)', function () {",
+									"  pm.expect(json).to.have.property('items');",
+									"  pm.expect(Array.isArray(json.items)).to.be.true;",
+									"});",
+									"",
+									"if (json.items && json.items.length) {",
+									"  pm.collectionVariables.set('lastInboundId', String(json.items[0].id));",
+									"  pm.collectionVariables.set('lastInboundChatId', String(json.items[0].chat_id));",
+									"}",
+									"if (json.next_cursor) {",
+									"  pm.collectionVariables.set('inboundCursor', String(json.next_cursor));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/inbound",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"inbound"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Inbound (with params) — GET /admin/telegram/inbound?limit=10&q=hello&chat_id=..",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('items array', function () {",
+									"  pm.expect(Array.isArray(json.items)).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/inbound?limit=10&q={{inboundQ}}&chat_id={{inboundChatId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"inbound"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "q",
+									"value": "{{inboundQ}}"
+								},
+								{
+									"key": "chat_id",
+									"value": "{{inboundChatId}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Inbound (cursor pagination) — GET /admin/telegram/inbound?cursor=...",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('items array', function () {",
+									"  pm.expect(Array.isArray(json.items)).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/inbound?limit=10&cursor={{inboundCursor}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"inbound"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "cursor",
+									"value": "{{inboundCursor}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "99 - Negative / Policy Checks",
+			"item": [
+				{
+					"name": "Event Send (validation error) — POST /admin/telegram/event (empty body expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 400', function () {",
+									"  pm.response.to.have.status(400);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('validation_error', function () {",
+									"  pm.expect(json).to.have.property('error');",
+									"  pm.expect(json.error).to.have.property('message', 'validation_error');",
+									"  pm.expect(json.error).to.have.property('details');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/event",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"event"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "AutoReply (validation error) — POST /admin/telegram/autoreply (bad types expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 400', function () {",
+									"  pm.response.to.have.status(400);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": \"true\",\n  \"template\": 123\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8081/api"
+		},
+		{
+			"key": "adminToken",
+			"value": ""
+		},
+		{
+			"key": "telegramChatIdOverride",
+			"value": ""
+		},
+		{
+			"key": "testUserName",
+			"value": "Orhan"
+		},
+		{
+			"key": "testTicketSubject",
+			"value": "Postman Test Ticket"
+		},
+		{
+			"key": "testTicketPriority",
+			"value": "normal"
+		},
+		{
+			"key": "testTicketMessage",
+			"value": "Hello from Postman. This is a test ticket message."
+		},
+		{
+			"key": "testTicketReplyMessage",
+			"value": "We received your ticket, thank you."
+		},
+		{
+			"key": "autoReplyTemplateNew",
+			"value": "Test auto reply (productsPark)"
+		},
+		{
+			"key": "inboundQ",
+			"value": ""
+		},
+		{
+			"key": "inboundChatId",
+			"value": ""
+		},
+		{
+			"key": "inboundCursor",
+			"value": ""
+		},
+		{
+			"key": "nowIso",
+			"value": "2026-01-17T12:00:00.000Z"
+		}
+	]
+}

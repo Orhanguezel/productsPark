@@ -5,8 +5,9 @@ import { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   useGetSiteSettingByKeyQuery,
-  type JsonLike,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+} from "@/integrations/hooks";
+
+import type { JsonLike } from '@/integrations/types';
 
 /* ---------- helpers ---------- */
 

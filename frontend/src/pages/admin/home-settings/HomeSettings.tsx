@@ -9,9 +9,10 @@ import { toast } from "sonner";
 
 import {
   useListSiteSettingsAdminQuery,
-  useBulkUpsertSiteSettingsAdminMutation,
-  type UpsertSettingBody, // ✅ tip import
-} from "@/integrations/metahub/rtk/endpoints/admin/site_settings_admin.endpoints";
+  useBulkUpsertSiteSettingsAdminMutation
+} from "@/integrations/hooks";
+
+import type { UpsertSiteSettingBody } from '@/integrations/types';
 
 import {
   defaultHomeSettings,
@@ -84,7 +85,7 @@ export default function HomeSettings() {
 
   const handleSave = async () => {
     try {
-      const items: UpsertSettingBody[] = Object.entries(settings).map(
+      const items: UpsertSiteSettingBody[] = Object.entries(settings).map(
         ([key, value]) => ({
           key,
           value,

@@ -18,27 +18,17 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/lib/utils";
 
-import {
-  useGetSiteSettingByKeyQuery,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
 
 import {
+  useGetSiteSettingByKeyQuery,
   useListCartItemsQuery,
   useUpdateCartItemMutation,
   useDeleteCartItemMutation,
-  type CartItem as RtqCartItem,
-} from "@/integrations/metahub/rtk/endpoints/cart_items.endpoints";
-
-import {
-  useListProductsQuery,
-} from "@/integrations/metahub/rtk/endpoints/products.endpoints";
-
-import {
   useGetCouponByCodeQuery,
-} from "@/integrations/metahub/rtk/endpoints/coupons.endpoints";
+  useListProductsQuery,
+} from "@/integrations/hooks";
 
-// Ortak tip alias (RTK cart_items.endpoints.ts → PublicCartItem)
-type CartItem = RtqCartItem;
+import type { PublicCartItem } from '@/integrations/types';
 
 type GuestStoredItem = {
   productId: string;
@@ -174,7 +164,7 @@ const Cart = () => {
   }, [authLoading, user, guestOrderLoading, guestOrderSetting, navigate]);
 
   // Guest stored + ürünler → CartItem[]
-  const guestCartItems: CartItem[] = useMemo(() => {
+  const guestCartItems: PublicCartItem[] = useMemo(() => {
     if (user) return [];
     if (!guestStoredItems.length) return [];
 
@@ -183,26 +173,25 @@ const Cart = () => {
         const product = guestProducts.find((p) => p.id === stored.productId);
         if (!product) return null;
 
-        const item: CartItem = {
+        const item: PublicCartItem = {
           id: stored.productId,
           user_id: null,
           product_id: stored.productId,
           quantity: stored.quantity,
-          selected_options: (stored.selected_options ??
-            null) as Record<string, unknown> | null,
-          created_at: undefined,
-          updated_at: undefined,
-          products: product,
+          selected_options: (stored.selected_options ?? null) as Record<string, unknown> | null,
+          created_at: null,
+          updated_at: null,
+          products: (product as unknown) as PublicCartItem["products"],
         };
 
         return item;
       })
-      .filter(Boolean) as CartItem[];
+      .filter(Boolean) as PublicCartItem[];
   }, [user, guestStoredItems, guestProducts]);
 
   // Ortak sepet listesi (user: RTK, guest: derived)
-  const cartItems: CartItem[] = user
-    ? ((userCartItems as CartItem[]) || [])
+  const cartItems: PublicCartItem[] = user
+    ? ((userCartItems as PublicCartItem[]) || [])
     : guestCartItems;
 
   // Genel loading state
@@ -212,7 +201,7 @@ const Cart = () => {
 
   // --- Helpers ---
 
-  const getItemPrice = (item: CartItem) => {
+  const getItemPrice = (item: PublicCartItem) => {
     const product = item.products;
     if (!product) return 0;
 

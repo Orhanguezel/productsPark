@@ -3,9 +3,7 @@
 // =============================================================
 import { Wrench, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  useGetSiteSettingByKeyQuery,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+import { useGetSiteSettingByKeyQuery } from '@/integrations/hooks';
 
 const DEFAULT_MAINTENANCE_MESSAGE =
   "Sitemiz şu anda bakımda. Lütfen daha sonra tekrar deneyin.";

@@ -1,22 +1,18 @@
 // =============================================================
 // FILE: FooterSectionForm.tsx
+// FINAL — footer.ts types compatible (no menu imports)
 // =============================================================
-"use client";
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import type {
-  FooterSection,
-  UpsertFooterSectionBody,
-} from "@/integrations/metahub/rtk/types/footer";
+'use client';
+
+import * as React from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+
+import type { FooterSection, UpsertFooterSectionBody } from '@/integrations/types';
 
 type Props = {
   open: boolean;
@@ -35,25 +31,25 @@ export default function FooterSectionForm({
   onClose,
   onSubmit,
 }: Props) {
-  const [isActive, setIsActive] = useState<boolean>(
-    initial?.is_active ?? true,
-  );
+  const [isActive, setIsActive] = React.useState<boolean>(initial?.is_active ?? true);
 
-  useEffect(() => {
+  React.useEffect(() => {
     setIsActive(initial?.is_active ?? true);
   }, [initial, open]);
+
+  const titleInitial = initial?.title ?? '';
+  const displayOrder = initial ? initial.display_order : defaultOrder;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
 
     const body: UpsertFooterSectionBody = {
-      title: String(fd.get("title") ?? ""),
+      title: String(fd.get('title') ?? '').trim(),
       is_active: isActive,
-      // create’de defaultOrder, edit’te mevcut sırayı koru
-      display_order: initial ? initial.display_order : defaultOrder,
-      // ❌ links gönderme – artık footer linkleri menu_items üzerinden yönetiliyor
-    } as UpsertFooterSectionBody;
+      display_order: displayOrder,
+      // links: intentionally NOT sent (menu_items manages links now)
+    };
 
     await onSubmit(body);
     onClose();
@@ -63,45 +59,32 @@ export default function FooterSectionForm({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {initial ? "Bölümü Düzenle" : "Yeni Bölüm Ekle"}
-          </DialogTitle>
+          <DialogTitle>{initial ? 'Bölümü Düzenle' : 'Yeni Bölüm Ekle'}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Bölüm Adı</Label>
+            <Label htmlFor="title">Bölüm Adı</Label>
             <Input
+              id="title"
               name="title"
-              defaultValue={initial?.title ?? ""}
+              defaultValue={titleInitial}
               placeholder="Örn: Hızlı Erişim"
               required
             />
           </div>
 
-          <input
-            type="hidden"
-            name="is_active"
-            value={isActive ? "on" : ""}
-          />
           <div className="flex items-center gap-2">
-            <Switch
-              checked={isActive}
-              onCheckedChange={setIsActive}
-            />
+            <Switch checked={isActive} onCheckedChange={setIsActive} />
             <Label>Aktif</Label>
           </div>
 
           <div className="flex gap-2 justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" onClick={onClose}>
               İptal
             </Button>
             <Button type="submit" disabled={loading}>
-              {initial ? "Güncelle" : "Ekle"}
+              {initial ? 'Güncelle' : 'Ekle'}
             </Button>
           </div>
         </form>

@@ -11,20 +11,9 @@ import {
   productFaqUpdateSchema,
 } from "./validation";
 
-const now = () => new Date();
 
-// Güvenli boolean dönüştürücü
-function toBool(v: unknown): boolean {
-  if (typeof v === "boolean") return v;
-  const s = String(v ?? "").toLowerCase();
-  return s === "1" || s === "true";
-}
+import { now, toBool, andOrSingle } from '@/modules/_shared/common';
 
-// Drizzle where helper
-function andOrSingle<T>(conds: T[]) {
-  // @ts-expect-error drizzle types
-  return conds.length > 1 ? and(...conds) : conds[0];
-}
 
 /* LIST */
 export const adminListProductFaqs: RouteHandler = async (req, reply) => {

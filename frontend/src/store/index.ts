@@ -1,6 +1,7 @@
 // src/store/index.ts
 import { configureStore } from "@reduxjs/toolkit";
-import { baseApi } from "@/integrations/metahub/rtk/baseApi";
+import { baseApi } from "@/integrations/baseApi";
+
 
 export const store = configureStore({
   reducer: {

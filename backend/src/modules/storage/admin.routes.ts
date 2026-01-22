@@ -17,7 +17,7 @@ import {
 import type { StorageUpdateInput } from "./validation";
 
 export async function registerStorageAdmin(app: FastifyInstance) {
-  const BASE = "/admin/storage";
+  const BASE = "/storage";
 
   app.get<{ Querystring: unknown }>(
     `${BASE}/assets`,

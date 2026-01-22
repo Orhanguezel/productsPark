@@ -10,7 +10,6 @@ import {
 } from "./validation";
 import type { ApiProviderView, ApiProviderCredentials } from "./schema";
 
-// Node 18+ global fetch yoksa fallback
 import _fetch from "node-fetch";
 const fetchAny: typeof fetch = (globalThis as any).fetch || (_fetch as any);
 

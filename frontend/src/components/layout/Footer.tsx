@@ -11,23 +11,21 @@ import {
 
 import {
   useListMenuItemsQuery,
-} from "@/integrations/metahub/rtk/endpoints/menu_items.endpoints";
-import type { MenuItemRow } from "@/integrations/metahub/rtk/types/menu";
-
-import {
   useGetSiteSettingByKeyQuery,
-  type JsonLike,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
-
-import {
   useListFooterSectionsQuery,
-} from "@/integrations/metahub/rtk/endpoints/footer_sections.endpoints";
-import type { FooterSection as FooterSectionModel } from "@/integrations/metahub/rtk/types/footer";
+} from "@/integrations/hooks";
+import type {
+  MenuItem,
+  JsonLike,
+  FooterSection as FooterSectionModel,
+} from "@/integrations/types";
+
+
 
 /* ---------- helpers ---------- */
 
 const toStr = (v: JsonLike | undefined, fallback: string): string => {
-  if (typeof v === "string" && v.trim() !== "") return v;
+  if (typeof v === 'string' && v.trim() !== '') return v;
   return fallback;
 };
 
@@ -58,7 +56,7 @@ const Footer = () => {
     order: "order_num",
   });
 
-  const menuItems: MenuItemRow[] = menuItemsData.filter(
+  const menuItems: MenuItem[] = menuItemsData.filter(
     (i) => i.is_active && (i.location === "footer" || i.location == null),
   );
 

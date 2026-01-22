@@ -1,66 +1,43 @@
 // ===================================================================
 // FILE: src/modules/mail/controller.ts
+// FINAL — Controller sadece tetikler
 // ===================================================================
 
-import type { RouteHandler } from "fastify";
-import { sendMailRaw, sendOrderCreatedMail } from "./service";
-import { sendMailSchema, orderCreatedMailSchema } from "./validation";
+import type { RouteHandler } from 'fastify';
+import { sendMailSchema, orderCreatedMailSchema } from './validation';
+import { sendMailRaw } from './service';
+import { sendTemplatedEmail } from '@/modules/email-templates/mailer';
 
 /**
- * Küçük yardımcı: req.user içinden email'i güvenli çek
- */
-const getUserEmail = (req: any): string | undefined => {
-  const u = req.user;
-  if (!u || typeof u !== "object") return undefined;
-
-  // "email" alanı var mı?
-  if ("email" in u && (u as any).email != null) {
-    return String((u as any).email);
-  }
-
-  // İstersen burada token payload'dan da çekebilirsin (sub claim vs.)
-  return undefined;
-};
-
-/**
- * Test amaçlı: POST /mail/test
- * Body: { to?: string }
+ * Test mail
+ * POST /mail/test
  */
 export const sendTestMail: RouteHandler = async (req, reply) => {
   try {
     const body = (req.body ?? {}) as { to?: string };
-
-    const to =
-      body.to && body.to.length > 0 ? body.to : getUserEmail(req);
-
-    if (!to) {
-      return reply
-        .code(400)
-        .send({ error: { message: "to_required_for_test_mail" } });
+    if (!body.to) {
+      return reply.code(400).send({ message: 'to_required' });
     }
 
-    await sendMailRaw({
-      to,
-      subject: "SMTP Test – ProductsPark",
-      text: "Bu bir test mailidir. SMTP ayarlarınız başarılı görünüyor.",
-      html: "<p>Bu bir <strong>test mailidir</strong>. SMTP ayarlarınız başarılı görünüyor.</p>",
+    await sendTemplatedEmail({
+      to: body.to,
+      key: 'smtp_test',
+      params: {
+        now: new Date().toLocaleString('tr-TR'),
+      },
+      allowMissing: true,
     });
 
     return reply.send({ ok: true });
   } catch (e: any) {
     req.log.error(e);
-    return reply
-      .code(500)
-      .send({ error: { message: "mail_test_failed", details: e?.message } });
+    return reply.code(500).send({ message: 'mail_test_failed' });
   }
 };
 
-
 /**
- * Genel amaçlı mail gönderimi:
+ * Generic send (admin panel)
  * POST /mail/send
- * Body: { to, subject, text?, html? }
- * (Admin / panel için)
  */
 export const sendMailHandler: RouteHandler = async (req, reply) => {
   try {
@@ -68,44 +45,35 @@ export const sendMailHandler: RouteHandler = async (req, reply) => {
     await sendMailRaw(body);
     return reply.code(201).send({ ok: true });
   } catch (e: any) {
-    if (e?.name === "ZodError") {
-      return reply
-        .code(400)
-        .send({ error: { message: "validation_error", details: e.issues } });
-    }
     req.log.error(e);
-    return reply
-      .code(500)
-      .send({ error: { message: "mail_send_failed", details: e?.message } });
+    return reply.code(500).send({ message: 'mail_send_failed' });
   }
 };
 
-
 /**
- * Sipariş oluşturma mailini REST üzerinden tetiklemek istersen:
+ * Order created mail
  * POST /mail/order-created
- * Body: OrderCreatedMailInput
- *
- * NOT: Artık HTML'i elle üretmiyoruz; email_templates içindeki
- * "order_received" template'ini kullanıyoruz.
  */
-export const sendOrderCreatedMailHandler: RouteHandler = async (
-  req,
-  reply,
-) => {
+export const sendOrderCreatedMailHandler: RouteHandler = async (req, reply) => {
   try {
-    const body = orderCreatedMailSchema.parse(req.body ?? {});
-    await sendOrderCreatedMail(body);
+    const data = orderCreatedMailSchema.parse(req.body ?? {});
+
+    await sendTemplatedEmail({
+      to: data.to,
+      key: 'order_received',
+      locale: data.locale,
+      params: {
+        customer_name: data.customer_name,
+        order_number: data.order_number,
+        final_amount: data.final_amount,
+        status: data.status,
+        site_name: data.site_name,
+      },
+    });
+
     return reply.code(201).send({ ok: true });
   } catch (e: any) {
-    if (e?.name === "ZodError") {
-      return reply
-        .code(400)
-        .send({ error: { message: "validation_error", details: e.issues } });
-    }
     req.log.error(e);
-    return reply.code(500).send({
-      error: { message: "order_created_mail_failed", details: e?.message },
-    });
+    return reply.code(500).send({ message: 'order_created_mail_failed' });
   }
 };

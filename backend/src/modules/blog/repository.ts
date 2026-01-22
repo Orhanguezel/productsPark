@@ -14,8 +14,10 @@ export type ListParams = {
   offset?: number;
 
   is_published?: boolean | 0 | 1 | "0" | "1" | "true" | "false";
+  is_featured?: boolean | 0 | 1 | "0" | "1" | "true" | "false";
   q?: string;
   slug?: string;
+  category?: string;
 };
 
 const to01 = (v: ListParams["is_published"]): 0 | 1 | undefined => {
@@ -69,6 +71,7 @@ export async function listBlogPosts(params: ListParams) {
     created_at: blogPosts.created_at,
     updated_at: blogPosts.updated_at,
     published_at: blogPosts.published_at,
+    is_featured: blogPosts.is_featured,
   } as const;
 
   const orderBy =

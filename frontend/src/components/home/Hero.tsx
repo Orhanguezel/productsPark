@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import type { Category } from "@/integrations/metahub/rtk/types/categories";
-import { useListCategoriesQuery } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
+import type {
+  Category,
+  SiteSetting,
+} from "@/integrations/types";
 import {
+  useListCategoriesQuery,
   useListSiteSettingsQuery,
-  type SiteSetting,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+} from "@/integrations/hooks";
+
 
 const toBool = (v: unknown): boolean =>
   v === true ||

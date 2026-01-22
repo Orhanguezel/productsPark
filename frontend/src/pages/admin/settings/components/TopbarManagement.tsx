@@ -41,16 +41,15 @@ import {
 import { Plus, Save, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-import type { TopbarSetting } from "@/integrations/metahub/rtk/types/topbar";
-import type { Coupon } from "@/integrations/metahub/rtk/types/coupon";
+import type { TopbarSetting,Coupon} from "@/integrations/types";
 
 import {
   useListTopbarAdminQuery,
   useCreateTopbarAdminMutation,
   useUpdateTopbarAdminMutation,
   useDeleteTopbarAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/topbar_admin.endpoints";
-import { useListCouponsAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+  useListCouponsAdminQuery
+} from "@/integrations/hooks";
 
 const emptyToNull = (v: string | null | undefined) =>
   v == null ? null : v.trim() === "" ? null : v.trim();

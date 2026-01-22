@@ -1,91 +1,56 @@
-// src/modules/auth/admin.controller.ts
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { z } from "zod";
-import { randomUUID } from "crypto";
-import { db } from "@/db/client";
-import { users, refresh_tokens } from "@/modules/auth/schema";
-import { getPrimaryRole } from "@/modules/userRoles/service";
-import { userRoles } from "@/modules/userRoles/schema";
-import { profiles } from "@/modules/profiles/schema";
-import { and, asc, desc, eq, like } from "drizzle-orm";
-import { hash as argonHash } from "argon2";
+// =============================================================
+// FILE: src/modules/auth/admin.controller.ts
+// FINAL — Admin Users Controller (schema uyumlu, extra kolon yok)
+// - users tablosunda profile_image / alt vb. yok => update patch'te yok
+// =============================================================
+
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { randomUUID } from 'crypto';
+import { db } from '@/db/client';
+import { users, refresh_tokens } from '@/modules/auth/schema';
+import { getPrimaryRole } from '@/modules/userRoles/service';
+import { userRoles } from '@/modules/userRoles/schema';
+import { profiles } from '@/modules/profiles/schema';
+import { and, asc, desc, eq, like, type SQL } from 'drizzle-orm';
+import { hash as argonHash } from 'argon2';
+import { notifications, type NotificationInsert } from '@/modules/notifications/schema';
+import { sendPasswordChangedMail } from '@/modules/mail/service';
+
 import {
-  notifications,
-  type NotificationInsert,
-} from "@/modules/notifications/schema";
-import { sendPasswordChangedMail } from "@/modules/mail/service";
+  adminUsersListQuery,
+  adminUserUpdateBody,
+  adminUserSetActiveBody,
+  adminUserSetRolesBody,
+  adminUserSetPasswordBody,
+} from '@/modules/auth/validation';
 
-/** Ortak tipler */
+import { pickUserDto, toBool01 } from '@/modules/_shared/_shared';
+
 type UserRow = typeof users.$inferSelect;
-
-const toBool = (v: unknown): boolean =>
-  typeof v === "boolean" ? v : Number(v) === 1;
-
-const toNum = (v: unknown): number =>
-  typeof v === "number" ? v : Number(v ?? 0);
-
-/** Zod şemaları */
-const listQuery = z.object({
-  q: z.string().optional(),
-  role: z.enum(["admin", "moderator", "user"]).optional(),
-  is_active: z.coerce.boolean().optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
-  sort: z.enum(["created_at", "email", "last_login_at"]).optional(),
-  order: z.enum(["asc", "desc"]).optional(),
-});
-
-const updateUserBody = z
-  .object({
-    full_name: z.string().trim().min(2).max(100).optional(),
-    phone: z.string().trim().min(6).max(50).optional(),
-    email: z.string().email().optional(), // 🔹 email admin panelden güncellenebilir
-    is_active: z
-      .union([z.boolean(), z.number().int().min(0).max(1)])
-      .optional(),
-  })
-  .strict();
-
-const setActiveBody = z.object({
-  is_active: z.union([z.boolean(), z.number().int().min(0).max(1)]),
-});
-
-const setRolesBody = z.object({
-  roles: z.array(z.enum(["admin", "moderator", "user"])).default([]),
-});
-
-const setPasswordBody = z.object({
-  password: z.string().min(8).max(200),
-});
 
 export function makeAdminController(_app: FastifyInstance) {
   return {
     /** GET /admin/users */
     list: async (req: FastifyRequest, reply: FastifyReply) => {
-      const q = listQuery.parse(req.query ?? {});
+      const q = adminUsersListQuery.parse(req.query ?? {});
 
-      const conds: any[] = [];
+      const conds: SQL[] = [];
       if (q.q) conds.push(like(users.email, `%${q.q}%`));
-      if (typeof q.is_active === "boolean") {
-        conds.push(eq(users.is_active, q.is_active ? 1 : 0));
-      }
-      const where =
-        conds.length === 0
-          ? undefined
-          : conds.length === 1
-          ? conds[0]
-          : and(...conds);
+      if (typeof q.is_active === 'boolean') conds.push(eq(users.is_active, q.is_active ? 1 : 0));
+
+      const where = conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
 
       const sortCol =
-        q.sort === "email"
+        q.sort === 'email'
           ? users.email
-          : q.sort === "last_login_at"
+          : q.sort === 'last_login_at'
           ? users.last_sign_in_at
           : users.created_at;
-      const orderFn = q.order === "asc" ? asc : desc;
+
+      const orderFn = q.order === 'asc' ? asc : desc;
 
       const base = await db
-        .select() // wallet_balance zaten users satırında
+        .select()
         .from(users)
         .where(where)
         .orderBy(orderFn(sortCol))
@@ -96,117 +61,65 @@ export function makeAdminController(_app: FastifyInstance) {
         base.map(async (u) => ({
           ...u,
           role: await getPrimaryRole(u.id),
-        }))
+        })),
       );
 
-      // (opsiyonel) role filtresi
-      const filtered = q.role
-        ? withRole.filter((u) => u.role === q.role)
-        : withRole;
+      const filtered = q.role ? withRole.filter((u) => u.role === q.role) : withRole;
 
-      // FE için wallet_balance'ı number olarak gönder
-      const out = filtered.map((u) => ({
-        id: u.id,
-        email: u.email,
-        full_name: u.full_name ?? null,
-        phone: u.phone ?? null,
-        email_verified: u.email_verified,
-        is_active: u.is_active,
-        created_at: u.created_at,
-        last_login_at: u.last_sign_in_at,
-        role: (u as any).role,
-        wallet_balance: toNum(u.wallet_balance),
-      }));
-
-      return reply.send(out);
+      return reply.send(filtered.map((u) => pickUserDto(u, u.role)));
     },
 
     /** GET /admin/users/:id */
     get: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!u)
-        return reply.status(404).send({ error: { message: "not_found" } });
+
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
 
       const role = await getPrimaryRole(u.id);
-
-      // Burada da wallet_balance number olarak dön
-      return reply.send({
-        id: u.id,
-        email: u.email,
-        full_name: u.full_name ?? null,
-        phone: u.phone ?? null,
-        email_verified: u.email_verified,
-        is_active: u.is_active,
-        created_at: u.created_at,
-        last_login_at: u.last_sign_in_at,
-        role,
-        wallet_balance: toNum(u.wallet_balance),
-      });
+      return reply.send(pickUserDto(u, role));
     },
 
     /** PATCH /admin/users/:id */
     update: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
-      const body = updateUserBody.parse(req.body ?? {});
+      const body = adminUserUpdateBody.parse(req.body ?? {});
 
-      const existing = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!existing)
-        return reply.status(404).send({ error: { message: "not_found" } });
+      const existing = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!existing) return reply.status(404).send({ error: { message: 'not_found' } });
 
       const patch: Partial<UserRow> = {
-        ...(body.full_name ? { full_name: body.full_name } : {}),
-        ...(body.phone ? { phone: body.phone } : {}),
-        ...(body.email ? { email: body.email } : {}),
-        ...(body.is_active != null
-          ? { is_active: toBool(body.is_active) ? 1 : 0 }
-          : {}),
+        ...(body.full_name != null ? { full_name: body.full_name } : {}),
+        ...(body.phone != null ? { phone: body.phone } : {}),
+        ...(body.email != null ? { email: body.email } : {}),
+        ...(body.is_active != null ? { is_active: toBool01(body.is_active) ? 1 : 0 } : {}),
         updated_at: new Date(),
       };
 
       await db.update(users).set(patch).where(eq(users.id, id));
 
-      const updated = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!updated)
-        return reply.status(404).send({ error: { message: "not_found" } });
+      const updated = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!updated) return reply.status(404).send({ error: { message: 'not_found' } });
 
       const role = await getPrimaryRole(id);
-
-      // FE'deki users_admin normalizer'ın beklediği user objesi
-      return reply.send({
-        id: updated.id,
-        email: updated.email,
-        full_name: updated.full_name ?? null,
-        phone: updated.phone ?? null,
-        email_verified: updated.email_verified,
-        is_active: updated.is_active,
-        created_at: updated.created_at,
-        last_login_at: updated.last_sign_in_at,
-        role,
-        wallet_balance: toNum(updated.wallet_balance),
-      });
+      return reply.send(pickUserDto(updated, role));
     },
 
-    /** POST /admin/users/:id/active  { is_active } */
+    /** POST /admin/users/:id/active */
     setActive: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
-      const { is_active } = setActiveBody.parse(req.body ?? {});
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!u)
-        return reply.status(404).send({ error: { message: "not_found" } });
+      const { is_active } = adminUserSetActiveBody.parse(req.body ?? {});
+
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
+
+      const active = toBool01(is_active);
 
       await db
         .update(users)
         .set({
-          is_active: toBool(is_active) ? 1 : 0,
+          is_active: active ? 1 : 0,
+          ...(active ? { email_verified: 1 } : {}),
           updated_at: new Date(),
         })
         .where(eq(users.id, id));
@@ -214,15 +127,13 @@ export function makeAdminController(_app: FastifyInstance) {
       return reply.send({ ok: true });
     },
 
-    /** POST /admin/users/:id/roles  { roles: string[] }  (tam set) */
+    /** POST /admin/users/:id/roles (tam set) */
     setRoles: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
-      const { roles } = setRolesBody.parse(req.body ?? {});
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!u)
-        return reply.status(404).send({ error: { message: "not_found" } });
+      const { roles } = adminUserSetRolesBody.parse(req.body ?? {});
+
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
 
       await db.transaction(async (tx) => {
         await tx.delete(userRoles).where(eq(userRoles.user_id, id));
@@ -232,7 +143,7 @@ export function makeAdminController(_app: FastifyInstance) {
               id: randomUUID(),
               user_id: id,
               role: r,
-            }))
+            })),
           );
         }
       });
@@ -240,57 +151,61 @@ export function makeAdminController(_app: FastifyInstance) {
       return reply.send({ ok: true });
     },
 
-    /** POST /admin/users/:id/password  { password } */
+    /** POST /admin/users/:id/password */
     setPassword: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
-      const { password } = setPasswordBody.parse(req.body ?? {});
+      const { password } = adminUserSetPasswordBody.parse(req.body ?? {});
 
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!u)
-        return reply.status(404).send({ error: { message: "not_found" } });
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
 
       const password_hash = await argonHash(password);
+
+      // tüm refresh token'ları revoke et (admin reset sonrası güvenlik)
+      await db
+        .update(refresh_tokens)
+        .set({ revoked_at: new Date() })
+        .where(eq(refresh_tokens.user_id, id));
 
       await db
         .update(users)
         .set({
           password_hash,
+          is_active: 1,
+          email_verified: 1,
           updated_at: new Date(),
         })
         .where(eq(users.id, id));
 
-      // 🔔 Notification
+      // Notification
       try {
         const notif: NotificationInsert = {
           id: randomUUID(),
           user_id: id,
-          title: "Şifreniz güncellendi",
+          title: 'Şifreniz güncellendi',
           message:
-            "Hesap şifreniz yönetici tarafından güncellendi. Bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.",
-          type: "password_changed", // enum'unda bu değer olmalı
-          is_read: false,
+            'Hesap şifreniz yönetici tarafından güncellendi. Bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.',
+          type: 'password_changed',
+          is_read: 0,
           created_at: new Date(),
         };
         await db.insert(notifications).values(notif);
-      } catch (err) {
-        req.log?.error?.(err, "admin_password_change_notification_failed");
+      } catch (err: unknown) {
+        req.log?.error?.(err, 'admin_password_change_notification_failed');
       }
 
-      // ✉ Mail
-      const targetEmail = u.email;
-      if (targetEmail) {
+      // Mail
+      if (u.email) {
         const userName =
-          (u.full_name && u.full_name.length > 0
-            ? u.full_name
-            : targetEmail.split("@")[0]) || "Kullanıcı";
+          (u.full_name && u.full_name.length > 0 ? u.full_name : u.email.split('@')[0]) ||
+          'Kullanıcı';
+
         void sendPasswordChangedMail({
-          to: targetEmail,
+          to: u.email,
           user_name: userName,
-          site_name: "Dijital Market",
-        }).catch((err) => {
-          req.log?.error?.(err, "admin_password_change_mail_failed");
+          site_name: 'Dijital Market',
+        }).catch((err: unknown) => {
+          req.log?.error?.(err, 'admin_password_change_mail_failed');
         });
       }
 
@@ -301,19 +216,13 @@ export function makeAdminController(_app: FastifyInstance) {
     remove: async (req: FastifyRequest, reply: FastifyReply) => {
       const id = String((req.params as Record<string, string>).id);
 
-      const u = (
-        await db.select().from(users).where(eq(users.id, id)).limit(1)
-      )[0];
-      if (!u)
-        return reply.status(404).send({ error: { message: "not_found" } });
+      const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+      if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
 
       await db.transaction(async (tx) => {
-        await tx
-          .delete(refresh_tokens)
-          .where(eq(refresh_tokens.user_id, id));
+        await tx.delete(refresh_tokens).where(eq(refresh_tokens.user_id, id));
         await tx.delete(userRoles).where(eq(userRoles.user_id, id));
         await tx.delete(profiles).where(eq(profiles.id, id));
-        // TODO: orders, wallet_transactions, support_tickets vs. burada temizlenebilir.
         await tx.delete(users).where(eq(users.id, id));
       });
 

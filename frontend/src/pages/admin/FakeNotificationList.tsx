@@ -18,7 +18,7 @@ import {
   useUpdateFakeNotificationSettingsMutation,
   useListFakeOrderNotificationsQuery,
   useDeleteFakeOrderNotificationMutation,
-} from "@/integrations/metahub/rtk/endpoints/fake_notifications.endpoints";
+} from "@/integrations/hooks";
 
 export default function FakeNotificationList() {
   const nav = useNavigate();

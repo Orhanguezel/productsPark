@@ -17,12 +17,11 @@ import {
   useGetCategoryAdminByIdQuery,
   useCreateCategoryAdminMutation,
   useUpdateCategoryAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
+  useCreateAssetAdminMutation
+} from "@/integrations/hooks";
 
-// 🔹 STORAGE: tekli create hook
-import { useCreateAssetAdminMutation } from "@/integrations/metahub/rtk/endpoints/admin/storage_admin.endpoints";
 
-import type { UpsertCategoryBody } from "@/integrations/metahub/rtk/types/categories";
+import type { UpsertCategoryBody } from "@/integrations/types";
 
 /* helpers */
 const slugify = (v: string) =>

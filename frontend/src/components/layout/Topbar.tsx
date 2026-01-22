@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "react-router-dom";
 import {
   useGetActiveTopbarQuery,
-} from "@/integrations/metahub/rtk/endpoints/topbar_settings.endpoints";
+} from "@/integrations/hooks";
 
 export const Topbar = () => {
   const { data: settings, isFetching, isError } = useGetActiveTopbarQuery();

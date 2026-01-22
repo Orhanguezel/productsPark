@@ -4,10 +4,8 @@
 import { useAuth } from "@/hooks/useAuth";
 import {
   useGetSiteSettingByKeyQuery,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
-import {
   useListUserRolesQuery,
-} from "@/integrations/metahub/rtk/endpoints/user_roles.endpoints";
+} from "@/integrations/hooks";
 
 export const useMaintenanceMode = () => {
   const { user, loading: authLoading } = useAuth();

@@ -3,7 +3,17 @@
 # Şifre sorar
 mysql -u root -p
 
-ADMIN_EMAIL="admin@site.com" ADMIN_PASSWORD="SüperGizli!" bun run db:seed
+ADMIN_EMAIL="admin@site.com" ADMIN_PASSWORD="admin123" bun run db:seed
+
+
+mysql -h 127.0.0.1 -P 3306 -u app -papp app
+
+node -e "require('argon2').hash('admin123').then(console.log).catch(console.error)"
+
+
+rg -n "registerWallet\(" src
+
+
 
 
 cd /var/www/productsPark/backend

@@ -11,7 +11,7 @@ import {
 } from "./admin.controller";
 
 export async function registerCouponsAdmin(app: FastifyInstance) {
-  const base = "/admin/coupons";
+  const base = "/coupons";
 
   // 🆕 Burada generic veriyoruz
   app.get<AdminListCouponsRoute>(

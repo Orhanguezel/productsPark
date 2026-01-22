@@ -1,296 +1,281 @@
 // =============================================================
 // FILE: src/pages/public/ProductsPage.tsx
+// FINAL — Products List Page (SEO via SeoHelmet, NO DUPLICATES)
+// - Canonical/hreflang: RouteSeoLinks (global)
+// - Global defaults: GlobalSeo (global)
+// - Route SEO: SeoHelmet only
+// - NO JSON-LD HERE
+// - RTK params are strictly typed (order: "asc" | "desc", sort: allowed union)
 // =============================================================
-import { useState, useEffect, useMemo } from "react";
-import { useSearchParams, useParams } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 
-import type { Product } from "@/integrations/metahub/rtk/types/products";
-import type { Category } from "@/integrations/metahub/rtk/types/categories";
+import Navbar from '@/components/layout/Navbar';
+import Footer from '@/components/layout/Footer';
+import SeoHelmet from '@/components/seo/SeoHelmet';
 
-import {
-  useListProductsWithMetaQuery,
-} from "@/integrations/metahub/rtk/endpoints/products.endpoints";
-import { useListCategoriesQuery } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
+import type {
+  Product,
+  Category,
+  SortOption,
+  PageState,
+  ProductsPublicListParams,
+} from '@/integrations/types';
 
-import { useSeoSettings } from "@/hooks/useSeoSettings";
+import { useListProductsWithMetaQuery, useListCategoriesQuery } from '@/integrations/hooks';
+import { useSeoSettings } from '@/hooks/useSeoSettings';
 
-import ProductsHero from "./components/ProductsHero";
-import CategoryNotFoundState from "./components/CategoryNotFoundState";
-import SubcategoryGrid from "./components/SubcategoryGrid";
-import ProductsSection from "./components/ProductsSection";
+import { nonEmpty, getOrigin } from '@/integrations/types';
+
+import ProductsHero from './components/ProductsHero';
+import CategoryNotFoundState from './components/CategoryNotFoundState';
+import SubcategoryGrid from './components/SubcategoryGrid';
+import ProductsSection from './components/ProductsSection';
 
 type CategoryWithMeta = Category & {
-  // BE'den gelen ekstra alanlar
   product_count?: number;
   badges?: Array<{ text: string; active: boolean }>;
 };
 
-// Sort tipini ortak tanımlayalım
-export type SortOption = "featured" | "price-asc" | "price-desc" | "rating";
-
 const ITEMS_PER_PAGE = 12;
 
-const ProductsPage = () => {
-  const { slug } = useParams();
+type PublicSortField = NonNullable<ProductsPublicListParams['sort']>;
+type PublicOrder = NonNullable<ProductsPublicListParams['order']>;
+
+const ProductsPage: React.FC = () => {
+  const { slug } = useParams<{ slug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [currentCategory, setCurrentCategory] =
-    useState<CategoryWithMeta | null>(null);
-
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [sortBy, setSortBy] = useState<SortOption>("featured");
+  const [currentCategory, setCurrentCategory] = useState<CategoryWithMeta | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [sortBy, setSortBy] = useState<SortOption>('featured');
   const [categoryNotFound, setCategoryNotFound] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  const { settings } = useSeoSettings();
+  // SEO (no fallbacks)
+  const { flat, loading: seoLoading } = useSeoSettings({ seoOnly: true });
 
-  // Pagination
-  const currentPage = parseInt(searchParams.get("page") || "1", 10);
+  const currentPage = useMemo(() => {
+    const n = Number(searchParams.get('page') || '1');
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
+  }, [searchParams]);
 
-  /* -------------------- RTK Query: Categories -------------------- */
+  const hasQueryParams = useMemo(() => Array.from(searchParams.keys()).length > 0, [searchParams]);
 
-  // Ana kategoriler (parent_id = null)
+  /* ---------------- Categories ---------------- */
+
   const {
     data: categoriesData = [],
-    isLoading: isCategoriesLoading,
-    isFetching: isCategoriesFetching,
+    isLoading: catLoading,
+    isFetching: catFetching,
   } = useListCategoriesQuery({
     parent_id: null,
     is_active: true,
-    sort: "display_order",
-    order: "asc",
+    sort: 'display_order',
+    order: 'asc',
   });
 
   const categories = categoriesData as CategoryWithMeta[];
 
-  // Alt kategoriler (seçili ana kategoriye göre)
   const {
     data: subcategoriesData = [],
-    isLoading: isSubcategoriesLoading,
-    isFetching: isSubcategoriesFetching,
+    isLoading: subLoading,
+    isFetching: subFetching,
   } = useListCategoriesQuery(
     currentCategory
       ? {
-        parent_id: currentCategory.id,
-        is_active: true,
-        sort: "display_order",
-        order: "asc",
-      }
+          parent_id: currentCategory.id,
+          is_active: true,
+          sort: 'display_order',
+          order: 'asc',
+        }
       : undefined,
-    { skip: !currentCategory }
+    { skip: !currentCategory },
   );
 
   const subcategories = subcategoriesData as CategoryWithMeta[];
 
-  /* -------------------- Derived values -------------------- */
-
-  // Seçili kategori objesi (URL slug + state’e göre)
   const categoryToFilter = useMemo(() => {
     if (currentCategory) return currentCategory;
-    if (selectedCategory !== "all") {
+    if (selectedCategory !== 'all') {
       return categories.find((c) => c.slug === selectedCategory) ?? null;
     }
     return null;
   }, [currentCategory, selectedCategory, categories]);
 
-  // Sort mapping (RTK endpoint params için)
-  const { sortField, sortOrder } = useMemo(() => {
-    let sortField: "price" | "rating" | "created_at" | undefined;
-    let sortOrder: "asc" | "desc" | undefined;
+  /* ---------------- Sorting (STRICT) ---------------- */
 
+  const { sortField, sortOrder } = useMemo((): {
+    sortField: PublicSortField;
+    sortOrder: PublicOrder;
+  } => {
+    // IMPORTANT:
+    // - return values MUST be literal "asc"/"desc" (not widened to string)
+    // - sortField must match ProductsPublicListParams['sort'] union
     switch (sortBy) {
-      case "price-asc":
-        sortField = "price";
-        sortOrder = "asc";
-        break;
-      case "price-desc":
-        sortField = "price";
-        sortOrder = "desc";
-        break;
-      case "rating":
-        sortField = "rating";
-        sortOrder = "desc";
-        break;
+      case 'price-asc':
+        return { sortField: 'price' as PublicSortField, sortOrder: 'asc' as const };
+      case 'price-desc':
+        return { sortField: 'price' as PublicSortField, sortOrder: 'desc' as const };
+      case 'rating':
+        return { sortField: 'rating' as PublicSortField, sortOrder: 'desc' as const };
       default:
-        sortField = "created_at";
-        sortOrder = "desc";
+        // "featured" vb. -> endpoint tarafında genelde created_at desc ile listeleniyor
+        return { sortField: 'created_at' as PublicSortField, sortOrder: 'desc' as const };
     }
-
-    return { sortField, sortOrder };
   }, [sortBy]);
 
-  /* -------------------- RTK Query: Product List (items + total) -------------------- */
+  /* ---------------- Products (RTK params typed) ---------------- */
+
+  const productsQueryArgs = useMemo<ProductsPublicListParams | void>(() => {
+    if (categories.length === 0) return undefined;
+
+    const base = {
+      is_active: true as const,
+      limit: ITEMS_PER_PAGE,
+      offset: (currentPage - 1) * ITEMS_PER_PAGE,
+      sort: sortField,
+      order: sortOrder,
+    } satisfies ProductsPublicListParams;
+
+    // exactOptionalPropertyTypes-safe:
+    // category_id undefined ise property yok
+    return categoryToFilter?.id
+      ? ({ ...base, category_id: categoryToFilter.id } satisfies ProductsPublicListParams)
+      : base;
+  }, [categories.length, categoryToFilter?.id, currentPage, sortField, sortOrder]);
 
   const {
     data: productsResult,
-    isLoading: isProductsLoading,
-    isFetching: isProductsFetching,
-  } = useListProductsWithMetaQuery(
-    categories.length === 0
-      ? undefined
-      : {
-        category_id: categoryToFilter?.id,
-        is_active: true,
-        limit: ITEMS_PER_PAGE,
-        offset: (currentPage - 1) * ITEMS_PER_PAGE,
-        sort: sortField,
-        order: sortOrder,
-      },
-    {
-      // kategori listesi gelmeden ürün sorgusunu tetikleme
-      skip: categories.length === 0,
-    }
-  );
+    isLoading: prodLoading,
+    isFetching: prodFetching,
+  } = useListProductsWithMetaQuery(productsQueryArgs, {
+    skip: categories.length === 0,
+  });
 
   const products = (productsResult?.items ?? []) as Product[];
   const totalProducts = productsResult?.total ?? 0;
 
   const loading =
-    isCategoriesLoading ||
-    isCategoriesFetching ||
-    isSubcategoriesLoading ||
-    isSubcategoriesFetching ||
-    isProductsLoading ||
-    isProductsFetching;
+    seoLoading ||
+    catLoading ||
+    catFetching ||
+    subLoading ||
+    subFetching ||
+    prodLoading ||
+    prodFetching;
 
-  // totalPages artık RTK result’tan
   const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
-  /* -------------------- Effects -------------------- */
+  const pageState: PageState = useMemo(() => {
+    if (loading) return 'loading';
+    if (categoryNotFound) return 'ready';
+    return 'ready';
+  }, [loading, categoryNotFound]);
 
-  // URL slug / query param -> currentCategory
+  /* ---------------- URL → Category ---------------- */
+
   useEffect(() => {
-    if (categories.length === 0) return;
+    if (!categories.length) return;
 
     if (slug) {
-      const category = categories.find((c) => c.slug === slug);
-      if (category) {
-        setCurrentCategory(category);
+      const c = categories.find((x) => x.slug === slug);
+      if (c) {
+        setCurrentCategory(c);
         setSelectedCategory(slug);
         setCategoryNotFound(false);
       } else {
+        setCurrentCategory(null);
+        setSelectedCategory('all');
         setCategoryNotFound(true);
-        setSelectedCategory("all");
       }
-    } else {
-      const categoryParam = searchParams.get("kategori");
-      if (categoryParam) {
-        const category = categories.find((c) => c.slug === categoryParam);
-        if (category) {
-          setCurrentCategory(category);
-          setSelectedCategory(categoryParam);
-          setCategoryNotFound(false);
-        }
-      } else {
-        setSelectedCategory("all");
+      return;
+    }
+
+    const qp = searchParams.get('kategori');
+    if (qp) {
+      const c = categories.find((x) => x.slug === qp);
+      if (c) {
+        setCurrentCategory(c);
+        setSelectedCategory(qp);
         setCategoryNotFound(false);
+        return;
       }
     }
+
+    setCurrentCategory(null);
+    setSelectedCategory('all');
+    setCategoryNotFound(false);
   }, [slug, searchParams, categories]);
 
-  /* -------------------- Helpers -------------------- */
+  /* ---------------- Pagination ---------------- */
 
   const handlePageChange = (page: number) => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    if (page === 1) {
-      newSearchParams.delete("page");
-    } else {
-      newSearchParams.set("page", page.toString());
-    }
-    setSearchParams(newSearchParams);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const next = Math.max(1, Math.floor(page));
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (next === 1) nextParams.delete('page');
+    else nextParams.set('page', String(next));
+
+    setSearchParams(nextParams);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const generateItemListSchema = () => {
-    if (!products || products.length === 0) return null;
+  /* ---------------- SEO (Blog ile birebir) ---------------- */
 
-    return {
-      "@context": "https://schema.org/",
-      "@type": "ItemList",
-      itemListElement: products.map((product, index) => ({
-        "@type": "ListItem",
-        position: index + 1,
-        item: {
-          "@type": "Product",
-          name: product.name,
-          url: `${window.location.origin}/urun/${product.slug}`,
-          image: product.image_url || "",
-          offers: {
-            "@type": "Offer",
-            price: product.price,
-            priceCurrency: "TRY",
-          },
-        },
-      })),
-    };
-  };
+  const seoTitle = nonEmpty(flat?.seo_products_title);
+  const seoDesc = nonEmpty(flat?.seo_products_description);
 
-  const itemListSchema = generateItemListSchema();
+  const url = useMemo(() => {
+    const origin = getOrigin();
+    return origin ? `${origin}/urunler` : '';
+  }, []);
 
-  /* -------------------- Render -------------------- */
+  const robots = useMemo(() => {
+    if (currentPage > 1) return 'noindex,follow';
+    if (hasQueryParams) return 'noindex,follow';
+    return null;
+  }, [currentPage, hasQueryParams]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Helmet>
-        <title>{settings.seo_products_title}</title>
-        <meta
-          name="description"
-          content={settings.seo_products_description}
-        />
-        <meta property="og:title" content={settings.seo_products_title} />
-        <meta
-          property="og:description"
-          content={settings.seo_products_description}
-        />
-        <meta property="og:type" content="website" />
-        {currentPage > 1 && <meta name="robots" content="noindex, follow" />}
-        {itemListSchema && (
-          <script type="application/ld+json">
-            {JSON.stringify(itemListSchema)}
-          </script>
-        )}
-      </Helmet>
+      <SeoHelmet
+        title={seoTitle || null}
+        description={seoDesc || null}
+        ogType="website"
+        url={url || null}
+        robots={robots}
+      />
 
       <Navbar />
 
-      {/* Hero */}
       <ProductsHero currentCategory={currentCategory} />
 
-      {/* İçerik */}
       {categoryNotFound ? (
         <CategoryNotFoundState />
-      ) : (
-        <>
-          {subcategories.length > 0 ? (
-            // Alt kategoriler grid
-            <SubcategoryGrid subcategories={subcategories} />
-          ) : (
-            // Ürün listesi / sort / pagination / article
-            <ProductsSection
-              products={products}
-              totalProducts={totalProducts}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              loading={loading}
-              sortBy={sortBy}
-              onSortChange={(value) =>
-                setSortBy(value as SortOption) // Select string -> union
-              }
-              selectedCategory={selectedCategory}
-              onSelectedCategoryChange={setSelectedCategory}
-              currentCategory={currentCategory}
-              subcategories={subcategories}
-              mobileFilterOpen={mobileFilterOpen}
-              onMobileFilterOpenChange={setMobileFilterOpen}
-              onPageChange={handlePageChange}
-            />
-          )}
-        </>
-      )}
+      ) : pageState === 'ready' ? (
+        subcategories.length > 0 ? (
+          <SubcategoryGrid subcategories={subcategories} />
+        ) : (
+          <ProductsSection
+            products={products}
+            totalProducts={totalProducts}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            loading={loading}
+            sortBy={sortBy}
+            onSortChange={(v) => setSortBy(v as SortOption)}
+            selectedCategory={selectedCategory}
+            onSelectedCategoryChange={setSelectedCategory}
+            currentCategory={currentCategory}
+            subcategories={subcategories}
+            mobileFilterOpen={mobileFilterOpen}
+            onMobileFilterOpenChange={setMobileFilterOpen}
+            onPageChange={handlePageChange}
+          />
+        )
+      ) : null}
 
       <Footer />
     </div>

@@ -15,7 +15,7 @@ import {
   useGetFakeOrderNotificationQuery,
   useCreateFakeOrderNotificationMutation,
   useUpdateFakeOrderNotificationMutation,
-} from "@/integrations/metahub/rtk/endpoints/fake_notifications.endpoints";
+} from "@/integrations/hooks";
 
 type FormState = {
   product_name: string;

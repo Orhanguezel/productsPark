@@ -12,7 +12,7 @@ import {
 import { requireAuth } from "@/common/middleware/auth";
 
 export async function registerEmailTemplatesAdmin(app: FastifyInstance) {
-  const base = "/admin/email_templates";
+  const base = "/email_templates";
 
   app.get(base,               { preHandler: [requireAuth] }, listEmailTemplatesAdmin);
   app.get(`${base}/:id`,      { preHandler: [requireAuth] }, getEmailTemplateAdmin);

@@ -1,11 +1,16 @@
 // =============================================================
 // FILE: src/pages/admin/custom-pages/PageList.tsx
+// FINAL — Custom Pages list (typesafe; image_* fields)
+// Fixes:
+// - featured_* removed (use image_url/image_alt from CustomPageView)
+// - cover thumb uses list image_url, falls back to detail.image_url if missing
 // =============================================================
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AdminLayout } from '@/components/admin/AdminLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Pagination,
   PaginationContent,
@@ -13,7 +18,7 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination';
 import {
   Table,
   TableBody,
@@ -21,10 +26,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,40 +40,32 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from '@/components/ui/alert-dialog';
 
 import {
   useListCustomPagesAdminQuery,
   useDeleteCustomPageAdminMutation,
   useGetCustomPageAdminByIdQuery,
-} from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
-import type { CustomPageView } from "@/integrations/metahub/rtk/types/customPages";
+} from '@/integrations/hooks';
+import type { CustomPageView } from '@/integrations/types';
 
 /* ---------- Kapak Thumb: nokta atışı görsel seç ---------- */
 function PageCoverThumb(props: {
   id: string;
-  featured_image?: string | null;
-  featured_image_alt?: string | null;
+  image_url?: string | null;
+  image_alt?: string | null;
   title?: string | null;
 }) {
-  const hasImg = !!props.featured_image;
+  const hasImg = !!props.image_url;
 
+  // Listede image_url yoksa detaya fallback (skip when already have image_url)
   const { data: detail } = useGetCustomPageAdminByIdQuery(props.id, {
     skip: hasImg,
   });
 
-  const src =
-    props.featured_image ??
-    (detail as any)?.featured_image ??
-    (detail as any)?.image_url ??
-    null;
+  const src = props.image_url ?? detail?.image_url ?? null;
 
-  const alt =
-    props.featured_image_alt ??
-    (detail as any)?.featured_image_alt ??
-    (detail as any)?.image_alt ??
-    props.title ??
-    "Kapak";
+  const alt = props.image_alt ?? detail?.image_alt ?? props.title ?? 'Kapak';
 
   if (!src) {
     return (
@@ -81,10 +78,10 @@ function PageCoverThumb(props: {
   return (
     <img
       src={src}
-      alt={alt || "Kapak"}
+      alt={alt || 'Kapak'}
       className="h-10 w-16 object-cover rounded border"
       onError={(e) => {
-        (e.currentTarget as HTMLImageElement).style.display = "none";
+        (e.currentTarget as HTMLImageElement).style.display = 'none';
       }}
     />
   );
@@ -94,8 +91,7 @@ export default function PageList() {
   const navigate = useNavigate();
 
   const { data: list = [], isLoading } = useListCustomPagesAdminQuery();
-  const [deletePage, { isLoading: deleting }] =
-    useDeleteCustomPageAdminMutation();
+  const [deletePage, { isLoading: deleting }] = useDeleteCustomPageAdminMutation();
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -104,18 +100,16 @@ export default function PageList() {
 
   const totalPages = Math.ceil(pages.length / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPages = pages.slice(
-    startIndex,
-    startIndex + itemsPerPage,
-  );
+  const paginatedPages = pages.slice(startIndex, startIndex + itemsPerPage);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (pageId: string) => {
     try {
-      await deletePage(id).unwrap();
-      toast.success("Sayfa silindi");
+      await deletePage(pageId).unwrap();
+      toast.success('Sayfa silindi');
+      // invalidateTags LIST var; RTK otomatik refetch edecektir.
     } catch (err) {
       console.error(err);
-      toast.error("Sayfa silinirken hata oluştu");
+      toast.error('Sayfa silinirken hata oluştu');
     }
   };
 
@@ -136,7 +130,7 @@ export default function PageList() {
           <p className="text-sm text-muted-foreground">
             Özel sayfalar oluşturun (site.com/sayfa-adi)
           </p>
-          <Button onClick={() => navigate("/admin/pages/new")}>
+          <Button onClick={() => navigate('/admin/pages/new')}>
             <Plus className="w-4 h-4 mr-2" />
             Yeni Sayfa
           </Button>
@@ -158,6 +152,7 @@ export default function PageList() {
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {paginatedPages.length === 0 ? (
                   <TableRow>
@@ -171,36 +166,28 @@ export default function PageList() {
                       <TableCell className="py-2">
                         <PageCoverThumb
                           id={page.id}
-                          featured_image={page.featured_image}
-                          featured_image_alt={page.featured_image_alt}
+                          image_url={page.image_url}
+                          image_alt={page.image_alt}
                           title={page.title}
                         />
                       </TableCell>
 
-                      <TableCell className="font-medium">
-                        {page.title}
-                      </TableCell>
+                      <TableCell className="font-medium">{page.title}</TableCell>
 
                       <TableCell>
                         <code className="text-xs">/{page.slug}</code>
                       </TableCell>
 
                       <TableCell>
-                        <Badge
-                          variant={
-                            page.is_published ? "default" : "secondary"
-                          }
-                        >
-                          {page.is_published ? "Yayında" : "Taslak"}
+                        <Badge variant={page.is_published ? 'default' : 'secondary'}>
+                          {page.is_published ? 'Yayında' : 'Taslak'}
                         </Badge>
                       </TableCell>
 
                       <TableCell>
                         {page.created_at
-                          ? new Date(
-                            page.created_at,
-                          ).toLocaleDateString("tr-TR")
-                          : "-"}
+                          ? new Date(page.created_at).toLocaleDateString('tr-TR')
+                          : '-'}
                       </TableCell>
 
                       <TableCell className="text-right">
@@ -209,25 +196,17 @@ export default function PageList() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() =>
-                                window.open(
-                                  `/${page.slug}`,
-                                  "_blank",
-                                )
-                              }
+                              onClick={() => window.open(`/${page.slug}`, '_blank')}
                               title="Sayfayı görüntüle"
                             >
                               <ExternalLink className="w-4 h-4" />
                             </Button>
                           )}
+
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() =>
-                              navigate(
-                                `/admin/pages/edit/${page.id}`,
-                              )
-                            }
+                            onClick={() => navigate(`/admin/pages/edit/${page.id}`)}
                             title="Düzenle"
                           >
                             <Pencil className="w-4 h-4" />
@@ -235,34 +214,21 @@ export default function PageList() {
 
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={deleting}
-                                title="Sil"
-                              >
+                              <Button variant="ghost" size="sm" disabled={deleting} title="Sil">
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </AlertDialogTrigger>
+
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Emin misiniz?
-                                </AlertDialogTitle>
+                                <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Bu sayfayı kalıcı olarak silmek
-                                  üzeresiniz.
+                                  Bu sayfayı kalıcı olarak silmek üzeresiniz.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>
-                                  İptal
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() =>
-                                    handleDelete(page.id)
-                                  }
-                                >
+                                <AlertDialogCancel>İptal</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(page.id)}>
                                   Sil
                                 </AlertDialogAction>
                               </AlertDialogFooter>
@@ -290,31 +256,28 @@ export default function PageList() {
                   }}
                 />
               </PaginationItem>
-              {Array.from(
-                { length: totalPages },
-                (_, i) => i + 1,
-              ).map((page) => (
-                <PaginationItem key={page}>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNo) => (
+                <PaginationItem key={pageNo}>
                   <PaginationLink
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      setCurrentPage(page);
+                      setCurrentPage(pageNo);
                     }}
-                    isActive={currentPage === page}
+                    isActive={currentPage === pageNo}
                   >
-                    {page}
+                    {pageNo}
                   </PaginationLink>
                 </PaginationItem>
               ))}
+
               <PaginationItem>
                 <PaginationNext
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    setCurrentPage((p) =>
-                      Math.min(totalPages, p + 1),
-                    );
+                    setCurrentPage((p) => Math.min(totalPages, p + 1));
                   }}
                 />
               </PaginationItem>

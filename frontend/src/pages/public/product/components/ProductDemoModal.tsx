@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Sparkles } from "lucide-react";
-import type { Product } from "./productDetail.types";
+import type { Product } from '@/integrations/types';
 
 interface ProductDemoModalProps {
   product: Product;

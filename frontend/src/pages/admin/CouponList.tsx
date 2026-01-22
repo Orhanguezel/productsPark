@@ -28,8 +28,8 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import {
   useListCouponsAdminQuery,
   useDeleteCouponAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
-import type { Coupon } from "@/integrations/metahub/rtk/types/coupon";
+} from "@/integrations/hooks";
+import type { Coupon } from "@/integrations/types";
 
 export default function CouponList() {
   const navigate = useNavigate();

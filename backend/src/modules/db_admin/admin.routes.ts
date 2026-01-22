@@ -18,7 +18,7 @@ import {
 } from "./admin.controller";
 
 export async function registerDbAdmin(app: FastifyInstance) {
-  const BASE = "/admin/db";
+  const BASE = "/db";
 
   // -------------------------------------------------------------------
   // EXPORT: GET /admin/db/export

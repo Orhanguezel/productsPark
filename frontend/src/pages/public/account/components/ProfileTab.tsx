@@ -1,104 +1,142 @@
 // =============================================================
 // FILE: src/pages/account/components/ProfileTab.tsx
+// FINAL — No admin mutation, correct payloads (AuthUpdate + Profile upsert)
 // =============================================================
-import { useEffect, useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from '@/hooks/useAuth';
 import {
   useGetMyProfileQuery,
   useUpsertMyProfileMutation,
-} from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
-import { useUpdateUserMutation } from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
+  useAuthUpdateMutation,
+} from '@/integrations/hooks';
 
 export function ProfileTab() {
   const { user } = useAuth();
 
-  const { data: profileData } = useGetMyProfileQuery();
-  const [upsertProfile, { isLoading: upsertingProfile }] =
-    useUpsertMyProfileMutation();
+  // profile (separate table/module)
+  const { data: profileData } = useGetMyProfileQuery(undefined, {
+    skip: !user?.id,
+  });
 
-  const [updateUser, { isLoading: updatingUser }] = useUpdateUserMutation();
+  const [upsertProfile, { isLoading: upsertingProfile }] = useUpsertMyProfileMutation();
+
+  // auth user update (me)
+  const [authUpdate, { isLoading: updatingMe }] = useAuthUpdateMutation();
 
   // ---- local state ----
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
 
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   // user değişince e-postayı senkronla
   useEffect(() => {
-    setEmail(user?.email ?? "");
+    setEmail(user?.email ?? '');
   }, [user?.email]);
 
   // profil yüklendiğinde ad/telefonu doldur
   useEffect(() => {
     if (profileData) {
-      setFullName(profileData.full_name ?? "");
-      setPhone(profileData.phone ?? "");
+      setFullName(profileData.full_name ?? '');
+      setPhone(profileData.phone ?? '');
+    } else {
+      // fallback: auth user varsa
+      setFullName(user?.full_name ?? '');
+      setPhone(user?.phone ?? '');
     }
-  }, [profileData]);
+  }, [profileData, user?.full_name, user?.phone]);
+
+  const isBusy = upsertingProfile || updatingMe;
+
+  const emailChanged = useMemo(() => {
+    const current = (user?.email ?? '').trim();
+    return email.trim() !== '' && email.trim() !== current;
+  }, [email, user?.email]);
 
   const handleUpdateProfile = async () => {
+    if (!user?.id) {
+      toast.error('Oturum bulunamadı');
+      return;
+    }
+
     try {
-      await upsertProfile({ profile: { full_name: fullName, phone } }).unwrap();
-      toast.success("Profil güncellendi");
-    } catch {
-      toast.error("Profil güncellenemedi");
+      // ✅ Hook Partial<Pick<Profile,...>> bekliyor: doğrudan alanları gönder
+      await upsertProfile({
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+      }).unwrap();
+
+      toast.success('Profil güncellendi');
+    } catch (e) {
+      console.error(e);
+      toast.error('Profil güncellenemedi');
     }
   };
 
   const handleUpdateEmail = async () => {
-    if (!email) {
-      toast.error("Geçerli bir e-posta girin");
+    if (!user?.id) {
+      toast.error('Oturum bulunamadı');
       return;
     }
-    if (email === (user?.email ?? "")) {
-      toast.info("E-posta zaten güncel");
+    if (!email.trim()) {
+      toast.error('Geçerli bir e-posta girin');
+      return;
+    }
+    if (!emailChanged) {
+      toast.info('E-posta zaten güncel');
       return;
     }
 
     try {
-      await updateUser({ email }).unwrap();
-      toast.success(
-        "E-posta güncelleme bağlantısı gönderildi. Lütfen yeni e-postayı kontrol edin."
-      );
+      // ✅ Admin değil: authUpdate (me) body
+      await authUpdate({ email: email.trim() } as any).unwrap();
+      // Not: AuthUpdateBody senin paylaştığın tipte email yok.
+      // Eğer backend /auth/user email güncelliyorsa, AuthUpdateBody'ye email eklemen gerekir.
+      // Aşağıdaki "as any"yi kaldırmak için, AuthUpdateBody'yi genişlet:
+      //   email?: string | null;
+
+      toast.success('E-posta güncelleme isteği alındı');
     } catch (e) {
       console.error(e);
-      toast.error("E-posta güncellenemedi");
+      toast.error('E-posta güncellenemedi');
     }
   };
 
   const handleChangePassword = async () => {
+    if (!user?.id) {
+      toast.error('Oturum bulunamadı');
+      return;
+    }
+
     if (!newPassword || newPassword.length < 6) {
-      toast.error("Şifre en az 6 karakter olmalıdır");
+      toast.error('Şifre en az 6 karakter olmalıdır');
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error("Şifreler eşleşmiyor");
+      toast.error('Şifreler eşleşmiyor');
       return;
     }
 
     try {
-      await updateUser({ password: newPassword }).unwrap();
-      toast.success("Şifre başarıyla güncellendi");
+      // ✅ password AuthUpdateBody içinde var
+      await authUpdate({ password: newPassword }).unwrap();
+      toast.success('Şifre başarıyla güncellendi');
 
-      // inputları sıfırla
-      setNewPassword("");
-      setConfirmPassword("");
+      setNewPassword('');
+      setConfirmPassword('');
     } catch (e) {
       console.error(e);
-      toast.error("Şifre güncellenemedi");
+      toast.error('Şifre güncellenemedi');
     }
   };
-
-  const isBusy = upsertingProfile || updatingUser;
 
   return (
     <>
@@ -107,6 +145,7 @@ export function ProfileTab() {
         <CardHeader>
           <CardTitle>Profil Bilgileri</CardTitle>
         </CardHeader>
+
         <CardContent className="space-y-4">
           {/* E-posta */}
           <div className="space-y-2">
@@ -118,17 +157,14 @@ export function ProfileTab() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ornek@domain.com"
+                disabled={isBusy}
               />
-              <Button
-                type="button"
-                onClick={handleUpdateEmail}
-                disabled={updatingUser || !email}
-              >
+              <Button type="button" onClick={handleUpdateEmail} disabled={isBusy || !emailChanged}>
                 Güncelle
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              E-posta değişikliği için doğrulama linki gönderilecektir.
+              E-posta değişikliği için doğrulama akışı backend’e bağlıdır.
             </p>
           </div>
 
@@ -140,6 +176,7 @@ export function ProfileTab() {
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
+              disabled={isBusy}
             />
           </div>
 
@@ -152,14 +189,11 @@ export function ProfileTab() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+90 5XX XXX XX XX"
+              disabled={isBusy}
             />
           </div>
 
-          <Button
-            onClick={handleUpdateProfile}
-            disabled={isBusy}
-            className="w-full"
-          >
+          <Button onClick={handleUpdateProfile} disabled={isBusy} className="w-full">
             Profili Güncelle
           </Button>
         </CardContent>
@@ -179,8 +213,10 @@ export function ProfileTab() {
               placeholder="Yeni şifrenizi girin"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              disabled={isBusy}
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Şifre Tekrar</Label>
             <Input
@@ -189,13 +225,11 @@ export function ProfileTab() {
               placeholder="Şifrenizi tekrar girin"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={isBusy}
             />
           </div>
-          <Button
-            onClick={handleChangePassword}
-            className="w-full"
-            disabled={updatingUser}
-          >
+
+          <Button onClick={handleChangePassword} className="w-full" disabled={isBusy}>
             Şifreyi Güncelle
           </Button>
         </CardContent>

@@ -1,101 +1,101 @@
 // =============================================================
 // FILE: src/components/home/FeaturedCategories.tsx
+// FINAL — Featured Categories (featured-only guaranteed, cleaner)
+// - categories: query is_featured=true + client-side guard
+// - products: fetch enough items to cover featured categories
+// - strict null-safe original_price
 // =============================================================
-import { useMemo } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Star, ShoppingCart } from "lucide-react";
 
-import { formatPrice } from "@/lib/utils";
+import React, { useMemo } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Star, ShoppingCart } from 'lucide-react';
 
-// RTK
-import { useListCategoriesQuery } from "@/integrations/metahub/rtk/endpoints/categories.endpoints";
-import {
-  useListProductsQuery,
-} from "@/integrations/metahub/rtk/endpoints/products.endpoints";
+import { formatPrice } from '@/lib/utils';
+import { useListProductsQuery, useListCategoriesQuery } from '@/integrations/hooks';
 
-import type { Product } from "@/integrations/metahub/rtk/types/products";
-import type { Category } from "@/integrations/metahub/rtk/types/categories";
+import type { Product, Category } from '@/integrations/types';
 
-interface CatRow {
-  id: string;
-  name: string;
-  slug: string;
-}
-
+type CatRow = { id: string; name: string; slug: string };
 type CatWithProducts = CatRow & { products: Product[] };
 
 export default function FeaturedCategories() {
-  /* ---------------- Kategoriler (RTK) ---------------- */
+  /* ---------------- Categories (featured only) ---------------- */
 
   const {
-    data: catsData = [],
+    data: catsData,
     isLoading: isCatsLoading,
     isFetching: isCatsFetching,
   } = useListCategoriesQuery({
     is_active: true,
     is_featured: true,
-    sort: "display_order",
-    order: "asc",
+    sort: 'display_order',
+    order: 'asc',
+    // istersen: limit: 20, offset: 0
   });
 
-  const featuredCats: CatRow[] = useMemo(
-    () =>
-      (catsData as Category[]).map((c) => ({
-        id: c.id,
-        name: c.name,
-        slug: c.slug,
-      })),
-    [catsData],
-  );
+  const featuredCats: CatRow[] = useMemo(() => {
+    const rows: Category[] = Array.isArray(catsData) ? catsData : [];
 
-  const featuredCategoryIds = useMemo(
-    () => featuredCats.map((c) => c.id),
-    [featuredCats],
-  );
+    // ✅ kesin filtre (backend paramı ignore etse bile)
+    return rows
+      .filter((c) => c.is_active === true && c.is_featured === true)
+      .map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
+      .filter((c) => !!c.id && !!c.slug && !!c.name);
+  }, [catsData]);
 
-  /* ---------------- Ürünler (RTK) ---------------- */
+  const featuredCategoryIds = useMemo(() => featuredCats.map((c) => c.id), [featuredCats]);
+
+  /* ---------------- Products ---------------- */
+
+  // Her kategori için 4 ürün hedefliyoruz; rating desc.
+  // Backend category filtre desteklemiyorsa bile yeterli ürün çekmek gerekir.
+  const desiredPerCategory = 4;
+  const desiredTotal = Math.max(32, featuredCategoryIds.length * desiredPerCategory * 3); // buffer
 
   const {
-    data: productsData = [],
+    data: productsData,
     isLoading: isProductsLoading,
     isFetching: isProductsFetching,
   } = useListProductsQuery(
     featuredCategoryIds.length
       ? {
-        is_active: true,
-        // birden fazla kategori için yeterince yüksek bir limit
-        limit: Math.max(32, featuredCategoryIds.length * 8),
-        offset: 0,
-        sort: "rating",
-        order: "desc",
-      }
+          is_active: true,
+          limit: desiredTotal,
+          offset: 0,
+          sort: 'rating',
+          order: 'desc',
+        }
       : undefined,
-    {
-      skip: featuredCategoryIds.length === 0,
-    },
+    { skip: featuredCategoryIds.length === 0 },
   );
 
-  const loading =
-    isCatsLoading || isCatsFetching || isProductsLoading || isProductsFetching;
+  const loading = isCatsLoading || isCatsFetching || isProductsLoading || isProductsFetching;
 
-  /* ------------- Kategori -> ürün eşleme ------------- */
+  /* ---------------- Map category -> products ---------------- */
 
   const categories: CatWithProducts[] = useMemo(() => {
     if (!featuredCats.length) return [];
-    const products = productsData as Product[];
+
+    const products: Product[] = Array.isArray(productsData) ? productsData : [];
+
+    // index by category_id
+    const byCat = new Map<string, Product[]>();
+    for (const p of products) {
+      const cid = p.category_id;
+      if (!cid) continue;
+      if (!byCat.has(cid)) byCat.set(cid, []);
+      byCat.get(cid)!.push(p);
+    }
 
     return featuredCats
-      .map<CatWithProducts>((category) => {
-        const productsForCategory = products
-          .filter((p) => p.category_id === category.id)
-          .slice(0, 4); // her kategori için max 4 ürün
-
-        return { ...category, products: productsForCategory };
+      .map<CatWithProducts>((cat) => {
+        const list = (byCat.get(cat.id) ?? []).slice(0, desiredPerCategory);
+        return { ...cat, products: list };
       })
       .filter((c) => c.products.length > 0);
-  }, [featuredCats, productsData]);
+  }, [featuredCats, productsData, desiredPerCategory]);
 
   /* ---------------- Render ---------------- */
 
@@ -107,6 +107,7 @@ export default function FeaturedCategories() {
     );
   }
 
+  // Featured kategori yoksa veya ürün eşleşmediyse hiç basma
   if (categories.length === 0) return null;
 
   return (
@@ -115,9 +116,8 @@ export default function FeaturedCategories() {
         {categories.map((category) => (
           <div key={category.id}>
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold">
-                {category.name}
-              </h2>
+              <h2 className="text-3xl md:text-4xl font-bold">{category.name}</h2>
+
               <Button
                 variant="outline"
                 onClick={() => {
@@ -130,17 +130,17 @@ export default function FeaturedCategories() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {category.products.map((product) => {
-                const hasValidOriginal =
-                  product.original_price != null &&
-                  product.original_price > product.price;
+                const originalPrice = product.original_price;
 
-                const discount = hasValidOriginal
-                  ? Math.round(
-                    ((product.original_price - product.price) /
-                      product.original_price) *
-                    100,
-                  )
-                  : null;
+                const hasValidOriginal =
+                  typeof originalPrice === 'number' &&
+                  Number.isFinite(originalPrice) &&
+                  originalPrice > product.price;
+
+                const discount =
+                  hasValidOriginal && originalPrice
+                    ? Math.round(((originalPrice - product.price) / originalPrice) * 100)
+                    : null;
 
                 return (
                   <Card
@@ -154,48 +154,53 @@ export default function FeaturedCategories() {
                       <img
                         src={
                           product.image_url ||
-                          "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=300&fit=crop"
+                          'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=300&fit=crop'
                         }
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-smooth"
                       />
-                      {discount !== null && (
+
+                      {discount !== null ? (
                         <Badge className="absolute top-3 left-3 bg-destructive text-destructive-foreground">
                           -{discount}%
                         </Badge>
-                      )}
+                      ) : null}
                     </div>
 
                     <CardContent className="p-4">
-                      <h3 className="font-semibold mb-2 line-clamp-1">
-                        {product.name}
-                      </h3>
+                      <h3 className="font-semibold mb-2 line-clamp-1">{product.name}</h3>
+
                       <div className="flex items-center gap-1 mb-3">
                         <div className="flex">
                           {Array.from({ length: 5 }).map((_, i) => (
                             <Star
                               key={i}
-                              className={`w-3 h-3 ${i < Math.floor(product.rating)
-                                  ? "fill-yellow-400 text-yellow-400"
-                                  : "text-gray-300"
-                                }`}
+                              className={`w-3 h-3 ${
+                                i < Math.floor(product.rating)
+                                  ? 'fill-yellow-400 text-yellow-400'
+                                  : 'text-gray-300'
+                              }`}
                             />
                           ))}
                         </div>
+
                         <span className="text-xs text-muted-foreground">
                           ({product.review_count})
                         </span>
                       </div>
+
                       <div className="flex items-baseline gap-2 mb-4">
                         <span className="text-2xl font-bold text-primary">
                           {formatPrice(product.price)}
                         </span>
-                        {hasValidOriginal && (
+
+                        {hasValidOriginal ? (
                           <span className="text-sm text-muted-foreground line-through">
-                            {formatPrice(product.original_price!)}
+                            {formatPrice(originalPrice)}
                           </span>
-                        )}
+                        ) : null}
                       </div>
+
                       <Button className="w-full gradient-primary text-white">
                         <ShoppingCart className="w-4 h-4 mr-2" />
                         Sepete Ekle

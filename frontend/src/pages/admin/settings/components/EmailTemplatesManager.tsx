@@ -16,13 +16,13 @@ import { Plus, Edit, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 
-import type { EmailTemplateView } from "@/integrations/metahub/rtk/types/email";
+import type { EmailTemplateAdminView } from '@/integrations/types';
 import {
   useListEmailTemplatesAdminQuery,
   useCreateEmailTemplateAdminMutation,
   useUpdateEmailTemplateAdminMutation,
   useDeleteEmailTemplateAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/email_templates_admin.endpoints";
+} from "@/integrations/hooks";
 
 type FormState = {
   template_name: string;
@@ -52,7 +52,7 @@ export default function EmailTemplatesManager() {
   const [deleteTemplate, { isLoading: deleting }] = useDeleteEmailTemplateAdminMutation();
 
   const [show, setShow] = useState(false);
-  const [editing, setEditing] = useState<EmailTemplateView | null>(null);
+  const [editing, setEditing] = useState<EmailTemplateAdminView | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const sortedTemplates = useMemo(
@@ -66,7 +66,7 @@ export default function EmailTemplatesManager() {
     setShow(true);
   }
 
-  function openEdit(t: EmailTemplateView) {
+  function openEdit(t: EmailTemplateAdminView) {
     setEditing(t);
     setForm({
       template_name: t.name,

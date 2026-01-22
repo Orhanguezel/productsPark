@@ -29,18 +29,19 @@ import {
   useListSupportTicketsQuery,
   useCreateSupportTicketMutation,
   useUpdateSupportTicketMutation,
-} from "@/integrations/metahub/rtk/endpoints/support_tickets.endpoints";
-import {
   useListTicketRepliesByTicketQuery,
   useCreateTicketReplyMutation,
-} from "@/integrations/metahub/rtk/endpoints/ticket_replies.endpoints";
+  useSendTelegramNotificationMutation,
+  
+} from "@/integrations/hooks";
+
 import type {
   SupportTicket,
   SupportTicketPriority,
   SupportTicketStatus,
   TicketReply,
-} from "@/integrations/metahub/rtk/types/support";
-import { useSendTelegramNotificationMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+} from "@/integrations/types";
+
 
 type TicketReplyUI = TicketReply & { display_name: string };
 

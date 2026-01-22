@@ -1,7 +1,7 @@
 // =============================================================
 // FILE: src/pages/public/components/ProductArticleSection.tsx
 // =============================================================
-import type { Product } from "./productDetail.types";
+import type { Product } from '@/integrations/types';
 
 interface ProductArticleSectionProps {
   product: Product;

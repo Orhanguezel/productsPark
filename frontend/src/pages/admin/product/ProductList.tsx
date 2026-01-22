@@ -1,21 +1,30 @@
 // =============================================================
 // FILE: src/components/admin/products/ProductList.tsx
+// FINAL — Admin Product List (adds show_on_homepage column + toggle)
+// - uses RTK: listProductsAdmin, deleteProductAdmin, listCategoriesAdmin, toggleHomepageProductAdmin
+// - strict-friendly
 // =============================================================
-"use client";
 
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { toast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Plus, ImageOff } from "lucide-react";
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
+import { Pencil, Trash2, Plus, ImageOff } from 'lucide-react';
+
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+} from '@/components/ui/select';
+
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+
 import {
   Table,
   TableBody,
@@ -23,7 +32,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table';
+
 import {
   Pagination,
   PaginationContent,
@@ -32,26 +42,24 @@ import {
   PaginationNext,
   PaginationPrevious,
   PaginationEllipsis,
-} from "@/components/ui/pagination";
-import { AdminLayout } from "@/components/admin/AdminLayout";
+} from '@/components/ui/pagination';
 
-// RTK Admin endpoints (core ürün list/delete)
+import { AdminLayout } from '@/components/admin/AdminLayout';
+
+// RTK Admin endpoints
 import {
   useListProductsAdminQuery,
   useDeleteProductAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
-import { useListCategoriesAdminQuery } from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
+  useListCategoriesAdminQuery,
+  useToggleHomepageProductAdminMutation,
+} from '@/integrations/hooks';
 
-// Types
-import type {
-  ProductAdmin,
-  CategoryRow,
-} from "@/integrations/metahub/rtk/types/products";
+import type { ProductAdmin, CategoryRow } from '@/integrations/types';
 
 const formatTRY = (n: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
+  new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
     maximumFractionDigits: 2,
   }).format(n ?? 0);
 
@@ -59,26 +67,24 @@ export default function ProductList() {
   const navigate = useNavigate();
 
   // server data
-  const { data: productsData = [], isFetching: loadingProducts } =
-    useListProductsAdminQuery();
-  const { data: categories = [], isFetching: loadingCategories } =
-    useListCategoriesAdminQuery();
+  const { data: productsData = [], isFetching: loadingProducts } = useListProductsAdminQuery();
+  const { data: categories = [], isFetching: loadingCategories } = useListCategoriesAdminQuery();
 
-  const [deleteProduct, { isLoading: deleting }] =
-    useDeleteProductAdminMutation();
+  const [deleteProduct, { isLoading: deleting }] = useDeleteProductAdminMutation();
+  const [toggleHomepage, { isLoading: togglingHomepage }] =
+    useToggleHomepageProductAdminMutation();
 
   // ui state
-  const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
   const getThumb = (p: ProductAdmin): string | null => {
-    // Storage-first → legacy → gallery fallback
     return (
-      (typeof p.featured_image === "string" && p.featured_image) ||
-      (typeof p.image_url === "string" && p.image_url) ||
+      (typeof p.featured_image === 'string' && p.featured_image) ||
+      (typeof p.image_url === 'string' && p.image_url) ||
       (Array.isArray(p.gallery_urls) && p.gallery_urls[0]) ||
       null
     );
@@ -86,9 +92,8 @@ export default function ProductList() {
 
   const getCategoryName = (
     p: ProductAdmin,
-    cats: Pick<CategoryRow, "id" | "name">[]
+    cats: Pick<CategoryRow, 'id' | 'name'>[],
   ): string | null => {
-    // Prefer embedded relation; else look up by category_id from list
     if (p.categories?.name) return p.categories.name;
     if (p.category_id) {
       const m = cats.find((c) => c.id === p.category_id);
@@ -101,24 +106,21 @@ export default function ProductList() {
   const filteredProducts = useMemo(() => {
     let list = [...productsData] as ProductAdmin[];
 
-    if (filterCategory !== "all") {
-      list = list.filter((p) => (p.category_id ?? "") === filterCategory);
+    if (filterCategory !== 'all') {
+      list = list.filter((p) => (p.category_id ?? '') === filterCategory);
     }
 
-    if (filterStatus !== "all") {
-      list = list.filter(
-        (p) => !!p.is_active === (filterStatus === "active")
-      );
+    if (filterStatus !== 'all') {
+      list = list.filter((p) => !!p.is_active === (filterStatus === 'active'));
     }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (p) =>
-          (p.name ?? "").toLowerCase().includes(q) ||
-          (p.slug ?? "").toLowerCase().includes(q) ||
-          (getCategoryName(p, categories)?.toLowerCase().includes(q) ??
-            false)
+          (p.name ?? '').toLowerCase().includes(q) ||
+          (p.slug ?? '').toLowerCase().includes(q) ||
+          (getCategoryName(p, categories)?.toLowerCase().includes(q) ?? false),
       );
     }
 
@@ -133,24 +135,19 @@ export default function ProductList() {
   }, [productsData, filterCategory, filterStatus, searchQuery, categories]);
 
   // pagination
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredProducts.length / itemsPerPage)
-  );
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentProducts = filteredProducts.slice(
-    startIndex,
-    startIndex + itemsPerPage
-  );
+  const currentProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const renderPaginationItems = () => {
-    const items = [];
+    const items: JSX.Element[] = [];
     const maxVisible = 5;
+
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
     const endPage = Math.min(totalPages, startPage + maxVisible - 1);
 
@@ -161,37 +158,30 @@ export default function ProductList() {
     if (startPage > 1) {
       items.push(
         <PaginationItem key="first">
-          <PaginationLink onClick={() => handlePageChange(1)}>
-            1
-          </PaginationLink>
-        </PaginationItem>
+          <PaginationLink onClick={() => handlePageChange(1)}>1</PaginationLink>
+        </PaginationItem>,
       );
-      if (startPage > 2)
-        items.push(<PaginationEllipsis key="ellipsis-start" />);
+      if (startPage > 2) items.push(<PaginationEllipsis key="ellipsis-start" />);
     }
 
     for (let i = startPage; i <= endPage; i++) {
       items.push(
         <PaginationItem key={i}>
-          <PaginationLink
-            onClick={() => handlePageChange(i)}
-            isActive={currentPage === i}
-          >
+          <PaginationLink onClick={() => handlePageChange(i)} isActive={currentPage === i}>
             {i}
           </PaginationLink>
-        </PaginationItem>
+        </PaginationItem>,
       );
     }
 
     if (endPage < totalPages) {
-      if (endPage < totalPages - 1)
-        items.push(<PaginationEllipsis key="ellipsis-end" />);
+      if (endPage < totalPages - 1) items.push(<PaginationEllipsis key="ellipsis-end" />);
       items.push(
         <PaginationItem key="last">
           <PaginationLink onClick={() => handlePageChange(totalPages)}>
             {totalPages}
           </PaginationLink>
-        </PaginationItem>
+        </PaginationItem>,
       );
     }
 
@@ -199,16 +189,33 @@ export default function ProductList() {
   };
 
   const onDelete = async (id: string) => {
-    if (!confirm("Bu ürünü silmek istediğinizden emin misiniz?")) return;
+    if (!confirm('Bu ürünü silmek istediğinizden emin misiniz?')) return;
     try {
       await deleteProduct(id).unwrap();
-      toast({ title: "Başarılı", description: "Ürün silindi." });
+      toast({ title: 'Başarılı', description: 'Ürün silindi.' });
     } catch (err) {
       console.error(err);
       toast({
-        title: "Hata",
-        description: "Ürün silinirken bir hata oluştu.",
-        variant: "destructive",
+        title: 'Hata',
+        description: 'Ürün silinirken bir hata oluştu.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const onToggleHomepage = async (p: ProductAdmin, next: boolean) => {
+    try {
+      await toggleHomepage({ id: p.id, show_on_homepage: next }).unwrap();
+      toast({
+        title: 'Başarılı',
+        description: next ? 'Ürün anasayfada gösterilecek.' : 'Ürün anasayfadan kaldırıldı.',
+      });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Hata',
+        description: 'Anasayfa görünürlüğü güncellenemedi.',
+        variant: 'destructive',
       });
     }
   };
@@ -220,11 +227,8 @@ export default function ProductList() {
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2 justify-between items-center">
           <h3 className="text-lg font-semibold">Ürün Yönetimi</h3>
-          {/* sidebarda aktiflik için bu rota: /admin/products/new */}
-          <Button
-            onClick={() => navigate("/admin/products/new")}
-            className="gradient-primary"
-          >
+
+          <Button onClick={() => navigate('/admin/products/new')} className="gradient-primary">
             <Plus className="w-4 h-4 mr-2" />
             Yeni Ürün
           </Button>
@@ -240,6 +244,7 @@ export default function ProductList() {
               setCurrentPage(1);
             }}
           />
+
           <Select
             value={filterCategory}
             onValueChange={(v) => {
@@ -259,6 +264,7 @@ export default function ProductList() {
               ))}
             </SelectContent>
           </Select>
+
           <Select
             value={filterStatus}
             onValueChange={(v) => {
@@ -283,8 +289,7 @@ export default function ProductList() {
           <>
             <div className="text-sm text-muted-foreground mb-2">
               Toplam {filteredProducts.length} ürün bulundu
-              {filteredProducts.length > itemsPerPage &&
-                ` (Sayfa ${currentPage}/${totalPages})`}
+              {filteredProducts.length > itemsPerPage && ` (Sayfa ${currentPage}/${totalPages})`}
             </div>
 
             <Table>
@@ -296,13 +301,18 @@ export default function ProductList() {
                   <TableHead>Fiyat</TableHead>
                   <TableHead>Stok</TableHead>
                   <TableHead>Durum</TableHead>
+                  <TableHead>Anasayfa</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {currentProducts.map((product) => {
                   const thumb = getThumb(product);
                   const catName = getCategoryName(product, categories);
+
+                  const homepageChecked = !!(product as ProductAdmin).show_on_homepage;
+
                   return (
                     <TableRow key={product.id}>
                       <TableCell>
@@ -310,7 +320,7 @@ export default function ProductList() {
                           {thumb ? (
                             <img
                               src={thumb}
-                              alt={product.name ?? "Ürün görseli"}
+                              alt={product.name ?? 'Ürün görseli'}
                               className="w-full h-full object-cover"
                               referrerPolicy="no-referrer"
                             />
@@ -322,26 +332,16 @@ export default function ProductList() {
 
                       <TableCell className="font-medium">
                         <div className="flex flex-col">
-                          <span className="line-clamp-1">
-                            {product.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            /{product.slug}
-                          </span>
+                          <span className="line-clamp-1">{product.name}</span>
+                          <span className="text-xs text-muted-foreground">/{product.slug}</span>
                         </div>
                       </TableCell>
 
                       <TableCell>
-                        {catName ? (
-                          catName
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
+                        {catName ? catName : <span className="text-muted-foreground">-</span>}
                       </TableCell>
 
-                      <TableCell>
-                        {formatTRY(Number(product.price || 0))}
-                      </TableCell>
+                      <TableCell>{formatTRY(Number(product.price || 0))}</TableCell>
 
                       <TableCell>{product.stock_quantity ?? 0}</TableCell>
 
@@ -353,22 +353,31 @@ export default function ProductList() {
                         )}
                       </TableCell>
 
+                      <TableCell>
+                        <Switch
+                          checked={homepageChecked}
+                          disabled={togglingHomepage}
+                          onCheckedChange={(v) => onToggleHomepage(product, v)}
+                        />
+                      </TableCell>
+
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            navigate(`/admin/products/edit/${product.id}`)
-                          }
+                          onClick={() => navigate(`/admin/products/edit/${product.id}`)}
                           title="Düzenle"
+                          type="button"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => onDelete(product.id)}
                           title="Sil"
+                          type="button"
                         >
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
@@ -376,12 +385,10 @@ export default function ProductList() {
                     </TableRow>
                   );
                 })}
+
                 {currentProducts.length === 0 && (
                   <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center text-muted-foreground"
-                    >
+                    <TableCell colSpan={8} className="text-center text-muted-foreground">
                       Kayıt bulunamadı.
                     </TableCell>
                   </TableRow>
@@ -396,14 +403,9 @@ export default function ProductList() {
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() =>
-                          currentPage > 1 &&
-                          handlePageChange(currentPage - 1)
-                        }
+                        onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
                         className={
-                          currentPage === 1
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
+                          currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
                         }
                       />
                     </PaginationItem>
@@ -412,14 +414,11 @@ export default function ProductList() {
 
                     <PaginationItem>
                       <PaginationNext
-                        onClick={() =>
-                          currentPage < totalPages &&
-                          handlePageChange(currentPage + 1)
-                        }
+                        onClick={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
                         className={
                           currentPage === totalPages
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
                         }
                       />
                     </PaginationItem>

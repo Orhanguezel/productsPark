@@ -7,7 +7,7 @@ import { requireAuth } from "@/common/middleware/auth";
 import { requireAdmin } from "@/common/middleware/roles";
 
 export async function registerContactsAdmin(app: FastifyInstance) {
-  const BASE = "/admin/contacts";
+  const BASE = "/contacts";
   const c = makeAdminController(app);
 
   const adminGuard = async (req: FastifyRequest, reply: FastifyReply) => {

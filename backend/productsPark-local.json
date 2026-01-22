@@ -1,0 +1,69 @@
+{
+  "id": "4b9d9f62-19fe-4a73-9b8a-5f9c4b8a0d0f",
+  "name": "productsPark-local",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081/api",
+      "enabled": true
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "telegramChatIdOverride",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "testUserName",
+      "value": "Orhan",
+      "enabled": true
+    },
+    {
+      "key": "testTicketSubject",
+      "value": "Postman Test Ticket",
+      "enabled": true
+    },
+    {
+      "key": "testTicketPriority",
+      "value": "normal",
+      "enabled": true
+    },
+    {
+      "key": "testTicketMessage",
+      "value": "Hello from Postman. This is a test ticket message.",
+      "enabled": true
+    },
+    {
+      "key": "testTicketReplyMessage",
+      "value": "We received your ticket, thank you.",
+      "enabled": true
+    },
+    {
+      "key": "autoReplyTemplateNew",
+      "value": "Test auto reply (productsPark)",
+      "enabled": true
+    },
+    {
+      "key": "inboundQ",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "inboundChatId",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "inboundCursor",
+      "value": "",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-01-17T12:00:00.000Z",
+  "_postman_exported_using": "Postman/10.x"
+}

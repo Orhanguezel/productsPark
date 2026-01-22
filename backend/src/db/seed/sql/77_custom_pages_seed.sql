@@ -20,14 +20,57 @@ VALUES
 ('d08dba17-56d9-48c1-b30e-824b390e0009', 'Hizmet Sözleşmesi', 'hizmet-sozlesmesi',
  JSON_OBJECT('html', '<div class="container mx-auto px-4 py-12"><h1 class="text-4xl font-bold mb-8">Mesafeli Satış Sözleşmesi</h1><div class="prose max-w-none"><h2 class="text-2xl font-bold mb-4 mt-8">1. Taraflar</h2><p class="text-muted-foreground mb-6">İşbu sözleşme, dijital ürünler platformumuz (bundan sonra "SATICI" olarak anılacaktır) ile platformumuzu kullanan müşteri (bundan sonra "ALICI" olarak anılacaktır) arasında akdedilmiştir.</p><h2 class="text-2xl font-bold mb-4 mt-8">2. Sözleşmenin Konusu</h2><p class="text-muted-foreground mb-6">İşbu sözleşme, ALICI''nın SATICI''ya ait internet sitesi üzerinden elektronik ortamda siparişini verdiği dijital ürünlerin satışı ve teslimi ile ilgili olarak 6502 sayılı Tüketicinin Korunması Hakkında Kanun ve Mesafeli Sözleşmelere Dair Yönetmelik hükümleri gereğince tarafların hak ve yükümlülüklerini düzenler.</p><h2 class="text-2xl font-bold mb-4 mt-8">3. Ürün Bilgileri</h2><p class="text-muted-foreground mb-6">Satışa konu ürünlerin temel özellikleri (türü, miktarı, marka/modeli, rengi, adedi) ürün sayfasında yer almaktadır. ALICI, sipariş vermeden önce ürün bilgilerini incelemiş ve bilgilendirilmiş sayılır.</p><h2 class="text-2xl font-bold mb-4 mt-8">4. Fiyat ve Ödeme</h2><p class="text-muted-foreground mb-6">Ürünlerin satış fiyatı, ürün sayfasında gösterilen fiyattır. Fiyatlar KDV dahildir. SATICI, kampanya süresince veya stok durumuna göre fiyatlarda değişiklik yapma hakkını saklı tutar.</p><p class="text-muted-foreground mb-6">Ödeme şekilleri:</p><ul class="list-disc pl-6 space-y-2 text-muted-foreground mb-6"><li>Kredi Kartı / Banka Kartı</li><li>Havale / EFT</li><li>Hesap Bakiyesi</li><li>Diğer elektronik ödeme yöntemleri</li></ul><h2 class="text-2xl font-bold mb-4 mt-8">5. Teslimat</h2><p class="text-muted-foreground mb-6">Dijital ürünler, ödeme onayından sonra anında veya belirtilen süre içerisinde elektronik ortamda ALICI''ya teslim edilir. Teslimat, ALICI''nın kayıtlı e-posta adresine veya hesap panelindeki sipariş detayları bölümüne yapılır.</p><h2 class="text-2xl font-bold mb-4 mt-8">6. Cayma Hakkı</h2><p class="text-muted-foreground mb-6">6502 sayılı Tüketicinin Korunması Hakkında Kanun''un 15. maddesi ve Mesafeli Sözleşmeler Yönetmeliği''nin 15. maddesi gereğince, dijital içerik ve hizmetlerin sunulması ile birlikte cayma hakkı sona erer. ALICI, dijital ürünü teslim almakla cayma hakkından vazgeçtiğini kabul eder.</p><h2 class="text-2xl font-bold mb-4 mt-8">7. Garanti ve Sorumluluk</h2><p class="text-muted-foreground mb-6">SATICI, teslim edilen dijital ürünlerin orijinal ve çalışır durumda olduğunu garanti eder. Ürünle ilgili teknik sorunlar için 7 gün içerisinde destek ekibimize başvurulabilir.</p><h2 class="text-2xl font-bold mb-4 mt-8">8. Kişisel Verilerin Korunması</h2><p class="text-muted-foreground mb-6">ALICI''nın kişisel bilgileri, 6698 sayılı Kişisel Verilerin Korunması Kanunu kapsamında işlenir ve korunur. Detaylı bilgi için Gizlilik Politikamızı inceleyebilirsiniz.</p><h2 class="text-2xl font-bold mb-4 mt-8">9. Uyuşmazlıkların Çözümü</h2><p class="text-muted-foreground mb-6">İşbu sözleşmeden doğan uyuşmazlıklarda, Tüketici Hakem Heyetleri ve Tüketici Mahkemeleri yetkilidir. ALICI, sipariş verdiği anda bu sözleşmeyi kabul etmiş sayılır.</p><h2 class="text-2xl font-bold mb-4 mt-8">10. Yürürlük</h2><p class="text-muted-foreground mb-6">İşbu sözleşme, ALICI tarafından elektronik ortamda onaylanmasıyla yürürlüğe girer. SATICI, sözleşmede değişiklik yapma hakkını saklı tutar.</p></div></div>'),
  NULL, NULL, NULL,
- NULL, NULL, 1, '2025-10-15 13:07:17.000', '2025-10-15 13:07:17.000')
+ NULL, NULL, 1, '2025-10-15 13:07:17.000', '2025-10-15 13:07:17.000'),
+
+-- Hakkımızda
+('3b5d7e2a-2c8b-4b20-9f2f-7c9c7d8a3a01', 'Hakkımızda', 'hakkimizda',
+ JSON_OBJECT(
+   'hero_kicker', '— Hakkımızda',
+   'hero_title',  'Dijital Dünyanin Guvenilir Adresi',
+   'hero_lead',   '2020''den beri binlerce musteriye guvenli ve kaliteli dijital urunler sunuyoruz',
+
+   'story_title', 'Hikayemiz',
+   'story_p1', 'Dijital Market olarak 2020 yilinda basladigimiz bu yolculukta, musterilerimize en kaliteli dijital urunleri en uygun fiyatlarla sunmayi hedefledik.',
+   'story_p2', 'Oyun lisanslarindan yazilim aktivasyonlarina, tasarim araclarindan egitim platformlarina kadar genis bir urun yelpazesiyle hizmet veriyoruz. Her gecen gun buyuyen musteri kitlemiz ve yuksek memnuniyet oranimiz ile sektorun guclu platformlarindan biri olduk.',
+   'story_p3', 'Musteri memnuniyeti odakli yaklasimimiz, 7/24 destek hizmetimiz ve %100 orijinal urun garantimiz ile fark yaratmaya devam ediyoruz.',
+
+   'values_title', 'Degerlerimiz',
+   'values', JSON_ARRAY(
+     JSON_OBJECT('icon','shield','title','Guvenilirlik','text','%100 orijinal urunler ve guvenli odeme sistemleri'),
+     JSON_OBJECT('icon','zap','title','Hizli Teslimat','text','Aninda dijital teslimat ile zaman kaybetmeyin'),
+     JSON_OBJECT('icon','headphones','title','7/24 Destek','text','Her zaman yaninizdayiz, sorunlarinizi cozuyoruz'),
+     JSON_OBJECT('icon','award','title','Kalite','text','Sadece guvenilir kaynaklardan temin edilen urunler'),
+     JSON_OBJECT('icon','users','title','Musteri Odaklilik','text','Musteri memnuniyeti bizim onceligimiz'),
+     JSON_OBJECT('icon','target','title','Seffaflik','text','Acik ve net iletisim, gizli ucret yok')
+   ),
+
+   'stats', JSON_ARRAY(
+     JSON_OBJECT('value','50K+','label','Mutlu Musteri','variant','primary'),
+     JSON_OBJECT('value','643','label','Dijital Urun','variant','secondary'),
+     JSON_OBJECT('value','98%','label','Memnuniyet Orani','variant','accent'),
+     JSON_OBJECT('value','7/24','label','Destek Hizmeti','variant','primary')
+   ),
+
+   'mission_title', 'Misyonumuz',
+   'mission_text', 'Dijital dunyada guvenilir, hizli ve kaliteli hizmet sunarak musterilerimizin dijital ihtiyaclarini karsilamak ve onlara en iyi alisveris deneyimini yasatmak.'
+ ),
+ 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&h=630&fit=crop',
+ NULL,
+ 'Takim Calismasi',
+ 'Hakkimizda - Dijimins',
+ 'Dijimins hakkinda: guvenli dijital urun saticisi, hizli teslimat ve 7/24 destek.',
+ 1,
+ NOW(3),
+ NOW(3)
+)
+
 ON DUPLICATE KEY UPDATE
-  `title`            = VALUES(`title`),
-  `content`          = VALUES(`content`),
-  `featured_image`           = VALUES(`featured_image`),
-  `featured_image_asset_id`  = VALUES(`featured_image_asset_id`),
-  `featured_image_alt`       = VALUES(`featured_image_alt`),
-  `meta_title`       = VALUES(`meta_title`),
-  `meta_description` = VALUES(`meta_description`),
-  `is_published`     = VALUES(`is_published`),
-  `updated_at`       = VALUES(`updated_at`);
+  `title`                  = VALUES(`title`),
+  `content`                = VALUES(`content`),
+  `featured_image`         = VALUES(`featured_image`),
+  `featured_image_asset_id`= VALUES(`featured_image_asset_id`),
+  `featured_image_alt`     = VALUES(`featured_image_alt`),
+  `meta_title`             = VALUES(`meta_title`),
+  `meta_description`       = VALUES(`meta_description`),
+  `is_published`           = VALUES(`is_published`),
+  `updated_at`             = VALUES(`updated_at`);

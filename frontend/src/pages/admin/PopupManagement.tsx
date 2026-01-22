@@ -19,15 +19,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useListPopupsAdminQuery,
   useDeletePopupAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/popups_admin.endpoints";
-
-import {
   useListProductsAdminQuery,
-} from "@/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints";
-
-import {
   useListCouponsAdminQuery,
-} from "@/integrations/metahub/rtk/endpoints/admin/coupons_admin.endpoints";
+} from "@/integrations/hooks";
+
 
 const getFrequencyLabel = (frequency: string) => {
   const labels: Record<string, string> = {

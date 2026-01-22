@@ -18,8 +18,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/hooks/useCart";
 
-import { useListProductsQuery } from "@/integrations/metahub/rtk/endpoints/products.endpoints";
-import { useListCartItemsQuery } from "@/integrations/metahub/rtk/endpoints/cart_items.endpoints";
+import {
+  useListProductsQuery,
+  useListCartItemsQuery
+ } from "@/integrations/hooks";
 
 type UICartItem = {
   id: string;

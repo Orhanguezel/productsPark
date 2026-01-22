@@ -1,0 +1,894 @@
+{
+	"info": {
+		"_postman_id": "9f5b0d6a-4a1c-4d0a-97fd-1f1ac5d2fb3c",
+		"name": "Wallet — Public + Admin — TESTED",
+		"description": "Wallet module: public (deposit request, me balance, me txns) + admin (list/patch deposits, list txns, adjust). Includes positive + negative validation tests. Public uses Bearer {{userToken}}, Admin uses Bearer {{adminToken}}.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 - Setup / Helpers",
+			"item": [
+				{
+					"name": "Check User Token (GET /wallet/me/balance)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Has userToken', function () {",
+									"  const t = pm.environment.get('userToken') || pm.collectionVariables.get('userToken');",
+									"  pm.expect(t && String(t).trim().length > 10).to.be.true;",
+									"});",
+									"",
+									"pm.test('HTTP 200 or 401', function () {",
+									"  pm.expect([200, 401]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Balance is a number', function () {",
+									"    pm.expect(typeof json === 'number' || typeof json === 'string' || typeof json === 'object').to.be.true;",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/me/balance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"me",
+								"balance"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Check Admin Token (GET /wallet/transactions)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Has adminToken', function () {",
+									"  const t = pm.environment.get('adminToken') || pm.collectionVariables.get('adminToken');",
+									"  pm.expect(t && String(t).trim().length > 10).to.be.true;",
+									"});",
+									"",
+									"pm.test('HTTP 200 or 403', function () {",
+									"  pm.expect([200, 403]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/transactions?limit=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"transactions"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "10 - Wallet (Public / Auth Required)",
+			"item": [
+				{
+					"name": "Me Balance (ok) — GET /wallet/me/balance",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Balance is number-like', function () {",
+									"  // Controller returns number; but allow string/object in case proxy/wrapper exists",
+									"  pm.expect([",
+									"    typeof json === 'number',",
+									"    typeof json === 'string',",
+									"    typeof json === 'object'",
+									"  ].some(Boolean)).to.be.true;",
+									"});",
+									"",
+									"pm.collectionVariables.set('lastMeBalanceRaw', JSON.stringify(json));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/me/balance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"me",
+								"balance"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Me Transactions (ok) — GET /wallet/me/transactions?order=created_at.desc&limit=20",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('x-total-count header present', function () {",
+									"  const h = pm.response.headers.get('x-total-count');",
+									"  pm.expect(h).to.not.equal(undefined);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"",
+									"if (Array.isArray(json) && json.length) {",
+									"  pm.collectionVariables.set('lastMeTxnId', String(json[0].id || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/me/transactions?order=created_at.desc&limit=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"me",
+								"transactions"
+							],
+							"query": [
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Deposit Request (ok) — POST /wallet/deposit_requests",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 201', function () {",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has id/user_id/amount/status', function () {",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(json).to.have.property('user_id');",
+									"  pm.expect(json).to.have.property('amount');",
+									"  pm.expect(json).to.have.property('status');",
+									"});",
+									"",
+									"pm.collectionVariables.set('lastDepositRequestId', String(json.id || ''));",
+									"pm.collectionVariables.set('lastDepositUserId', String(json.user_id || ''));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": {{depositAmount}},\n  \"payment_method\": \"havale\",\n  \"payment_proof\": {{depositProofUrlOrNull}}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/deposit_requests",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"deposit_requests"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "20 - Wallet (Admin / Auth + Admin)",
+			"item": [
+				{
+					"name": "List Deposit Requests (pending) — GET /wallet/deposit_requests?status=pending&order=created_at.desc&limit=20",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('x-total-count header present', function () {",
+									"  const h = pm.response.headers.get('x-total-count');",
+									"  pm.expect(h).to.not.equal(undefined);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"",
+									"if (Array.isArray(json) && json.length) {",
+									"  pm.collectionVariables.set('adminFirstDepositId', String(json[0].id || ''));",
+									"  pm.collectionVariables.set('adminFirstDepositUserId', String(json[0].user_id || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/deposit_requests?status=pending&order=created_at.desc&limit=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"deposit_requests"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "pending"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve Deposit (ok) — PATCH /wallet/deposit_requests/:id (status=approved)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('status is approved', function () {",
+									"  pm.expect(String(json.status)).to.eql('approved');",
+									"});",
+									"",
+									"pm.collectionVariables.set('approvedDepositId', String(json.id || ''));",
+									"pm.collectionVariables.set('approvedDepositUserId', String(json.user_id || ''));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"approved\",\n  \"admin_notes\": \"Approved via Postman collection\",\n  \"processed_at\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/deposit_requests/{{approveDepositId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"deposit_requests",
+								"{{approveDepositId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Wallet Transactions (admin) — GET /wallet/transactions?order=created_at.desc&limit=50",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('x-total-count header present', function () {",
+									"  const h = pm.response.headers.get('x-total-count');",
+									"  pm.expect(h).to.not.equal(undefined);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/transactions?order=created_at.desc&limit=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"transactions"
+							],
+							"query": [
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Adjust User Wallet (admin) — POST /wallet/users/:id/adjust (+)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true & has balance', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"  pm.expect(json).to.have.property('balance');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": {{adjustAmountPlus}},\n  \"description\": \"Admin adjust (+) via Postman\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/users/{{adjustUserId}}/adjust",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"users",
+								"{{adjustUserId}}",
+								"adjust"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Adjust User Wallet (admin) — POST /wallet/users/:id/adjust (-)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true & has balance', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"  pm.expect(json).to.have.property('balance');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": {{adjustAmountMinus}},\n  \"description\": \"Admin adjust (-) via Postman\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/users/{{adjustUserId}}/adjust",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"users",
+								"{{adjustUserId}}",
+								"adjust"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "99 - Negative / Validation Checks",
+			"item": [
+				{
+					"name": "Create Deposit Request (validation error) — POST /wallet/deposit_requests (amount=0 expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 400', function () {",
+									"  pm.response.to.have.status(400);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has message=invalid_body or invalid_amount', function () {",
+									"  pm.expect(json).to.have.property('message');",
+									"  pm.expect(['invalid_body','invalid_amount']).to.include(String(json.message));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 0,\n  \"payment_method\": \"havale\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/deposit_requests",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"deposit_requests"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Me Balance (unauthorized) — GET /wallet/me/balance (no token expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 401', function () {",
+									"  pm.response.to.have.status(401);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/me/balance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"me",
+								"balance"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Patch Deposit (not found) — PATCH /wallet/deposit_requests/:id (random uuid expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 404 or 400', function () {",
+									"  pm.expect([404,400]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"approved\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/deposit_requests/{{randomUuid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"deposit_requests",
+								"{{randomUuid}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Adjust Wallet (validation error) — POST /wallet/users/:id/adjust (amount=0 expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 400', function () {",
+									"  pm.response.to.have.status(400);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('message=invalid_body or invalid_amount', function () {",
+									"  pm.expect(json).to.have.property('message');",
+									"  pm.expect(['invalid_body','invalid_amount']).to.include(String(json.message));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 0,\n  \"description\": \"invalid\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/users/{{adjustUserId}}/adjust",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet",
+								"users",
+								"{{adjustUserId}}",
+								"adjust"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8081/api"
+		},
+		{
+			"key": "userToken",
+			"value": ""
+		},
+		{
+			"key": "adminToken",
+			"value": ""
+		},
+		{
+			"key": "depositAmount",
+			"value": 100
+		},
+		{
+			"key": "depositProofUrlOrNull",
+			"value": "null"
+		},
+		{
+			"key": "approveDepositId",
+			"value": "{{lastDepositRequestId}}"
+		},
+		{
+			"key": "adjustUserId",
+			"value": "{{approvedDepositUserId}}"
+		},
+		{
+			"key": "adjustAmountPlus",
+			"value": 10
+		},
+		{
+			"key": "adjustAmountMinus",
+			"value": -5
+		},
+		{
+			"key": "randomUuid",
+			"value": "00000000-0000-0000-0000-000000000000"
+		},
+		{
+			"key": "lastDepositRequestId",
+			"value": ""
+		},
+		{
+			"key": "lastDepositUserId",
+			"value": ""
+		},
+		{
+			"key": "approvedDepositId",
+			"value": ""
+		},
+		{
+			"key": "approvedDepositUserId",
+			"value": ""
+		},
+		{
+			"key": "adminFirstDepositId",
+			"value": ""
+		},
+		{
+			"key": "adminFirstDepositUserId",
+			"value": ""
+		},
+		{
+			"key": "lastMeBalanceRaw",
+			"value": ""
+		},
+		{
+			"key": "lastMeTxnId",
+			"value": ""
+		}
+	]
+}

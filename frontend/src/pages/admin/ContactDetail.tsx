@@ -10,13 +10,13 @@ import {
   useGetContactAdminQuery,
   useUpdateContactAdminMutation,
   useRemoveContactAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/contacts_admin.endpoints";
+} from "@/integrations/hooks";
 
 import type {
   ContactView,
   ContactUpdateInput,
   ContactStatus,
-} from "@/integrations/metahub/rtk/types/contacts";
+} from "@/integrations/types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

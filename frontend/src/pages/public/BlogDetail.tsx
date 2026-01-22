@@ -1,85 +1,124 @@
 // =============================================================
-// FILE: src/pages/BlogDetail.tsx (veya senin kullandığın path)
+// FILE: src/pages/BlogDetail.tsx
+// FINAL — Blog Detail Page (SEO via SeoHelmet, no duplicates)
+// - Canonical/hreflang: RouteSeoLinks (global)
+// - Global defaults: GlobalSeo (global)
+// - Route SEO: SeoHelmet only
+// - No fallback image URLs: og:image emitted only if post.image_url exists
+// - robots: noindex when unpublished
 // =============================================================
 
-import { useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import {
-  Calendar,
-  User,
-  Clock,
-  Share2,
-  Facebook,
-  Twitter,
-  Linkedin,
-} from "lucide-react";
-import { toast } from "sonner";
+import React, { useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 
-import {
-  useGetBlogPostBySlugQuery,
-  useListBlogPostsQuery,
-} from "@/integrations/metahub/rtk/endpoints/blog_posts.endpoints";
-import type { BlogPost as BlogPostType } from "@/integrations/metahub/rtk/types/blog";
+import Navbar from '@/components/layout/Navbar';
+import Footer from '@/components/layout/Footer';
+import SeoHelmet from '@/components/seo/SeoHelmet';
 
-const fallbackImage =
-  "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&h=600&fit=crop";
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 
-const BlogDetail = () => {
-  const { slug } = useParams<{ slug: string }>();
+import { Calendar, User, Clock, Share2, Facebook, Twitter, Linkedin } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { useGetBlogPostBySlugQuery, useListBlogPostsQuery } from '@/integrations/hooks';
+import type { BlogPost as BlogPostType } from '@/integrations/types';
+import { getOrigin, hasText, nonEmpty } from '@/integrations/types';
+import { stripHtmlToText, truncateText } from '@/integrations/types';
+
+type SeoMetaItem = { name?: string; property?: string; content: string };
+
+const BlogDetail: React.FC = () => {
+  const { slug } = useParams<{ slug?: string }>();
   const navigate = useNavigate();
 
-  // 🔹 Ana yazı: slug ile getir
   const {
     data: post,
     isLoading: postLoading,
     isError: postError,
-  } = useGetBlogPostBySlugQuery(slug ?? "", {
-    skip: !slug,
-  });
+    error,
+  } = useGetBlogPostBySlugQuery(slug ?? '', { skip: !slug });
 
-  // 🔹 İlgili yazılar için liste (yayında olanlar, son yazılar)
-  const {
-    data: relatedData = [],
-    isLoading: relatedLoading,
-  } = useListBlogPostsQuery(
-    {
-      is_published: true,
-      sort: "created_at",
-      order: "desc",
-      limit: 6,
-    },
-    {
-      skip: !slug,
-    }
+  const { data: relatedData = [], isLoading: relatedLoading } = useListBlogPostsQuery(
+    { is_published: true, sort: 'created_at', order: 'desc', limit: 6 },
+    { skip: !slug },
   );
 
-  // 🔹 İlgili yazılar: aynı kategoriden, kendisini hariç tut, max 3
-  const relatedPosts: BlogPostType[] =
-    post == null
-      ? []
-      : relatedData
-          .filter((p) => p.slug !== post.slug)
-          .filter((p) =>
-            post.category
-              ? p.category === post.category // aynı kategori varsa filtrele
-              : true
-          )
-          .slice(0, 3);
+  const notFound = postError && (error as { status?: unknown } | null)?.status === 404;
 
   const loading = postLoading || (relatedLoading && !post);
 
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "";
-    return new Date(dateString).toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
+  const relatedPosts: BlogPostType[] = useMemo(() => {
+    if (!post) return [];
+    return relatedData
+      .filter((p) => p.slug !== post.slug)
+      .filter((p) => (post.category ? p.category === post.category : true))
+      .slice(0, 3);
+  }, [relatedData, post]);
+
+  const origin = useMemo(() => getOrigin(), []);
+  const url = useMemo(() => {
+    if (!origin) return '';
+    return slug ? `${origin}/blog/${slug}` : `${origin}/blog`;
+  }, [origin, slug]);
+
+  const seoTitle = useMemo(() => {
+    return nonEmpty(post?.meta_title) || nonEmpty(post?.title) || '';
+  }, [post?.meta_title, post?.title]);
+
+  const seoDesc = useMemo(() => {
+    const d = nonEmpty(post?.meta_description);
+    if (d) return d;
+
+    const ex = nonEmpty(post?.excerpt);
+    if (ex) return truncateText(ex, 160);
+
+    const contentText = stripHtmlToText(post?.content || '');
+    return contentText ? truncateText(contentText, 160) : '';
+  }, [post?.meta_description, post?.excerpt, post?.content]);
+
+  const ogImage = useMemo(() => nonEmpty(post?.image_url) || '', [post?.image_url]);
+
+  const robots = useMemo(() => {
+    // Published değilse indexleme kapat (admin preview vs.)
+    if (!post) return null;
+    return post.is_published ? null : 'noindex,nofollow';
+  }, [post]);
+
+  const extraMeta: SeoMetaItem[] = useMemo(() => {
+    if (!post) return [];
+
+    const items: SeoMetaItem[] = [];
+
+    if (post.published_at) {
+      const iso = new Date(post.published_at).toISOString();
+      items.push({ property: 'article:published_time', content: iso });
+    }
+
+    if (post.updated_at) {
+      const iso = new Date(post.updated_at).toISOString();
+      items.push({ property: 'article:modified_time', content: iso });
+    }
+
+    if (hasText(post.author_name)) {
+      items.push({ property: 'article:author', content: post.author_name! });
+    }
+
+    if (hasText(post.category)) {
+      items.push({ property: 'article:section', content: post.category! });
+    }
+
+    return items;
+  }, [post]);
+
+  const formatDateTRLocal = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('tr-TR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
     });
   };
 
@@ -87,17 +126,10 @@ const BlogDetail = () => {
     toast.success(`${platform} üzerinde paylaşılıyor...`);
   };
 
-  // slug yoksa direkt 404 benzeri mesaj
-  useEffect(() => {
-    if (!slug) {
-      // İstersen otomatik /blog'a yönlendirebilirsin
-      // navigate("/blog");
-    }
-  }, [slug]);
-
   if (!slug) {
     return (
       <div className="min-h-screen flex flex-col">
+        <SeoHelmet title="Geçersiz blog adresi" robots="noindex,follow" />
         <Navbar />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-muted-foreground">Geçersiz blog adresi.</p>
@@ -119,9 +151,10 @@ const BlogDetail = () => {
     );
   }
 
-  if (postError || !post) {
+  if (notFound || !post) {
     return (
       <div className="min-h-screen flex flex-col">
+        <SeoHelmet title="Blog yazısı bulunamadı" robots="noindex,follow" />
         <Navbar />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-muted-foreground">Blog yazısı bulunamadı.</p>
@@ -133,65 +166,65 @@ const BlogDetail = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SeoHelmet
+        title={seoTitle || null}
+        description={seoDesc || null}
+        ogType="article"
+        url={url || null}
+        imageUrl={ogImage || null}
+        robots={robots}
+        meta={extraMeta}
+      />
+
       <Navbar />
 
       <article className="py-12 flex-1">
         <div className="container mx-auto px-4 max-w-4xl">
-          {/* Breadcrumb */}
           <div className="text-sm text-muted-foreground mb-6">
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="hover:text-primary"
-            >
+            <button type="button" onClick={() => navigate('/')} className="hover:text-primary">
               Ana Sayfa
             </button>
-            {" / "}
-            <button
-              type="button"
-              onClick={() => navigate("/blog")}
-              className="hover:text-primary"
-            >
+            {' / '}
+            <button type="button" onClick={() => navigate('/blog')} className="hover:text-primary">
               Blog
             </button>
-            {" / "}
-            <span className="text-foreground">
-              {post.category ?? "Genel"}
-            </span>
+            {' / '}
+            <span className="text-foreground">{post.category ?? 'Genel'}</span>
           </div>
 
-          {/* Başlık / meta */}
           <div className="mb-8">
-            <Badge className="mb-4">{post.category ?? "Genel"}</Badge>
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">
-              {post.title}
-            </h1>
+            <Badge className="mb-4">{post.category ?? 'Genel'}</Badge>
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">{post.title}</h1>
             <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4" />
-                {post.author_name ?? "Admin"}
+                {post.author_name ?? 'Admin'}
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                {formatDate(post.published_at || post.created_at)}
+                {formatDateTRLocal(post.published_at || post.created_at)}
               </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                {post.read_time ?? "Okuma süresi"}
-              </div>
+              {hasText(post.read_time) ? (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  {post.read_time}
+                </div>
+              ) : null}
             </div>
           </div>
 
-          {/* Kapak görseli */}
-          <div className="mb-8 rounded-lg overflow-hidden shadow-card">
-            <img
-              src={post.image_url || fallbackImage}
-              alt={post.title}
-              className="w-full aspect-video object-cover"
-            />
-          </div>
+          {/* No fallback image: only render if provided */}
+          {ogImage ? (
+            <div className="mb-8 rounded-lg overflow-hidden shadow-card">
+              <img
+                src={ogImage}
+                alt={post.image_alt || post.title}
+                className="w-full aspect-video object-cover"
+                loading="lazy"
+              />
+            </div>
+          ) : null}
 
-          {/* Paylaş butonları */}
           <Card className="mb-8 p-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <span className="font-semibold flex items-center gap-2">
@@ -199,73 +232,66 @@ const BlogDetail = () => {
                 Paylaş
               </span>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleShare("Facebook")}
-                >
+                <Button variant="outline" size="icon" onClick={() => handleShare('Facebook')}>
                   <Facebook className="w-4 h-4" />
                 </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleShare("Twitter")}
-                >
+                <Button variant="outline" size="icon" onClick={() => handleShare('Twitter')}>
                   <Twitter className="w-4 h-4" />
                 </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleShare("LinkedIn")}
-                >
+                <Button variant="outline" size="icon" onClick={() => handleShare('LinkedIn')}>
                   <Linkedin className="w-4 h-4" />
                 </Button>
               </div>
             </div>
           </Card>
 
-          {/* İçerik */}
           <div
             className="prose prose-lg max-w-none mb-12 dark:prose-invert"
-            dangerouslySetInnerHTML={{ __html: post.content ?? "" }}
+            dangerouslySetInnerHTML={{ __html: post.content ?? '' }}
           />
 
           <Separator className="my-12" />
 
-          {/* İlgili Yazılar */}
-          {relatedPosts.length > 0 && (
+          {relatedPosts.length > 0 ? (
             <div>
               <h2 className="text-3xl font-bold mb-6">İlgili Yazılar</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {relatedPosts.map((relatedPost) => (
-                  <Card
-                    key={relatedPost.id}
-                    className="group overflow-hidden cursor-pointer hover:shadow-elegant transition-all duration-300"
-                    onClick={() => navigate(`/blog/${relatedPost.slug}`)}
-                  >
-                    <div className="relative overflow-hidden aspect-video">
-                      <img
-                        src={
-                          relatedPost.image_url ||
-                          "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&h=300&fit=crop"
-                        }
-                        alt={relatedPost.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                    </div>
-                    <CardContent className="p-4">
-                      <Badge className="mb-2" variant="secondary">
-                        {relatedPost.category ?? "Genel"}
-                      </Badge>
-                      <h3 className="font-semibold group-hover:text-primary transition-colors line-clamp-2">
-                        {relatedPost.title}
-                      </h3>
-                    </CardContent>
-                  </Card>
-                ))}
+                {relatedPosts.map((rp) => {
+                  const rpImage = nonEmpty(rp.image_url);
+
+                  return (
+                    <Card
+                      key={rp.id}
+                      className="group overflow-hidden cursor-pointer hover:shadow-elegant transition-all duration-300"
+                      onClick={() => navigate(`/blog/${rp.slug}`)}
+                      role="button"
+                    >
+                      {/* No fallback image */}
+                      {rpImage ? (
+                        <div className="relative overflow-hidden aspect-video">
+                          <img
+                            src={rpImage}
+                            alt={rp.image_alt || rp.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : null}
+
+                      <CardContent className="p-4">
+                        <Badge className="mb-2" variant="secondary">
+                          {rp.category ?? 'Genel'}
+                        </Badge>
+                        <h3 className="font-semibold group-hover:text-primary transition-colors line-clamp-2">
+                          {rp.title}
+                        </h3>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </article>
 

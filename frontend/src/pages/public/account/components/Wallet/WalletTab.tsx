@@ -1,14 +1,17 @@
 // =============================================================
 // FILE: src/pages/account/components/Wallet/WalletTab.tsx
+// FINAL — strict + exactOptionalPropertyTypes uyumlu
+// - payment_methods JSON: optional alanlar undefined ise objeye yazılmaz
+// - Shopier: form_action / form_data type-guard ile güvenli
 // =============================================================
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 import {
   Pagination,
   PaginationContent,
@@ -16,25 +19,23 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
-import { toast } from "sonner";
+} from '@/components/ui/pagination';
+import { toast } from 'sonner';
 
-import { useAuth } from "@/hooks/useAuth";
-import { useGetMyProfileQuery } from "@/integrations/metahub/rtk/endpoints/profiles.endpoints";
-import { useListSiteSettingsQuery } from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+import { useAuth } from '@/hooks/useAuth';
 import {
-  useCreateOrderMutation,
-  type CreateOrderBody,
-} from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
-import type { WalletTransaction as WalletTxn } from "@/integrations/metahub/rtk/types/wallet";
-import { useListPaymentProvidersQuery } from "@/integrations/metahub/rtk/endpoints/payment_providers.endpoints";
-import {
+  useGetMyProfileQuery,
+  useListSiteSettingsQuery,
+  useListPaymentProvidersQuery,
   usePaytrGetTokenMutation,
   usePaytrHavaleGetTokenMutation,
   useShopierCreatePaymentMutation,
-} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+  useCreateOrderMutation,
+} from '@/integrations/hooks';
 
-type PaymentMethodId = "havale" | "eft" | "paytr" | "paytr_havale" | "shopier";
+import type { WalletTransaction as WalletTxn, CreateOrderBody } from '@/integrations/types';
+
+type PaymentMethodId = 'havale' | 'eft' | 'paytr' | 'paytr_havale' | 'shopier';
 
 type PaymentMethod = {
   id: PaymentMethodId;
@@ -47,41 +48,47 @@ type PaymentMethod = {
 };
 
 const itemsPerPage = 10;
-const WALLET_PRODUCT_ID = "00000000-0000-0000-0000-000000000000"; // sanal UUID
+const WALLET_PRODUCT_ID = '00000000-0000-0000-0000-000000000000'; // sanal UUID
 
 /* ---------- helpers ---------- */
 const asNumber = (v: unknown, d = 0): number => {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const n = Number(v.replace(",", "."));
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v.replace(',', '.'));
     return Number.isFinite(n) ? n : d;
   }
   const n = Number(v ?? NaN);
   return Number.isFinite(n) ? n : d;
 };
 
-export function WalletTab({
-  txns,
-  txLoading,
-}: {
-  txns: WalletTxn[];
-  txLoading?: boolean;
-}) {
+const optStr = (v: unknown): string | undefined => {
+  if (typeof v !== 'string') return undefined;
+  const s = v.trim();
+  return s ? s : undefined;
+};
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+const isFormDataRecord = (v: unknown): v is Record<string, string | number> => {
+  if (!isRecord(v)) return false;
+  for (const val of Object.values(v)) {
+    const t = typeof val;
+    if (t !== 'string' && t !== 'number') return false;
+  }
+  return true;
+};
+
+export function WalletTab({ txns, txLoading }: { txns: WalletTxn[]; txLoading?: boolean }) {
   const { user } = useAuth();
   const { data: profileData } = useGetMyProfileQuery();
   const navigate = useNavigate();
 
   // ---- site_settings RTK ----
-  const {
-    data: siteSettings,
-    isLoading: settingsLoading,
-  } = useListSiteSettingsQuery(undefined);
+  const { data: siteSettings, isLoading: settingsLoading } = useListSiteSettingsQuery(undefined);
 
   // ---- payment_providers RTK (PUBLIC) ----
-  const {
-    data: providers = [],
-    isLoading: providersLoading,
-  } = useListPaymentProvidersQuery();
+  const { data: providers = [], isLoading: providersLoading } = useListPaymentProvidersQuery();
 
   // ---- orders RTK (create) ----
   const [createOrder, { isLoading: creatingOrder }] = useCreateOrderMutation();
@@ -92,17 +99,15 @@ export function WalletTab({
   const [shopierCreatePayment] = useShopierCreatePaymentMutation();
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethodId | "">(
-    ""
-  );
-  const [depositAmount, setDepositAmount] = useState("");
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethodId | ''>('');
+  const [depositAmount, setDepositAmount] = useState('');
   const [depositing, setDepositing] = useState(false);
   const [transactionsPage, setTransactionsPage] = useState(1);
 
   // site_settings'ten min limit türet
   const minLimit = useMemo(() => {
     if (!siteSettings) return 10;
-    const row = siteSettings.find((s) => s.key === "min_balance_limit");
+    const row = siteSettings.find((s) => s.key === 'min_balance_limit');
     return asNumber(row?.value, 10);
   }, [siteSettings]);
 
@@ -115,58 +120,63 @@ export function WalletTab({
 
     // --------- 1) Havale / EFT detayları (site_settings.payment_methods JSON) ---------
     if (siteSettings) {
-      const paymentMethodsRow = siteSettings.find(
-        (s) => s.key === "payment_methods"
-      );
+      const paymentMethodsRow = siteSettings.find((s) => s.key === 'payment_methods');
 
       let cfg: Record<string, unknown> = {};
       const raw = paymentMethodsRow?.value;
 
-      if (raw && typeof raw === "string") {
+      if (raw && typeof raw === 'string') {
         try {
           cfg = JSON.parse(raw) as Record<string, unknown>;
         } catch {
           cfg = {};
         }
-      } else if (raw && typeof raw === "object") {
+      } else if (raw && typeof raw === 'object' && raw) {
         cfg = raw as Record<string, unknown>;
       }
 
-      const getFromCfg = <T,>(k: string, d: T): T =>
-        (cfg[k] as T | undefined) ?? d;
+      const getFromCfg = <T,>(k: string, d: T): T => (cfg[k] as T | undefined) ?? d;
+
+      // (opsiyonel) bool helper — istersen ileride getFromCfg<boolean> yerine kullan
+      // const getBool = (k: string, d = false) => {
+      //   const v = cfg[k];
+      //   if (typeof v === "boolean") return v;
+      //   if (typeof v === "number") return v === 1;
+      //   if (typeof v === "string") return v === "1" || v.toLowerCase() === "true";
+      //   return d;
+      // };
 
       // Havale
-      if (getFromCfg<boolean>("havale_enabled", false)) {
+      if (getFromCfg<boolean>('havale_enabled', false)) {
+        const iban = optStr(getFromCfg('havale_iban', undefined));
+        const account_holder = optStr(getFromCfg('havale_account_holder', undefined));
+        const bank_name = optStr(getFromCfg('havale_bank_name', undefined));
+
         methods.push({
-          id: "havale",
-          name: "Havale",
+          id: 'havale',
+          name: 'Havale',
           enabled: true,
           commission: 0,
-          iban: getFromCfg<string | undefined>("havale_iban", undefined),
-          account_holder: getFromCfg<string | undefined>(
-            "havale_account_holder",
-            undefined
-          ),
-          bank_name: getFromCfg<string | undefined>(
-            "havale_bank_name",
-            undefined
-          ),
+          ...(iban ? { iban } : {}),
+          ...(account_holder ? { account_holder } : {}),
+          ...(bank_name ? { bank_name } : {}),
         });
       }
 
       // EFT
-      if (getFromCfg<boolean>("eft_enabled", false)) {
+      if (getFromCfg<boolean>('eft_enabled', false)) {
+        const iban = optStr(getFromCfg('eft_iban', undefined));
+        const account_holder = optStr(getFromCfg('eft_account_holder', undefined));
+        const bank_name = optStr(getFromCfg('eft_bank_name', undefined));
+
         methods.push({
-          id: "eft",
-          name: "EFT",
+          id: 'eft',
+          name: 'EFT',
           enabled: true,
           commission: 0,
-          iban: getFromCfg<string | undefined>("eft_iban", undefined),
-          account_holder: getFromCfg<string | undefined>(
-            "eft_account_holder",
-            undefined
-          ),
-          bank_name: getFromCfg<string | undefined>("eft_bank_name", undefined),
+          ...(iban ? { iban } : {}),
+          ...(account_holder ? { account_holder } : {}),
+          ...(bank_name ? { bank_name } : {}),
         });
       }
     }
@@ -176,29 +186,26 @@ export function WalletTab({
       .filter((p) => p.is_active)
       .forEach((p) => {
         const cfg = p.public_config ?? {};
-        const commission = asNumber(
-          (cfg as Record<string, unknown>).commission,
-          0
-        );
+        const commission = asNumber((cfg as Record<string, unknown>).commission, 0);
 
-        if (p.key === "paytr") {
+        if (p.key === 'paytr') {
           methods.push({
-            id: "paytr",
-            name: p.display_name || "Kredi Kartı (PayTR)",
+            id: 'paytr',
+            name: p.display_name || 'Kredi Kartı (PayTR)',
             enabled: true,
             commission,
           });
-        } else if (p.key === "paytr_havale") {
+        } else if (p.key === 'paytr_havale') {
           methods.push({
-            id: "paytr_havale",
-            name: p.display_name || "Havale/EFT (PayTR)",
+            id: 'paytr_havale',
+            name: p.display_name || 'Havale/EFT (PayTR)',
             enabled: true,
             commission,
           });
-        } else if (p.key === "shopier") {
+        } else if (p.key === 'shopier') {
           methods.push({
-            id: "shopier",
-            name: p.display_name || "Kredi Kartı (Shopier)",
+            id: 'shopier',
+            name: p.display_name || 'Kredi Kartı (Shopier)',
             enabled: true,
             commission,
           });
@@ -210,7 +217,7 @@ export function WalletTab({
     // Daha önce seçilen yöntem hala listede varsa koru, yoksa ilk aktif yöntemi seç
     setSelectedPayment((prev) => {
       if (prev && methods.some((m) => m.id === prev)) return prev;
-      return methods[0]?.id ?? "";
+      return methods[0]?.id ?? '';
     });
   }, [user?.id, siteSettings, providers]);
 
@@ -223,35 +230,32 @@ export function WalletTab({
   /* ---------- Deposit handlers ---------- */
   const handleDeposit = async () => {
     if (!user) {
-      toast.error("Lütfen giriş yapın");
-      navigate("/giris");
+      toast.error('Lütfen giriş yapın');
+      navigate('/giris');
       return;
     }
 
     if (!depositAmount || parseFloat(depositAmount) <= 0) {
-      toast.error("Geçerli bir miktar girin");
+      toast.error('Geçerli bir miktar girin');
       return;
     }
 
     const amount = parseFloat(depositAmount);
     if (amount < minLimit) {
-      toast.error(
-        `Minimum yükleme tutarı ${minLimit.toLocaleString("tr-TR")} ₺'dir`
-      );
+      toast.error(`Minimum yükleme tutarı ${minLimit.toLocaleString('tr-TR')} ₺'dir`);
       return;
     }
 
     if (!selectedPayment) {
-      toast.error("Ödeme yöntemi seçiniz");
+      toast.error('Ödeme yöntemi seçiniz');
       return;
     }
 
-    if (selectedPayment === "paytr") await handlePayTRPayment();
-    else if (selectedPayment === "shopier") await handleShopierPayment();
-    else if (selectedPayment === "paytr_havale")
-      await handlePayTRHavalePayment();
-    else if (selectedPayment === "havale" || selectedPayment === "eft") {
-      toast.success("Ödeme bilgilerine yönlendiriliyorsunuz...");
+    if (selectedPayment === 'paytr') await handlePayTRPayment();
+    else if (selectedPayment === 'shopier') await handleShopierPayment();
+    else if (selectedPayment === 'paytr_havale') await handlePayTRHavalePayment();
+    else if (selectedPayment === 'havale' || selectedPayment === 'eft') {
+      toast.success('Ödeme bilgilerine yönlendiriliyorsunuz...');
       window.location.href = `/bakiye-odeme-bilgileri?amount=${depositAmount}`;
     }
   };
@@ -259,10 +263,11 @@ export function WalletTab({
   /* ---------- PayTR Card ---------- */
   const handlePayTRPayment = async () => {
     if (!user || !profileData) return;
-    const amount = parseFloat(depositAmount);
-    if (amount <= 0) return;
 
-    const paytrMethod = paymentMethods.find((m) => m.id === "paytr");
+    const amount = parseFloat(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const paytrMethod = paymentMethods.find((m) => m.id === 'paytr');
     const commissionRate = paytrMethod?.commission ?? 0;
     const commission = (amount * commissionRate) / 100;
     const finalTotal = amount + commission;
@@ -276,55 +281,54 @@ export function WalletTab({
 
       const body: CreateOrderBody = {
         order_number: orderNumber,
-        payment_method: "paytr",
-        payment_status: "pending",
-        notes: "Cüzdan bakiye yükleme",
+        payment_method: 'paytr',
+        payment_status: 'pending',
+        notes: 'Cüzdan bakiye yükleme',
         items: [
           {
             product_id: WALLET_PRODUCT_ID,
-            product_name: "Cüzdan Bakiye Yükleme",
+            product_name: 'Cüzdan Bakiye Yükleme',
             quantity: 1,
             price: subtotalStr,
             total: subtotalStr,
-            options: { type: "wallet_topup" },
+            options: { type: 'wallet_topup' },
           },
         ],
-        subtotal: subtotalStr, // cüzdana yatacak tutar
-        discount: "0.00",
-        total: finalStr, // karttan çekilecek (komisyonlu) tutar
+        subtotal: subtotalStr,
+        discount: '0.00',
+        total: finalStr,
       };
 
       const order = await createOrder(body).unwrap();
 
-      // PayTR backend: payment_amount kuruş cinsinden bekliyor
       const payment_amount_kurus = Math.round(finalTotal * 100);
-      const basket = [
-        ["Cüzdan Bakiye Yükleme", Math.round(amount * 100), 1],
-      ] as [string, number, number][];
+      const basket = [['Cüzdan Bakiye Yükleme', Math.round(amount * 100), 1]] as [
+        string,
+        number,
+        number,
+      ][];
 
       const tokenData = await paytrGetToken({
-        email: user.email ?? "",
+        email: user.email ?? '',
         payment_amount: payment_amount_kurus,
         merchant_oid: orderNumber,
-        user_ip: "127.0.0.1",
+        user_ip: '127.0.0.1',
         installment: 0,
         no_installment: 1,
         max_installment: 0,
-        currency: "TL",
+        currency: 'TL',
         basket,
-        lang: "tr",
+        lang: 'tr',
       }).unwrap();
 
       if (!tokenData?.success || !tokenData.token) {
-        throw new Error(tokenData?.error || "Token alınamadı");
+        throw new Error(tokenData?.error || 'Token alınamadı');
       }
 
-      navigate(
-        `/odeme-iframe?token=${tokenData.token}&order_id=${order.order_number}`
-      );
+      navigate(`/odeme-iframe?token=${tokenData.token}&order_id=${order.order_number}`);
     } catch (e) {
-      console.error("PayTR payment error:", e);
-      toast.error(e instanceof Error ? e.message : "Ödeme başlatılamadı");
+      console.error('PayTR payment error:', e);
+      toast.error(e instanceof Error ? e.message : 'Ödeme başlatılamadı');
     } finally {
       setDepositing(false);
     }
@@ -333,10 +337,11 @@ export function WalletTab({
   /* ---------- Shopier ---------- */
   const handleShopierPayment = async () => {
     if (!user || !profileData) return;
-    const amount = parseFloat(depositAmount);
-    if (amount <= 0) return;
 
-    const shopierMethod = paymentMethods.find((m) => m.id === "shopier");
+    const amount = parseFloat(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const shopierMethod = paymentMethods.find((m) => m.id === 'shopier');
     const commissionRate = shopierMethod?.commission ?? 0;
     const commission = (amount * commissionRate) / 100;
     const finalTotal = amount + commission;
@@ -350,50 +355,61 @@ export function WalletTab({
 
       const body: CreateOrderBody = {
         order_number: orderNumber,
-        payment_method: "shopier",
-        payment_status: "pending",
-        notes: "Cüzdan bakiye yükleme",
+        payment_method: 'shopier',
+        payment_status: 'pending',
+        notes: 'Cüzdan bakiye yükleme',
         items: [
           {
             product_id: WALLET_PRODUCT_ID,
-            product_name: "Cüzdan Bakiye Yükleme",
+            product_name: 'Cüzdan Bakiye Yükleme',
             quantity: 1,
             price: subtotalStr,
             total: subtotalStr,
-            options: { type: "wallet_topup" },
+            options: { type: 'wallet_topup' },
           },
         ],
         subtotal: subtotalStr,
-        discount: "0.00",
+        discount: '0.00',
         total: finalStr,
       };
 
-      const order = await createOrder(body).unwrap();
+      await createOrder(body).unwrap();
 
-      // Şu an backend stub body'yi kullanmıyor; tip izin verdiği kadarıyla boş obje gönderiyoruz.
+      // Backend body istemiyor olabilir; type-safe boş map
       const paymentData = await shopierCreatePayment({}).unwrap();
 
-      if (!paymentData?.success || !paymentData.form_action || !paymentData.form_data) {
-        throw new Error(paymentData?.error || "Ödeme oluşturulamadı");
+      if (!paymentData?.success) {
+        throw new Error(paymentData?.error || 'Ödeme oluşturulamadı');
       }
 
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = paymentData.form_action;
+      const formAction = paymentData.form_action;
+      const formData = paymentData.form_data;
 
-      Object.keys(paymentData.form_data).forEach((key) => {
-        const input = document.createElement("input");
-        input.type = "hidden";
+      if (!formAction || typeof formAction !== 'string') {
+        throw new Error('Shopier form_action geçersiz');
+      }
+      if (!isFormDataRecord(formData)) {
+        throw new Error('Shopier form_data geçersiz');
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = formAction;
+
+      for (const [key, val] of Object.entries(formData)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
         input.name = key;
-        input.value = String(paymentData.form_data![key]);
+        input.value = String(val);
         form.appendChild(input);
-      });
+      }
 
       document.body.appendChild(form);
       form.submit();
     } catch (e) {
-      console.error("Shopier payment error:", e);
-      toast.error(e instanceof Error ? e.message : "Ödeme başlatılamadı");
+      console.error('Shopier payment error:', e);
+      toast.error(e instanceof Error ? e.message : 'Ödeme başlatılamadı');
+    } finally {
       setDepositing(false);
     }
   };
@@ -401,8 +417,9 @@ export function WalletTab({
   /* ---------- PayTR Havale ---------- */
   const handlePayTRHavalePayment = async () => {
     if (!user || !profileData) return;
+
     const amount = parseFloat(depositAmount);
-    if (amount <= 0) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
 
     const subtotalStr = amount.toFixed(2);
 
@@ -412,52 +429,54 @@ export function WalletTab({
 
       const body: CreateOrderBody = {
         order_number: orderNumber,
-        payment_method: "paytr_havale",
-        payment_status: "pending",
-        notes: "Cüzdan bakiye yükleme",
+        payment_method: 'paytr_havale',
+        payment_status: 'pending',
+        notes: 'Cüzdan bakiye yükleme',
         items: [
           {
             product_id: WALLET_PRODUCT_ID,
-            product_name: "Cüzdan Bakiye Yükleme",
+            product_name: 'Cüzdan Bakiye Yükleme',
             quantity: 1,
             price: subtotalStr,
             total: subtotalStr,
-            options: { type: "wallet_topup" },
+            options: { type: 'wallet_topup' },
           },
         ],
         subtotal: subtotalStr,
-        discount: "0.00",
-        total: subtotalStr, // havale yöntemi → komisyon yok
+        discount: '0.00',
+        total: subtotalStr,
       };
 
       const order = await createOrder(body).unwrap();
 
       const payment_amount_kurus = Math.round(amount * 100);
-      const basket = [
-        ["Cüzdan Bakiye Yükleme", Math.round(amount * 100), 1],
-      ] as [string, number, number][];
+      const basket = [['Cüzdan Bakiye Yükleme', Math.round(amount * 100), 1]] as [
+        string,
+        number,
+        number,
+      ][];
 
       const tokenData = await paytrHavaleGetToken({
-        email: user.email ?? "",
+        email: user.email ?? '',
         payment_amount: payment_amount_kurus,
         merchant_oid: orderNumber,
-        user_ip: "127.0.0.1",
+        user_ip: '127.0.0.1',
         installment: 0,
         no_installment: 1,
         max_installment: 0,
-        currency: "TL",
+        currency: 'TL',
         basket,
-        lang: "tr",
+        lang: 'tr',
       }).unwrap();
 
       if (!tokenData?.success) {
-        throw new Error(tokenData?.error || "Token alınamadı");
+        throw new Error(tokenData?.error || 'Token alınamadı');
       }
 
       navigate(`/odeme-beklemede?order_id=${order.order_number}`);
     } catch (e) {
-      console.error("PayTR Havale payment error:", e);
-      toast.error(e instanceof Error ? e.message : "Ödeme başlatılamadı");
+      console.error('PayTR Havale payment error:', e);
+      toast.error(e instanceof Error ? e.message : 'Ödeme başlatılamadı');
     } finally {
       setDepositing(false);
     }
@@ -481,12 +500,13 @@ export function WalletTab({
               onChange={(e) => setDepositAmount(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Minimum tutar: {minLimit.toLocaleString("tr-TR")} ₺
+              Minimum tutar: {minLimit.toLocaleString('tr-TR')} ₺
             </p>
           </div>
 
           <div className="space-y-4">
             <Label>Ödeme Yöntemi</Label>
+
             {settingsLoading || providersLoading ? (
               <div className="p-4 bg-muted rounded-md text-center text-sm text-muted-foreground">
                 Ödeme ayarları yükleniyor…
@@ -502,15 +522,9 @@ export function WalletTab({
                   onValueChange={(v) => setSelectedPayment(v as PaymentMethodId)}
                 >
                   {paymentMethods.map((method) => (
-                    <div
-                      key={method.id}
-                      className="flex items-center space-x-2"
-                    >
+                    <div key={method.id} className="flex items-center space-x-2">
                       <RadioGroupItem value={method.id} id={method.id} />
-                      <Label
-                        htmlFor={method.id}
-                        className="flex-1 cursor-pointer"
-                      >
+                      <Label htmlFor={method.id} className="flex-1 cursor-pointer">
                         {method.name}
                         {method.commission > 0 && (
                           <span className="text-sm text-muted-foreground ml-2">
@@ -526,17 +540,13 @@ export function WalletTab({
                   <div className="p-4 bg-muted rounded-md space-y-2">
                     <div className="flex justify-between">
                       <span>Yüklenecek Miktar:</span>
-                      <span className="font-semibold">
-                        ₺{parseFloat(depositAmount).toFixed(2)}
-                      </span>
+                      <span className="font-semibold">₺{parseFloat(depositAmount).toFixed(2)}</span>
                     </div>
+
                     {(() => {
-                      const selected = paymentMethods.find(
-                        (m) => m.id === selectedPayment
-                      );
+                      const selected = paymentMethods.find((m) => m.id === selectedPayment);
                       const commission = selected?.commission ?? 0;
-                      const commissionAmount =
-                        (parseFloat(depositAmount) * commission) / 100;
+                      const commissionAmount = (parseFloat(depositAmount) * commission) / 100;
 
                       if (commission > 0) {
                         return (
@@ -549,11 +559,7 @@ export function WalletTab({
                             <div className="flex justify-between font-bold">
                               <span>Toplam Ödenecek:</span>
                               <span>
-                                ₺
-                                {(
-                                  parseFloat(depositAmount) +
-                                  commissionAmount
-                                ).toFixed(2)}
+                                ₺{(parseFloat(depositAmount) + commissionAmount).toFixed(2)}
                               </span>
                             </div>
                           </>
@@ -581,7 +587,7 @@ export function WalletTab({
               !selectedPayment
             }
           >
-            {depositing || creatingOrder ? "İşleniyor..." : "Bakiye Yükle"}
+            {depositing || creatingOrder ? 'İşleniyor...' : 'Bakiye Yükle'}
           </Button>
         </CardContent>
       </Card>
@@ -592,34 +598,22 @@ export function WalletTab({
         </CardHeader>
         <CardContent>
           {txns.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">
-              İşlem geçmişi bulunmamaktadır.
-            </p>
+            <p className="text-center text-muted-foreground py-4">İşlem geçmişi bulunmamaktadır.</p>
           ) : (
             <>
               <div className="space-y-2">
                 {pagedTxns.map((txn) => (
-                  <div
-                    key={txn.id}
-                    className="flex justify-between items-center border-b pb-2"
-                  >
+                  <div key={txn.id} className="flex justify-between items-center border-b pb-2">
                     <div>
-                      <p className="font-medium">
-                        {txn.description ?? "Cüzdan İşlemi"}
-                      </p>
+                      <p className="font-medium">{txn.description ?? 'Cüzdan İşlemi'}</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(txn.created_at).toLocaleString("tr-TR")}
+                        {new Date(txn.created_at).toLocaleString('tr-TR')}
                       </p>
                     </div>
                     <p
-                      className={`font-bold ${
-                        txn.amount > 0
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
+                      className={`font-bold ${txn.amount > 0 ? 'text-green-600' : 'text-red-600'}`}
                     >
-                      {txn.amount > 0 ? "+" : ""}₺
-                      {txn.amount.toFixed(2)}
+                      {txn.amount > 0 ? '+' : ''}₺{txn.amount.toFixed(2)}
                     </p>
                   </div>
                 ))}
@@ -630,19 +624,18 @@ export function WalletTab({
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() =>
-                          setTransactionsPage((p) => Math.max(1, p - 1))
-                        }
+                        onClick={() => setTransactionsPage((p) => Math.max(1, p - 1))}
                         className={
                           transactionsPage === 1
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
                         }
                       />
                     </PaginationItem>
+
                     {Array.from(
                       { length: Math.ceil(txns.length / itemsPerPage) },
-                      (_, i) => i + 1
+                      (_, i) => i + 1,
                     ).map((page) => (
                       <PaginationItem key={page}>
                         <PaginationLink
@@ -654,31 +647,27 @@ export function WalletTab({
                         </PaginationLink>
                       </PaginationItem>
                     ))}
+
                     <PaginationItem>
                       <PaginationNext
                         onClick={() =>
                           setTransactionsPage((p) =>
-                            Math.min(
-                              Math.ceil(txns.length / itemsPerPage),
-                              p + 1
-                            )
+                            Math.min(Math.ceil(txns.length / itemsPerPage), p + 1),
                           )
                         }
                         className={
-                          transactionsPage ===
-                          Math.ceil(txns.length / itemsPerPage)
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
+                          transactionsPage === Math.ceil(txns.length / itemsPerPage)
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
                         }
                       />
                     </PaginationItem>
                   </PaginationContent>
                 </Pagination>
               )}
+
               {txLoading && (
-                <div className="text-xs text-muted-foreground mt-2">
-                  İşlemler yenileniyor…
-                </div>
+                <div className="text-xs text-muted-foreground mt-2">İşlemler yenileniyor…</div>
               )}
             </>
           )}

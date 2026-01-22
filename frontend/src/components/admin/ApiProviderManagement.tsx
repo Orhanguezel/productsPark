@@ -17,8 +17,8 @@ import {
   useDeleteApiProviderMutation,
   useUpdateApiProviderMutation,
   useCheckApiProviderBalanceMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
-import type { ApiProviderBalanceResponse } from "@/integrations/metahub/rtk/types/apiProviders";
+} from "@/integrations/hooks";
+import type { ApiProviderBalanceResponse } from "@/integrations/types";
 
 export const ApiProviderManagement = () => {
   const navigate = useNavigate();

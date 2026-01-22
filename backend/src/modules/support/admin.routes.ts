@@ -5,8 +5,8 @@ import { SupportAdminController } from "./admin.controller";
 import { requireAuth } from "@/common/middleware/auth";
 
 export async function registerSupportAdmin(app: FastifyInstance) {
-  const BASE = "/admin/support_tickets";
-  const REPLIES_BASE = "/admin/ticket_replies";
+  const BASE = "/support_tickets";
+  const REPLIES_BASE = "/ticket_replies";
 
   // Tickets (admin)
   app.get(`${BASE}`, { preHandler: [requireAuth] }, SupportAdminController.list);

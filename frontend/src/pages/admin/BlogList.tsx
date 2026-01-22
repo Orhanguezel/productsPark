@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   useListBlogPostsAdminQuery,
   useDeleteBlogPostAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/blog_admin.endpoints";
+} from "@/integrations/hooks";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2, Plus } from "lucide-react";

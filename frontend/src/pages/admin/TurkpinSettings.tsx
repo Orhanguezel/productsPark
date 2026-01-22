@@ -1,18 +1,20 @@
 import { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
-import {
-  useListApiProvidersQuery,
-  useCreateApiProviderMutation,
-  useUpdateApiProviderMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, RefreshCw, Save } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { useTurkpinBalanceMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+
+import {
+  useListApiProvidersQuery,
+  useCreateApiProviderMutation,
+  useUpdateApiProviderMutation,
+  useTurkpinBalanceMutation
+} from "@/integrations/hooks";
 
 const TurkpinSettings = () => {
   const [createProvider] = useCreateApiProviderMutation();

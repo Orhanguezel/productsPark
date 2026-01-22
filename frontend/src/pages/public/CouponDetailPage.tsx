@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { useGetCouponByCodeQuery } from "@/integrations/metahub/rtk/endpoints/coupons.endpoints";
+import { useGetCouponByCodeQuery } from "@/integrations/hooks";
 
 export default function CouponDetailPage() {
   const [searchParams] = useSearchParams();

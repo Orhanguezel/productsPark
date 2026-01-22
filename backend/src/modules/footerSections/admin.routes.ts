@@ -18,45 +18,47 @@ import type {
   AdminFooterSectionReorder,
 } from "./validation";
 
+const BASE = "/footer_sections";
+
 export async function registerFooterSectionsAdmin(app: FastifyInstance) {
   // LIST
   app.get<{ Querystring: AdminFooterSectionListQuery }>(
-    "/admin/footer_sections",
+    BASE,
     { preHandler: [requireAuth] },
     adminListFooterSections
   );
 
   // GET BY ID
   app.get<{ Params: { id: string } }>(
-    "/admin/footer_sections/:id",
+    `${BASE}/:id`,
     { preHandler: [requireAuth] },
     adminGetFooterSectionById
   );
 
   // CREATE
   app.post<{ Body: AdminFooterSectionCreate }>(
-    "/admin/footer_sections",
+    BASE,
     { preHandler: [requireAuth] },
     adminCreateFooterSection
   );
 
   // UPDATE
   app.patch<{ Params: { id: string }; Body: AdminFooterSectionUpdate }>(
-    "/admin/footer_sections/:id",
+    `${BASE}/:id`,
     { preHandler: [requireAuth] },
     adminUpdateFooterSection
   );
 
   // DELETE
   app.delete<{ Params: { id: string } }>(
-    "/admin/footer_sections/:id",
+    `${BASE}/:id`,
     { preHandler: [requireAuth] },
     adminDeleteFooterSection
   );
 
   // REORDER
   app.post<{ Body: AdminFooterSectionReorder }>(
-    "/admin/footer_sections/reorder",
+    `${BASE}/reorder`,
     { preHandler: [requireAuth] },
     adminReorderFooterSections
   );

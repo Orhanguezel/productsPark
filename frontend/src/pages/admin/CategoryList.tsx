@@ -28,8 +28,9 @@ import {
   useDeleteCategoryAdminMutation,
   useToggleActiveCategoryAdminMutation,
   useToggleFeaturedCategoryAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/categories_admin.endpoints";
-import type { Category } from "@/integrations/metahub/rtk/types/categories";
+} from "@/integrations/hooks";
+
+import type { Category } from "@/integrations/types";
 import { Switch } from "@/components/ui/switch";
 
 type FilterTab = "all" | "main" | "sub";

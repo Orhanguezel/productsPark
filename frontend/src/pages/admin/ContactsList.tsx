@@ -9,12 +9,12 @@ import {
   useListContactsAdminQuery,
   useRemoveContactAdminMutation,
   useUpdateContactAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/contacts_admin.endpoints";
+} from "@/integrations/hooks";
 import type {
   ContactView,
   ContactStatus,
   ContactUpdateInput,
-} from "@/integrations/metahub/rtk/types/contacts";
+} from "@/integrations/types";
 import { Button } from "@/components/ui/button";
 import {
   Table,

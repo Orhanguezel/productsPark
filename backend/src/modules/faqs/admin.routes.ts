@@ -10,7 +10,7 @@ import {
   removeFaqAdmin,
 } from "./admin.controller";
 
-const BASE = "/admin/faqs";
+const BASE = "/faqs";
 
 export async function registerFaqsAdmin(app: FastifyInstance) {
   app.get(`${BASE}`,               { config: { auth: true } }, listFaqsAdmin);

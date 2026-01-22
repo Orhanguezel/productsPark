@@ -11,7 +11,7 @@ import {
   productOptionUpdateSchema,
 } from "./validation";
 
-const now = () => new Date();
+import { now} from '@/modules/_shared/common';
 
 /* LIST */
 export const adminListProductOptions: RouteHandler = async (req, reply) => {

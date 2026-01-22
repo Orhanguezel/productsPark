@@ -14,10 +14,13 @@ import {
   adminReorderProducts,
   adminToggleActive,
   adminToggleHomepage,
+} from "./admin.controller";
+import {
   adminSetProductStock,
   adminListUsedStock,
-  adminListCategories,
-} from "./admin.controller";
+  adminDeleteProductStockLine,
+  adminListProductStock,
+} from './admin.stock.controller';
 
 import {
   adminListProductFaqs,
@@ -44,7 +47,7 @@ import {
   adminDeleteProductOption,
 } from "./admin.options.controller";
 
-const BASE = "/admin/products";
+const BASE = "/products";
 
 export async function registerProductsAdmin(app: FastifyInstance) {
   // Products (core)
@@ -55,131 +58,65 @@ export async function registerProductsAdmin(app: FastifyInstance) {
   app.delete(`${BASE}/:id`, { preHandler: [requireAuth] }, adminDeleteProduct);
 
   // Bulk ops
-  app.post(
-    `${BASE}/bulk/active`,
-    { preHandler: [requireAuth] },
-    adminBulkSetActive
-  );
-  app.post(
-    `${BASE}/bulk/reorder`,
-    { preHandler: [requireAuth] },
-    adminReorderProducts
-  );
+  app.post(`${BASE}/bulk/active`, { preHandler: [requireAuth] }, adminBulkSetActive);
+  app.post(`${BASE}/bulk/reorder`, { preHandler: [requireAuth] }, adminReorderProducts);
 
   // Toggles
-  app.patch(
-    `${BASE}/:id/active`,
-    { preHandler: [requireAuth] },
-    adminToggleActive
-  );
-  app.patch(
-    `${BASE}/:id/homepage`,
-    { preHandler: [requireAuth] },
-    adminToggleHomepage
-  );
+  app.patch(`${BASE}/:id/active`, { preHandler: [requireAuth] }, adminToggleActive);
+  app.patch(`${BASE}/:id/homepage`, { preHandler: [requireAuth] }, adminToggleHomepage);
 
   // FAQs
-  app.get(
-    `${BASE}/:id/faqs`,
-    { preHandler: [requireAuth] },
-    adminListProductFaqs
-  );
-  app.post(
-    `${BASE}/:id/faqs`,
-    { preHandler: [requireAuth] },
-    adminCreateProductFaq
-  );
-  app.patch(
-    `${BASE}/:id/faqs/:faqId`,
-    { preHandler: [requireAuth] },
-    adminUpdateProductFaq
-  );
-  app.patch(
-    `${BASE}/:id/faqs/:faqId/active`,
-    { preHandler: [requireAuth] },
-    adminToggleFaqActive
-  );
-  app.delete(
-    `${BASE}/:id/faqs/:faqId`,
-    { preHandler: [requireAuth] },
-    adminDeleteProductFaq
-  );
-  app.put(
-    `${BASE}/:id/faqs`,
-    { preHandler: [requireAuth] },
-    adminReplaceFaqs
-  ); // mevcut FE için backward-compatible
+  app.get(`${BASE}/:id/faqs`, { preHandler: [requireAuth] }, adminListProductFaqs);
+  app.post(`${BASE}/:id/faqs`, { preHandler: [requireAuth] }, adminCreateProductFaq);
+  app.patch(`${BASE}/:id/faqs/:faqId`, { preHandler: [requireAuth] }, adminUpdateProductFaq);
+  app.patch(`${BASE}/:id/faqs/:faqId/active`, { preHandler: [requireAuth] }, adminToggleFaqActive);
+  app.delete(`${BASE}/:id/faqs/:faqId`, { preHandler: [requireAuth] }, adminDeleteProductFaq);
+  app.put(`${BASE}/:id/faqs`, { preHandler: [requireAuth] }, adminReplaceFaqs); // mevcut FE için backward-compatible
 
   // Reviews
-  app.get(
-    `${BASE}/:id/reviews`,
-    { preHandler: [requireAuth] },
-    adminListProductReviews
-  );
-  app.post(
-    `${BASE}/:id/reviews`,
-    { preHandler: [requireAuth] },
-    adminCreateProductReview
-  );
+  app.get(`${BASE}/:id/reviews`, { preHandler: [requireAuth] }, adminListProductReviews);
+  app.post(`${BASE}/:id/reviews`, { preHandler: [requireAuth] }, adminCreateProductReview);
   app.patch(
     `${BASE}/:id/reviews/:reviewId`,
     { preHandler: [requireAuth] },
-    adminUpdateProductReview
+    adminUpdateProductReview,
   );
   app.patch(
     `${BASE}/:id/reviews/:reviewId/active`,
     { preHandler: [requireAuth] },
-    adminToggleReviewActive
+    adminToggleReviewActive,
   );
   app.delete(
     `${BASE}/:id/reviews/:reviewId`,
     { preHandler: [requireAuth] },
-    adminDeleteProductReview
+    adminDeleteProductReview,
   );
-  app.put(
-    `${BASE}/:id/reviews`,
-    { preHandler: [requireAuth] },
-    adminReplaceReviews
-  ); // mevcut FE için backward-compatible
+  app.put(`${BASE}/:id/reviews`, { preHandler: [requireAuth] }, adminReplaceReviews); // mevcut FE için backward-compatible
 
   // Options
-  app.get(
-    `${BASE}/:id/options`,
-    { preHandler: [requireAuth] },
-    adminListProductOptions
-  );
-  app.post(
-    `${BASE}/:id/options`,
-    { preHandler: [requireAuth] },
-    adminCreateProductOption
-  );
+  app.get(`${BASE}/:id/options`, { preHandler: [requireAuth] }, adminListProductOptions);
+  app.post(`${BASE}/:id/options`, { preHandler: [requireAuth] }, adminCreateProductOption);
   app.patch(
     `${BASE}/:id/options/:optionId`,
     { preHandler: [requireAuth] },
-    adminUpdateProductOption
+    adminUpdateProductOption,
   );
   app.delete(
     `${BASE}/:id/options/:optionId`,
     { preHandler: [requireAuth] },
-    adminDeleteProductOption
+    adminDeleteProductOption,
   );
 
   // Stock
-  app.put(
-    `${BASE}/:id/stock`,
+  app.get(`${BASE}/:id/stock`, { preHandler: [requireAuth] }, adminListProductStock);
+
+  app.put(`${BASE}/:id/stock`, { preHandler: [requireAuth] }, adminSetProductStock);
+
+  app.delete(
+    `${BASE}/:id/stock/:stockId`,
     { preHandler: [requireAuth] },
-    adminSetProductStock
-  );
-  app.get(
-    `${BASE}/:id/stock/used`,
-    { preHandler: [requireAuth] },
-    adminListUsedStock
+    adminDeleteProductStockLine,
   );
 
-  // Lists used by FE (filters)
-  app.get(
-    "/admin/categories",
-    { preHandler: [requireAuth] },
-    adminListCategories
-  );
+  app.get(`${BASE}/:id/stock/used`, { preHandler: [requireAuth] }, adminListUsedStock);
 }

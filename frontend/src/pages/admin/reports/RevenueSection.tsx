@@ -1,12 +1,15 @@
 // =============================================================
 // FILE: src/components/admin/reports/RevenueSection.tsx
+// FINAL — Revenue reports section (central types, no repetition)
+// - Uses ONLY types from '@/integrations/types' (reports.ts)
+// - Chart point: RevenueChartPoint { name, amount }
+// - Typed tooltip (no any)
 // =============================================================
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+
+import * as React from 'react';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
 import {
   BarChart,
   Bar,
@@ -16,97 +19,104 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from "recharts";
-import type { RevenueStats } from "./types";
+  type TooltipProps,
+} from 'recharts';
 
-interface RevenueSectionProps {
+import type { RevenueStats, RevenueChartPoint } from '@/integrations/types';
+import type { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
+
+type RevenueSectionProps = {
   revenueStats: RevenueStats;
-  revenueChartData: { name: string; tutar: number }[];
+  revenueChartData: RevenueChartPoint[];
+};
+
+const moneyTR = (n: number): string =>
+  n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const safeNum = (v: unknown): number => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+};
+
+function RevenueTooltip(props: TooltipProps<ValueType, NameType>) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length) return null;
+
+  const first = payload[0];
+  const raw = first?.value;
+  const value = typeof raw === 'number' || typeof raw === 'string' ? safeNum(raw) : 0;
+
+  return (
+    <div
+      style={{
+        backgroundColor: 'hsl(var(--card))',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: '0.5rem',
+        padding: '0.75rem',
+        color: 'hsl(var(--foreground))',
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{String(label ?? '')}</div>
+      <div style={{ opacity: 0.9 }}>
+        {String(first?.name ?? 'Gelir')}: ₺{moneyTR(value)}
+      </div>
+    </div>
+  );
 }
 
-export function RevenueSection({
-  revenueStats,
-  revenueChartData,
-}: RevenueSectionProps) {
+type StatCardProps = {
+  title: string;
+  value: number;
+};
+
+function StatCard({ title, value }: StatCardProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">₺{moneyTR(safeNum(value))}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function RevenueSection({ revenueStats, revenueChartData }: RevenueSectionProps) {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">Gelir Raporları</h2>
+
       <Card>
         <CardHeader>
           <CardTitle>Gelir Analizi</CardTitle>
         </CardHeader>
+
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={revenueChartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="name"
-                className="text-foreground"
-                stroke="hsl(var(--foreground))"
-              />
-              <YAxis
-                className="text-foreground"
-                stroke="hsl(var(--foreground))"
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                  color: "hsl(var(--foreground))",
-                }}
-              />
-              <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }} />
-              <Bar
-                dataKey="tutar"
-                fill="hsl(var(--primary))"
-                name="Gelir (₺)"
-              />
+
+              <XAxis dataKey="name" className="text-foreground" stroke="hsl(var(--foreground))" />
+              <YAxis className="text-foreground" stroke="hsl(var(--foreground))" />
+
+              <Tooltip content={<RevenueTooltip />} />
+              <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
+
+              <Bar dataKey="amount" fill="hsl(var(--primary))" name="Gelir (₺)" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Bugün</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ₺
-              {(revenueStats.today ?? 0).toLocaleString("tr-TR", {
-                minimumFractionDigits: 2,
-              })}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Son 7 Gün</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ₺
-              {(revenueStats.last7Days ?? 0).toLocaleString("tr-TR", {
-                minimumFractionDigits: 2,
-              })}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Son 30 Gün</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ₺
-              {(revenueStats.last30Days ?? 0).toLocaleString("tr-TR", {
-                minimumFractionDigits: 2,
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard title="Bugün" value={revenueStats.today} />
+        <StatCard title="Son 7 Gün" value={revenueStats.last7Days} />
+        <StatCard title="Son 30 Gün" value={revenueStats.last30Days} />
       </div>
     </div>
   );

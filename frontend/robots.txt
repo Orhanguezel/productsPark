@@ -1,0 +1,105 @@
+# X Emlak - robots.txt
+# Güvenilir gayrimenkul danışmanlığı
+
+User-agent: *
+Allow: /
+
+# --- Hassas alanlar ---
+Disallow: /admin/
+Disallow: /admin-api/
+Disallow: /api/
+
+# --- Sistem / geliştirme çıktıları (prod ortamda zaten servis edilmemeli) ---
+Disallow: /src/
+Disallow: /node_modules/
+Disallow: /dist/
+Disallow: /build/
+Disallow: /coverage/
+Disallow: /logs/
+Disallow: /tmp/
+Disallow: /.git/
+Disallow: /.gitignore
+Disallow: /.env
+Disallow: /.htaccess
+Disallow: /package.json
+Disallow: /tsconfig.json
+Disallow: /vite.config.*
+Disallow: /Guidelines.md
+Disallow: /README.md
+Disallow: /CHANGELOG.md
+Disallow: /LICENSE
+
+# Dosya uzantıları (genelde prod’da zaten erişilmez; yine de koruma)
+Disallow: /*.ts$
+Disallow: /*.tsx$
+Disallow: /*.js.map$
+Disallow: /*.css.map$
+Disallow: /*.log$
+Disallow: /*.bak$
+Disallow: /*.backup$
+Disallow: /*.swp$
+Disallow: /*.tmp$
+
+# --- Takip parametreleri (crawl bütçesi koruma) ---
+Disallow: /*?utm_*
+Disallow: /*&utm_*
+Disallow: /*?fbclid=*
+Disallow: /*&fbclid=*
+Disallow: /*?gclid=*
+Disallow: /*&gclid=*
+Disallow: /*?ref=*
+Disallow: /*&ref=*
+Disallow: /*?source=*
+Disallow: /*&source=*
+Disallow: /*?campaign=*
+Disallow: /*&campaign=*
+
+# --- Sosyal botlar (önizleme) ---
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+# --- Crawl delay (Google dikkate almaz; bazı botlar dikkate alır) ---
+User-agent: Bingbot
+Crawl-delay: 1
+Allow: /
+
+User-agent: DuckDuckBot
+Crawl-delay: 1
+Allow: /
+
+User-agent: Slurp
+Crawl-delay: 2
+Allow: /
+
+# --- İstersen AI botlarını engelle (aktif etmek için yorumları kaldır) ---
+# User-agent: GPTBot
+# Disallow: /
+# User-agent: Google-Extended
+# Disallow: /
+# User-agent: CCBot
+# Disallow: /
+# User-agent: anthropic-ai
+# Disallow: /
+# User-agent: Claude-Web
+# Disallow: /
+
+# --- Önemli assetler (genelde gerekmez ama açıkça belirtmek istersen) ---
+Allow: /assets/
+Allow: /icons/
+Allow: /images/
+Allow: /manifest.json
+Allow: /sw.js
+Allow: /favicon.ico
+Allow: /favicon.svg
+
+# Sitemap
+Sitemap: https://xilan.com/sitemap.xml
