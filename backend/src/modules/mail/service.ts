@@ -1,67 +1,50 @@
 // ===================================================================
 // FILE: src/modules/mail/service.ts
+// FINAL — SMTP transport + templated mail wrappers (NO static HTML)
+// - sendMailRaw / sendMail: low-level SMTP sender (site_settings)
+// - Templated wrappers: email_templates üzerinden gönderir
 // ===================================================================
 
-import nodemailer from "nodemailer";
-import type { Transporter } from "nodemailer";
-import { env } from "@/core/env";
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+import { env } from '@/core/env';
 import {
   sendMailSchema,
   type SendMailInput,
   orderCreatedMailSchema,
   type OrderCreatedMailInput,
-} from "./validation";
-import {
-  getSmtpSettings,
-  type SmtpSettings,
-} from "@/modules/siteSettings/service";
-import { z } from "zod";
+} from './validation';
+import { getSmtpSettings, type SmtpSettings } from '@/modules/siteSettings/service';
+import { z } from 'zod';
+import { sendTemplatedEmail } from '@/modules/email-templates/mailer';
 
-// Basit cache (aynı config için transporter'ı tekrar tekrar kurmamak için)
+// ---------------- transporter cache ----------------
 let cachedTransporter: Transporter | null = null;
 let cachedSignature: string | null = null;
 
 function buildSignature(cfg: SmtpSettings): string {
-  return [
-    cfg.host ?? "",
-    cfg.port ?? "",
-    cfg.username ?? "",
-    cfg.secure ? "1" : "0",
-  ].join("|");
+  return [cfg.host ?? '', cfg.port ?? '', cfg.username ?? '', cfg.secure ? '1' : '0'].join('|');
 }
 
-/**
- * SMTP config'ini site_settings + env'den okuyup transporter üretir
- */
 async function getTransporter(): Promise<Transporter> {
   const cfg = await getSmtpSettings();
 
   if (!cfg.host) {
-    throw new Error("smtp_host_not_configured");
-  }
-  if (!cfg.port) {
-    // default 587 (TLS) fallback
-    cfg.port = 587;
+    throw new Error('smtp_host_not_configured');
   }
 
-  const signature = buildSignature(cfg);
+  const port = cfg.port ?? 587;
+
+  const signature = buildSignature({ ...cfg, port });
   if (cachedTransporter && cachedSignature === signature) {
     return cachedTransporter;
   }
 
-  const auth =
-    cfg.username && cfg.password
-      ? {
-          user: cfg.username,
-          pass: cfg.password,
-        }
-      : undefined;
-
   const transporter = nodemailer.createTransport({
     host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure, // smtp_ssl:true ise 465, değilse 587 vb.
-    auth,
+    port,
+    secure: cfg.secure,
+    auth: cfg.username && cfg.password ? { user: cfg.username, pass: cfg.password } : undefined,
   });
 
   cachedTransporter = transporter;
@@ -71,145 +54,61 @@ async function getTransporter(): Promise<Transporter> {
 }
 
 /**
- * Düşük seviye mail gönderici (genel kullanım)
- * SMTP config'ini site_settings tablosundan okur.
+ * LOW LEVEL sender
+ * template logic YOK
  */
 export async function sendMailRaw(input: SendMailInput) {
   const data = sendMailSchema.parse(input);
-
   const smtpCfg = await getSmtpSettings();
 
-  // From alanını DB'den kur
-  const fromEmail =
-    smtpCfg.fromEmail ||
-    env.MAIL_FROM ||
-    env.SMTP_USER ||
-    "no-reply@example.com";
-
-  const from =
-    smtpCfg.fromName && fromEmail
-      ? `${smtpCfg.fromName} <${fromEmail}>`
-      : fromEmail;
+  const fromEmail = smtpCfg.fromEmail || env.MAIL_FROM || env.SMTP_USER || 'no-reply@example.com';
+  const from = smtpCfg.fromName && fromEmail ? `${smtpCfg.fromName} <${fromEmail}>` : fromEmail;
 
   const transporter = await getTransporter();
 
-  const info = await transporter.sendMail({
+  return transporter.sendMail({
     from,
     to: data.to,
     subject: data.subject,
     text: data.text,
     html: data.html,
   });
-
-  return info;
 }
 
 /**
- * sendMailRaw için backward-compatible alias
- * (email-templates/mailer.ts gibi yerler sendMail bekliyor)
+ * Backward-compatible alias
  */
 export async function sendMail(input: SendMailInput) {
   return sendMailRaw(input);
 }
 
-// Basit HTML escape
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, "&#039;");
-}
-
 /* ==================================================================
-   ORDER CREATED MAIL (email_templates → order_received mantığı)
+   TEMPLATE-BASED MAIL WRAPPERS (seed ile birebir)
    ================================================================== */
 
 /**
- * Sipariş oluşturma maili
- *
- * NOT:
- *  - email templates payload'ına uygun:
- *      { to, customer_name, order_number, final_amount, status, site_name?, locale? }
- *  - site_name çağıran için zorunlu değil → burada default veriyoruz.
+ * ORDER CREATED (template_key: order_received)
+ * Seed variables:
+ *  - customer_name, order_number, final_amount, status, site_name
  */
 export async function sendOrderCreatedMail(input: OrderCreatedMailInput) {
   const data = orderCreatedMailSchema.parse(input);
 
-  const locale = data.locale ?? "tr-TR";
-  const siteName = data.site_name ?? "Dijital Market"; // İstersen ileride site_settings’den okuyabiliriz
-  const createdAt = new Date();
-  const dateStr = createdAt.toLocaleString(locale);
-
-  const statusLabelMap: Record<string, string> = {
-    pending: "Beklemede",
-    processing: "Hazırlanıyor",
-    completed: "Tamamlandı",
-    cancelled: "İptal Edildi",
-    refunded: "İade Edildi",
-  };
-
-  const statusLabel = statusLabelMap[data.status] ?? data.status;
-
-  const subject = `${siteName} – Siparişiniz oluşturuldu (#${data.order_number})`;
-
-  const html = `
-    <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
-      <h2 style="font-size:18px;margin-bottom:8px;">Merhaba ${escapeHtml(
-        data.customer_name,
-      )},</h2>
-      <p style="margin:0 0 12px 0;">
-        <strong>#${escapeHtml(data.order_number)}</strong> numaralı siparişiniz
-        <strong>${escapeHtml(siteName)}</strong> üzerinde başarıyla oluşturuldu.
-      </p>
-
-      <p style="margin:0 0 16px 0;">
-        Durum: <strong>${escapeHtml(statusLabel)}</strong><br/>
-        Toplam Tutar: <strong>${escapeHtml(
-          data.final_amount,
-        )}</strong><br/>
-        Tarih: <strong>${escapeHtml(dateStr)}</strong>
-      </p>
-
-      <p style="margin:0 0 16px 0;">
-        Sipariş detaylarınızı hesap sayfanızdan görüntüleyebilirsiniz.
-      </p>
-
-      <p style="margin-top:24px;">
-        Teşekkür ederiz,<br/>
-        <strong>${escapeHtml(siteName)} Ekibi</strong>
-      </p>
-    </div>
-  `;
-
-  const text = [
-    `Merhaba ${data.customer_name},`,
-    ``,
-    `#${data.order_number} numaralı siparişiniz ${siteName} üzerinde oluşturuldu.`,
-    `Durum: ${statusLabel}`,
-    `Toplam Tutar: ${data.final_amount}`,
-    `Tarih: ${dateStr}`,
-    ``,
-    `Sipariş detaylarınızı hesabınızdan görüntüleyebilirsiniz.`,
-    ``,
-    `Teşekkür ederiz,`,
-    `${siteName} Ekibi`,
-  ].join("\n");
-
-  const info = await sendMailRaw({
+  return sendTemplatedEmail({
     to: data.to,
-    subject,
-    html,
-    text,
+    key: 'order_received',
+    locale: data.locale ?? null,
+    params: {
+      customer_name: data.customer_name,
+      order_number: data.order_number,
+      final_amount: data.final_amount,
+      status: data.status,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
   });
-
-  return info;
 }
 
-/* ==================================================================
-   DEPOSIT SUCCESS MAIL (email_templates → deposit_success)
-   ================================================================== */
+/* ================= DEPOSIT SUCCESS (deposit_success) ================= */
 
 const depositSuccessMailSchema = z.object({
   to: z.string().email(),
@@ -222,61 +121,31 @@ const depositSuccessMailSchema = z.object({
 
 export type DepositSuccessMailInput = z.infer<typeof depositSuccessMailSchema>;
 
+/**
+ * Seed variables:
+ *  - user_name, amount, new_balance, site_name
+ */
 export async function sendDepositSuccessMail(input: DepositSuccessMailInput) {
   const data = depositSuccessMailSchema.parse(input);
 
-  const locale = data.locale ?? "tr-TR";
-  const siteName = data.site_name ?? "Dijital Market";
-  const amountStr =
-    typeof data.amount === "number"
-      ? data.amount.toFixed(2)
-      : String(data.amount);
+  const amountStr = typeof data.amount === 'number' ? data.amount.toFixed(2) : String(data.amount);
   const newBalanceStr =
-    typeof data.new_balance === "number"
-      ? data.new_balance.toFixed(2)
-      : String(data.new_balance);
+    typeof data.new_balance === 'number' ? data.new_balance.toFixed(2) : String(data.new_balance);
 
-  const subject = `Bakiye Yükleme Onaylandı - ${siteName}`;
-
-  const html = `
-    <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
-      <h1 style="font-size:20px;text-align:center;">✓ Bakiye Yükleme Başarılı</h1>
-      <p>Merhaba <strong>${escapeHtml(data.user_name)}</strong>,</p>
-      <p>Bakiye yükleme talebiniz onaylandı ve hesabınıza eklendi.</p>
-      <p><br/></p>
-      <p><strong>Yüklenen Tutar:</strong> ${escapeHtml(amountStr)} TL</p>
-      <p><strong>Yeni Bakiye:</strong> ${escapeHtml(newBalanceStr)} TL</p>
-      <p>Artık alışverişe başlayabilirsiniz!</p>
-      <p>Saygılarımızla,</p>
-      <p>${escapeHtml(siteName)} Ekibi</p>
-    </div>
-  `;
-
-  const text = [
-    `Merhaba ${data.user_name},`,
-    ``,
-    `Bakiye yükleme talebiniz onaylandı ve hesabınıza eklendi.`,
-    ``,
-    `Yüklenen Tutar: ${amountStr} TL`,
-    `Yeni Bakiye: ${newBalanceStr} TL`,
-    ``,
-    `Artık alışverişe başlayabilirsiniz!`,
-    ``,
-    `Saygılarımızla,`,
-    `${siteName} Ekibi`,
-  ].join("\n");
-
-  return sendMailRaw({
+  return sendTemplatedEmail({
     to: data.to,
-    subject,
-    html,
-    text,
+    key: 'deposit_success',
+    locale: data.locale ?? null,
+    params: {
+      user_name: data.user_name,
+      amount: amountStr,
+      new_balance: newBalanceStr,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
   });
 }
 
-/* ==================================================================
-   TICKET REPLIED MAIL (email_templates → ticket_replied)
-   ================================================================== */
+/* ================= TICKET REPLIED (ticket_replied) ================= */
 
 const ticketRepliedMailSchema = z.object({
   to: z.string().email(),
@@ -291,168 +160,224 @@ const ticketRepliedMailSchema = z.object({
 export type TicketRepliedMailInput = z.infer<typeof ticketRepliedMailSchema>;
 
 /**
- * ticket_replied template'ine uygun payload:
- *  - { to, user_name, ticket_id, ticket_subject, reply_message, site_name?, locale? }
+ * Seed variables:
+ *  - user_name, ticket_id, ticket_subject, reply_message, site_name
  */
 export async function sendTicketRepliedMail(input: TicketRepliedMailInput) {
   const data = ticketRepliedMailSchema.parse(input);
 
-  const locale = data.locale ?? "tr-TR";
-  const siteName = data.site_name ?? "Destek Sistemi";
-
-  const subject = `Destek Talebiniz Yanıtlandı - ${siteName}`;
-
-  const html = `
-    <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
-      <h1 style="font-size:20px;text-align:center;">Destek Talebiniz Yanıtlandı</h1>
-      <p>Merhaba <strong>${escapeHtml(data.user_name)}</strong>,</p>
-      <p>Destek talebiniz yanıtlandı.</p>
-      <p><br/></p>
-      <p><strong>Talep No:</strong> ${escapeHtml(data.ticket_id)}</p>
-      <p><strong>Konu:</strong> ${escapeHtml(data.ticket_subject)}</p>
-      <p><br/></p>
-      <p><strong>Yanıt:</strong></p>
-      <p>${escapeHtml(data.reply_message).replace(/\n/g, "<br/>")}</p>
-      <p><br/></p>
-      <p>Detayları görüntülemek için kullanıcı paneline giriş yapabilirsiniz.</p>
-      <p>Saygılarımızla,</p>
-      <p>${escapeHtml(siteName)} Ekibi</p>
-    </div>
-  `;
-
-  const text = [
-    `Merhaba ${data.user_name},`,
-    ``,
-    `Destek talebiniz yanıtlandı.`,
-    ``,
-    `Talep No: ${data.ticket_id}`,
-    `Konu: ${data.ticket_subject}`,
-    ``,
-    `Yanıt:`,
-    data.reply_message,
-    ``,
-    `Detayları görüntülemek için kullanıcı paneline giriş yapabilirsiniz.`,
-    ``,
-    `Saygılarımızla,`,
-    `${siteName} Ekibi`,
-  ].join("\n");
-
-  return sendMailRaw({
+  return sendTemplatedEmail({
     to: data.to,
-    subject,
-    html,
-    text,
+    key: 'ticket_replied',
+    locale: data.locale ?? null,
+    params: {
+      user_name: data.user_name,
+      ticket_id: data.ticket_id,
+      ticket_subject: data.ticket_subject,
+      reply_message: data.reply_message,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
   });
 }
 
-/* ==================================================================
-   WELCOME MAIL (email_templates → welcome)
-   ================================================================== */
+/* ================= WELCOME (welcome) ================= */
 
 const welcomeMailSchema = z.object({
   to: z.string().email(),
   user_name: z.string(),
   user_email: z.string().email(),
   site_name: z.string().optional(),
+  locale: z.string().optional(),
 });
 
 export type WelcomeMailInput = z.infer<typeof welcomeMailSchema>;
 
 /**
- * welcome template'ine uygun payload:
- *  - { to, user_name, user_email, site_name? }
+ * Seed variables:
+ *  - user_name, user_email, site_name
  */
 export async function sendWelcomeMail(input: WelcomeMailInput) {
   const data = welcomeMailSchema.parse(input);
 
-  const siteName = data.site_name ?? "Dijital Market";
-
-  const subject = `Hesabınız Oluşturuldu - ${siteName}`;
-
-  const html = `
-    <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
-      <h1 style="font-size:20px;text-align:center;">Hesabınız Oluşturuldu</h1>
-      <p>Merhaba <strong>${escapeHtml(data.user_name)}</strong>,</p>
-      <p>${escapeHtml(siteName)} ailesine hoş geldiniz! Hesabınız başarıyla oluşturuldu.</p>
-      <p><br/></p>
-      <p>E-posta: <strong>${escapeHtml(data.user_email)}</strong></p>
-      <p>Herhangi bir sorunuz olursa bizimle iletişime geçmekten çekinmeyin.</p>
-      <p>Saygılarımızla,</p>
-      <p>${escapeHtml(siteName)} Ekibi</p>
-    </div>
-  `;
-
-  const text = [
-    `Merhaba ${data.user_name},`,
-    ``,
-    `${siteName} ailesine hoş geldiniz! Hesabınız başarıyla oluşturuldu.`,
-    ``,
-    `E-posta: ${data.user_email}`,
-    ``,
-    `Herhangi bir sorunuz olursa bizimle iletişime geçmekten çekinmeyin.`,
-    ``,
-    `Saygılarımızla,`,
-    `${siteName} Ekibi`,
-  ].join("\n");
-
-  return sendMailRaw({
+  return sendTemplatedEmail({
     to: data.to,
-    subject,
-    html,
-    text,
+    key: 'welcome',
+    locale: data.locale ?? null,
+    params: {
+      user_name: data.user_name,
+      user_email: data.user_email,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
   });
 }
 
-/* ==================================================================
-   PASSWORD CHANGED MAIL (şifre değişikliğinde güvenlik maili)
-   ================================================================== */
+/* ================= PASSWORD CHANGED (password_changed) ================= */
 
 const passwordChangedMailSchema = z.object({
   to: z.string().email(),
-  user_name: z.string().optional(),
+  user_name: z.string(),
   site_name: z.string().optional(),
+  locale: z.string().optional(),
 });
 
 export type PasswordChangedMailInput = z.infer<typeof passwordChangedMailSchema>;
 
 /**
- * Şifre değişikliğinde kullanıcıya bilgilendirme maili
+ * Seed variables:
+ *  - user_name, site_name
  */
-export async function sendPasswordChangedMail(
-  input: PasswordChangedMailInput,
-) {
+export async function sendPasswordChangedMail(input: PasswordChangedMailInput) {
   const data = passwordChangedMailSchema.parse(input);
 
-  const siteName = data.site_name ?? "Dijital Market";
-  const displayName = data.user_name ?? "Kullanıcımız";
-
-  const subject = `Şifreniz Güncellendi - ${siteName}`;
-
-  const html = `
-    <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
-      <h1 style="font-size:20px;text-align:center;">Şifreniz Güncellendi</h1>
-      <p>Merhaba <strong>${escapeHtml(displayName)}</strong>,</p>
-      <p>Hesap şifreniz başarıyla değiştirildi.</p>
-      <p>Eğer bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.</p>
-      <p>Saygılarımızla,</p>
-      <p>${escapeHtml(siteName)} Ekibi</p>
-    </div>
-  `;
-
-  const text = [
-    `Merhaba ${displayName},`,
-    ``,
-    `Hesap şifreniz başarıyla değiştirildi.`,
-    `Eğer bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.`,
-    ``,
-    `Saygılarımızla,`,
-    `${siteName} Ekibi`,
-  ].join("\n");
-
-  return sendMailRaw({
+  return sendTemplatedEmail({
     to: data.to,
-    subject,
-    html,
-    text,
+    key: 'password_changed',
+    locale: data.locale ?? null,
+    params: {
+      user_name: data.user_name,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
+  });
+}
+
+/* ================= PASSWORD RESET (password_reset) ================= */
+
+const passwordResetMailSchema = z.object({
+  to: z.string().email(),
+  reset_link: z.string().min(1),
+  site_name: z.string().optional(),
+  locale: z.string().optional(),
+});
+
+export type PasswordResetMailInput = z.infer<typeof passwordResetMailSchema>;
+
+/**
+ * Seed variables:
+ *  - reset_link, site_name
+ */
+export async function sendPasswordResetMail(input: PasswordResetMailInput) {
+  const data = passwordResetMailSchema.parse(input);
+
+  return sendTemplatedEmail({
+    to: data.to,
+    key: 'password_reset',
+    locale: data.locale ?? null,
+    params: {
+      reset_link: data.reset_link,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
+  });
+}
+
+/* ================= ORDER COMPLETED (order_completed) ================= */
+
+const orderCompletedMailSchema = z.object({
+  to: z.string().email(),
+  customer_name: z.string(),
+  order_number: z.string(),
+  final_amount: z.union([z.string(), z.number()]),
+  site_name: z.string().optional(),
+  locale: z.string().optional(),
+});
+
+export type OrderCompletedMailInput = z.infer<typeof orderCompletedMailSchema>;
+
+/**
+ * Seed variables:
+ *  - customer_name, order_number, final_amount, site_name
+ */
+export async function sendOrderCompletedMail(input: OrderCompletedMailInput) {
+  const data = orderCompletedMailSchema.parse(input);
+
+  const finalAmountStr =
+    typeof data.final_amount === 'number'
+      ? data.final_amount.toFixed(2)
+      : String(data.final_amount);
+
+  return sendTemplatedEmail({
+    to: data.to,
+    key: 'order_completed',
+    locale: data.locale ?? null,
+    params: {
+      customer_name: data.customer_name,
+      order_number: data.order_number,
+      final_amount: finalAmountStr,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
+  });
+}
+
+/* ================= ORDER CANCELLED (order_cancelled) ================= */
+
+const orderCancelledMailSchema = z.object({
+  to: z.string().email(),
+  customer_name: z.string(),
+  order_number: z.string(),
+  final_amount: z.union([z.string(), z.number()]),
+  cancellation_reason: z.string(),
+  site_name: z.string().optional(),
+  locale: z.string().optional(),
+});
+
+export type OrderCancelledMailInput = z.infer<typeof orderCancelledMailSchema>;
+
+/**
+ * Seed variables:
+ *  - customer_name, order_number, final_amount, cancellation_reason, site_name
+ */
+export async function sendOrderCancelledMail(input: OrderCancelledMailInput) {
+  const data = orderCancelledMailSchema.parse(input);
+
+  const finalAmountStr =
+    typeof data.final_amount === 'number'
+      ? data.final_amount.toFixed(2)
+      : String(data.final_amount);
+
+  return sendTemplatedEmail({
+    to: data.to,
+    key: 'order_cancelled',
+    locale: data.locale ?? null,
+    params: {
+      customer_name: data.customer_name,
+      order_number: data.order_number,
+      final_amount: finalAmountStr,
+      cancellation_reason: data.cancellation_reason,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
+  });
+}
+
+/* ================= ORDER ITEM DELIVERY (order_item_delivery) ================= */
+
+const orderItemDeliveryMailSchema = z.object({
+  to: z.string().email(),
+  customer_name: z.string(),
+  order_number: z.string(),
+  product_name: z.string(),
+  delivery_content: z.string(),
+  site_name: z.string().optional(),
+  locale: z.string().optional(),
+});
+
+export type OrderItemDeliveryMailInput = z.infer<typeof orderItemDeliveryMailSchema>;
+
+/**
+ * Seed variables:
+ *  - customer_name, order_number, product_name, delivery_content, site_name
+ */
+export async function sendOrderItemDeliveryMail(input: OrderItemDeliveryMailInput) {
+  const data = orderItemDeliveryMailSchema.parse(input);
+
+  return sendTemplatedEmail({
+    to: data.to,
+    key: 'order_item_delivery',
+    locale: data.locale ?? null,
+    params: {
+      customer_name: data.customer_name,
+      order_number: data.order_number,
+      product_name: data.product_name,
+      delivery_content: data.delivery_content,
+      site_name: data.site_name ?? 'Dijital Market',
+    },
   });
 }

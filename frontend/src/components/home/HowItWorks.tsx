@@ -1,116 +1,97 @@
+// =============================================================
 // FILE: src/components/home/HowItWorks.tsx
-import { useEffect, useState } from "react";
-import { Search, CreditCard, Download, Shield } from "lucide-react";
+// FINAL — Home HowItWorks (RTK keys only, NO fallback)
+// - pulls values from site_settings via listSiteSettings(keys=...)
+// - no local state/useEffect
+// - icons preserved
+// =============================================================
 
-import {
-  useListSiteSettingsQuery,
-  type SiteSetting,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+import React, { useMemo } from 'react';
+import { Search, CreditCard, Download, Shield } from 'lucide-react';
 
-const DEFAULT_SETTINGS = {
-  home_how_it_works_title: "Nasıl Çalışır?",
-  home_how_it_works_subtitle: "4 basit adımda dijital ürününüze sahip olun",
-  home_step_1_title: "Ürünü Seçin",
-  home_step_1_desc:
-    "Geniş ürün yelpazemizden ihtiyacınıza uygun dijital ürünü bulun ve inceleyin.",
-  home_step_2_title: "Güvenli Ödeme",
-  home_step_2_desc:
-    "Kredi kartı, havale veya kripto para ile güvenli ödeme yapın.",
-  home_step_3_title: "Anında Teslimat",
-  home_step_3_desc:
-    "Ödeme onaylandıktan sonra ürününüz otomatik olarak e-posta ve panele iletilir.",
-  home_step_4_title: "7/24 Destek",
-  home_step_4_desc:
-    "Herhangi bir sorun yaşarsanız destek ekibimiz size yardımcı olmaya hazır.",
-};
+import { useListSiteSettingsQuery } from '@/integrations/hooks';
+import type { JsonLike } from '@/integrations/types';
+import { toStr } from '@/integrations/types';
 
-type HowItWorksSettings = typeof DEFAULT_SETTINGS;
-
-const STRING_SETTING_KEYS = [
-  "home_how_it_works_title",
-  "home_how_it_works_subtitle",
-  "home_step_1_title",
-  "home_step_1_desc",
-  "home_step_2_title",
-  "home_step_2_desc",
-  "home_step_3_title",
-  "home_step_3_desc",
-  "home_step_4_title",
-  "home_step_4_desc",
+const KEYS = [
+  'home_how_it_works_title',
+  'home_how_it_works_subtitle',
+  'home_step_1_title',
+  'home_step_1_desc',
+  'home_step_2_title',
+  'home_step_2_desc',
+  'home_step_3_title',
+  'home_step_3_desc',
+  'home_step_4_title',
+  'home_step_4_desc',
 ] as const;
 
-type StringSettingKey = (typeof STRING_SETTING_KEYS)[number];
+type Key = (typeof KEYS)[number];
 
-const HowItWorks = () => {
-  const [settings, setSettings] = useState<HowItWorksSettings>(
-    DEFAULT_SETTINGS,
-  );
+function getString(map: Map<string, JsonLike>, key: Key): string {
+  return toStr(map.get(key)).trim();
+}
 
-  // home_* prefix’i ile tüm home ayarlarını çekiyoruz
-  const { data: siteSettings } = useListSiteSettingsQuery({
-    prefix: "home_",
+const HowItWorks: React.FC = () => {
+  const {
+    data: settingsList,
+    isLoading,
+    isFetching,
+  } = useListSiteSettingsQuery({
+    keys: [...KEYS],
+    order: 'key.asc',
+    limit: 50,
+    offset: 0,
   });
 
-  useEffect(() => {
-    if (!siteSettings) return;
+  const loading = isLoading || isFetching;
 
-    const dict: Record<string, SiteSetting["value"]> = {};
-    for (const item of siteSettings) {
-      dict[item.key] = item.value;
-    }
+  const map = useMemo(() => {
+    const m = new Map<string, JsonLike>();
+    for (const row of settingsList ?? []) m.set(row.key, row.value);
+    return m;
+  }, [settingsList]);
 
-    setSettings((prev) => {
-      const next: HowItWorksSettings = { ...prev };
+  const title = getString(map, 'home_how_it_works_title');
+  const subtitle = getString(map, 'home_how_it_works_subtitle');
 
-      STRING_SETTING_KEYS.forEach((key: StringSettingKey) => {
-        const raw = dict[key];
-        if (typeof raw === "string") {
-          next[key] = raw as HowItWorksSettings[StringSettingKey];
-        }
-      });
-
-      return next;
-    });
-  }, [siteSettings]);
-
-  const steps = [
-    {
-      icon: Search,
-      title: settings.home_step_1_title,
-      description: settings.home_step_1_desc,
-    },
-    {
-      icon: CreditCard,
-      title: settings.home_step_2_title,
-      description: settings.home_step_2_desc,
-    },
-    {
-      icon: Download,
-      title: settings.home_step_3_title,
-      description: settings.home_step_3_desc,
-    },
-    {
-      icon: Shield,
-      title: settings.home_step_4_title,
-      description: settings.home_step_4_desc,
-    },
-  ];
+  const steps = useMemo(
+    () => [
+      {
+        icon: Search,
+        title: getString(map, 'home_step_1_title'),
+        description: getString(map, 'home_step_1_desc'),
+      },
+      {
+        icon: CreditCard,
+        title: getString(map, 'home_step_2_title'),
+        description: getString(map, 'home_step_2_desc'),
+      },
+      {
+        icon: Download,
+        title: getString(map, 'home_step_3_title'),
+        description: getString(map, 'home_step_3_desc'),
+      },
+      {
+        icon: Shield,
+        title: getString(map, 'home_step_4_title'),
+        description: getString(map, 'home_step_4_desc'),
+      },
+    ],
+    [map],
+  );
 
   return (
     <section id="nasil-calisir" className="py-20">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            {settings.home_how_it_works_title}
-          </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            {settings.home_how_it_works_subtitle}
-          </p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">{loading ? '' : title}</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">{loading ? '' : subtitle}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {steps.map((step, index) => (
-            <div key={step.title} className="relative">
+            <div key={`${step.title}-${index}`} className="relative">
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full gradient-primary mb-6 relative">
                   <step.icon className="w-8 h-8 text-white" />
@@ -118,8 +99,9 @@ const HowItWorks = () => {
                     {index + 1}
                   </div>
                 </div>
-                <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
-                <p className="text-muted-foreground">{step.description}</p>
+
+                <h3 className="text-xl font-semibold mb-3">{loading ? '' : step.title}</h3>
+                <p className="text-muted-foreground">{loading ? '' : step.description}</p>
               </div>
 
               {index < steps.length - 1 && (

@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import * as React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Card,
   CardContent,
@@ -9,76 +10,101 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
-import { z } from "zod";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
+} from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
+import { z } from 'zod';
+import Navbar from '@/components/layout/Navbar';
+import Footer from '@/components/layout/Footer';
 
-// ✅ RTK Auth hook'ları
 import {
   useLoginMutation,
   useSignupMutation,
   useStatusQuery,
   useOauthStartMutation,
-} from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
+} from '@/integrations/hooks';
+
+/* -------------------- schemas -------------------- */
 
 const loginSchema = z.object({
-  email: z.string().trim().email({ message: "Geçerli bir e-posta adresi giriniz" }),
-  password: z.string().min(6, { message: "Şifre en az 6 karakter olmalıdır" }),
+  email: z.string().trim().email({ message: 'Geçerli bir e-posta adresi giriniz' }),
+  password: z.string().min(6, { message: 'Şifre en az 6 karakter olmalıdır' }),
 });
 
 const registerSchema = loginSchema
   .extend({
-    fullName: z
-      .string()
-      .trim()
-      .min(2, { message: "Ad soyad en az 2 karakter olmalıdır" })
-      .max(100),
+    fullName: z.string().trim().min(2, { message: 'Ad soyad en az 2 karakter olmalıdır' }).max(100),
     phone: z
       .string()
       .trim()
-      .min(10, { message: "Telefon numarası en az 10 karakter olmalıdır" })
+      .min(10, { message: 'Telefon numarası en az 10 karakter olmalıdır' })
       .max(20),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Şifreler eşleşmiyor",
-    path: ["confirmPassword"],
+    message: 'Şifreler eşleşmiyor',
+    path: ['confirmPassword'],
   });
+
+/* -------------------- error helpers (no-any) -------------------- */
+
+type ApiErrShape = { data?: unknown; error?: unknown; status?: unknown };
+
+function isObject(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === 'object' && !Array.isArray(x);
+}
+
+function pickErrorMessage(err: unknown): string | null {
+  // RTK Query errors can be: { status, data } or fetch error shapes
+  if (!isObject(err)) return null;
+
+  const e = err as ApiErrShape;
+
+  // common places
+  const data = isObject(e.data) ? (e.data as Record<string, unknown>) : null;
+  const nestedError = data && isObject(data.error) ? (data.error as Record<string, unknown>) : null;
+
+  const msg =
+    (nestedError && typeof nestedError.message === 'string' && nestedError.message) ||
+    (data && typeof data.message === 'string' && data.message) ||
+    (typeof (e as Record<string, unknown>).message === 'string' ? String((e as any).message) : '');
+
+  return msg.trim() ? msg.trim() : null;
+}
+
+/* -------------------- component -------------------- */
 
 const Auth = () => {
   const navigate = useNavigate();
 
-  // ✅ RTK hook'ları
   const [loginMutation, { isLoading: loginLoading }] = useLoginMutation();
   const [signupMutation, { isLoading: signupLoading }] = useSignupMutation();
   const [oauthStart, { isLoading: oauthLoading }] = useOauthStartMutation();
-  const {
-    data: status,
-    isLoading: statusLoading,
-    isFetching: statusFetching,
-  } = useStatusQuery();
+
+  const { data: status, isLoading: statusLoading, isFetching: statusFetching } = useStatusQuery();
 
   // Form state
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
-  const [registerEmail, setRegisterEmail] = useState("");
-  const [registerPassword, setRegisterPassword] = useState("");
-  const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
 
   const [localLoading, setLocalLoading] = useState(false);
-  const loading = localLoading || loginLoading || signupLoading || oauthLoading;
 
-  // ✅ Kullanıcı zaten login ise anasayfaya at
+  const loading = useMemo(
+    () => localLoading || loginLoading || signupLoading || oauthLoading,
+    [localLoading, loginLoading, signupLoading, oauthLoading],
+  );
+
+  // Already authenticated → redirect
   useEffect(() => {
     if (!statusLoading && !statusFetching && status?.authenticated && status.user) {
-      navigate("/");
+      navigate('/');
     }
   }, [statusLoading, statusFetching, status, navigate]);
 
@@ -92,21 +118,26 @@ const Auth = () => {
       });
 
       setLocalLoading(true);
+
+      // backend AuthTokenBody: { grant_type:'password', email, password }
       await loginMutation({
+        grant_type: 'password',
         email: validated.email,
         password: validated.password,
       }).unwrap();
 
-      toast.success("Giriş başarılı!");
-      navigate("/");
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
-      } else if (error?.data?.error?.message === "invalid_credentials") {
-        toast.error("E-posta veya şifre hatalı");
-      } else {
-        toast.error("Bir hata oluştu");
+      toast.success('Giriş başarılı!');
+      navigate('/');
+    } catch (err: unknown) {
+      if (err instanceof z.ZodError) {
+        toast.error(err.errors[0]?.message ?? 'Form hatası');
+        return;
       }
+
+      const code = pickErrorMessage(err);
+
+      if (code === 'invalid_credentials') toast.error('E-posta veya şifre hatalı');
+      else toast.error('Bir hata oluştu');
     } finally {
       setLocalLoading(false);
     }
@@ -115,19 +146,23 @@ const Auth = () => {
   const handleGoogleLogin = async () => {
     try {
       setLocalLoading(true);
-      const redirectTo = `${window.location.origin}/`;
 
+      const redirectTo = `${window.location.origin}/`;
       const res = await oauthStart({ redirectTo }).unwrap();
-      if (res.url) {
+
+      if (res?.url) {
         window.location.href = res.url;
-      } else {
-        toast.error("Google yönlendirme URL'si alınamadı");
+        return;
       }
-    } catch (error: any) {
+
+      toast.error("Google yönlendirme URL'si alınamadı");
+    } catch (err: unknown) {
+      const code = pickErrorMessage(err);
+
       toast.error(
-        error?.data?.error?.message === "google_oauth_not_configured"
-          ? "Google girişi yapılandırılmamış"
-          : "Google ile giriş sırasında bir hata oluştu",
+        code === 'google_oauth_not_configured'
+          ? 'Google girişi yapılandırılmamış'
+          : 'Google ile giriş sırasında bir hata oluştu',
       );
     } finally {
       setLocalLoading(false);
@@ -142,42 +177,38 @@ const Auth = () => {
         email: registerEmail,
         password: registerPassword,
         confirmPassword: registerConfirmPassword,
-        fullName: fullName,
-        phone: phone,
+        fullName,
+        phone,
       });
 
       setLocalLoading(true);
 
-      // ✅ Artık Supabase yok: direkt kendi /auth/signup endpoint'ine gidiyoruz
+      // backend AuthSignupBody: { email, password, full_name?, phone? }
       await signupMutation({
         email: validated.email,
         password: validated.password,
-        options: {
-          // emailRedirectTo şu an backend'te kullanılmıyor ama istersen kullanırsın
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            full_name: validated.fullName,
-            phone: validated.phone,
-          },
-        },
+        full_name: validated.fullName,
+        phone: validated.phone,
       }).unwrap();
 
-      toast.success("Kayıt başarılı! Giriş yapabilirsiniz.");
+      toast.success('Kayıt başarılı! Giriş yapabilirsiniz.');
 
-      // Form temizle
-      setRegisterEmail("");
-      setRegisterPassword("");
-      setRegisterConfirmPassword("");
-      setFullName("");
-      setPhone("");
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
-      } else if (error?.data?.error?.message === "user_exists") {
-        toast.error("Bu e-posta adresi zaten kayıtlı");
-      } else {
-        toast.error("Bir hata oluştu");
+      // Reset form
+      setRegisterEmail('');
+      setRegisterPassword('');
+      setRegisterConfirmPassword('');
+      setFullName('');
+      setPhone('');
+    } catch (err: unknown) {
+      if (err instanceof z.ZodError) {
+        toast.error(err.errors[0]?.message ?? 'Form hatası');
+        return;
       }
+
+      const code = pickErrorMessage(err);
+
+      if (code === 'user_exists') toast.error('Bu e-posta adresi zaten kayıtlı');
+      else toast.error('Bir hata oluştu');
     } finally {
       setLocalLoading(false);
     }
@@ -195,6 +226,7 @@ const Auth = () => {
             <CardTitle className="text-2xl">Dijital Market</CardTitle>
             <CardDescription>Hesabınıza giriş yapın veya yeni hesap oluşturun</CardDescription>
           </CardHeader>
+
           <CardContent>
             <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -202,7 +234,7 @@ const Auth = () => {
                 <TabsTrigger value="register">Kayıt Ol</TabsTrigger>
               </TabsList>
 
-              {/* Login Tab */}
+              {/* Login */}
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
@@ -216,6 +248,7 @@ const Auth = () => {
                       required
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="login-password">Şifre</Label>
                     <Input
@@ -227,22 +260,20 @@ const Auth = () => {
                       required
                     />
                   </div>
+
                   <div className="flex justify-end">
                     <Button
                       type="button"
                       variant="link"
                       className="px-0 text-sm"
-                      onClick={() => navigate("/sifre-sifirlama")}
+                      onClick={() => navigate('/sifre-sifirlama')}
                     >
                       Şifremi Unuttum
                     </Button>
                   </div>
-                  <Button
-                    type="submit"
-                    className="w-full gradient-primary"
-                    disabled={loading}
-                  >
-                    {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
+
+                  <Button type="submit" className="w-full gradient-primary" disabled={loading}>
+                    {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
                   </Button>
 
                   <div className="relative my-4">
@@ -250,9 +281,7 @@ const Auth = () => {
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Veya
-                      </span>
+                      <span className="bg-background px-2 text-muted-foreground">Veya</span>
                     </div>
                   </div>
 
@@ -263,7 +292,7 @@ const Auth = () => {
                     onClick={handleGoogleLogin}
                     disabled={loading}
                   >
-                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                       <path
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                         fill="#4285F4"
@@ -286,7 +315,7 @@ const Auth = () => {
                 </form>
               </TabsContent>
 
-              {/* Register Tab */}
+              {/* Register */}
               <TabsContent value="register">
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
@@ -300,6 +329,7 @@ const Auth = () => {
                       required
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="register-phone">Telefon Numarası</Label>
                     <Input
@@ -311,6 +341,7 @@ const Auth = () => {
                       required
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="register-email">E-posta</Label>
                     <Input
@@ -322,6 +353,7 @@ const Auth = () => {
                       required
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="register-password">Şifre</Label>
                     <Input
@@ -333,6 +365,7 @@ const Auth = () => {
                       required
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="register-confirm-password">Şifre Tekrar</Label>
                     <Input
@@ -344,12 +377,9 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    className="w-full gradient-primary"
-                    disabled={loading}
-                  >
-                    {loading ? "Kayıt yapılıyor..." : "Kayıt Ol"}
+
+                  <Button type="submit" className="w-full gradient-primary" disabled={loading}>
+                    {loading ? 'Kayıt yapılıyor...' : 'Kayıt Ol'}
                   </Button>
 
                   <div className="relative my-4">
@@ -357,9 +387,7 @@ const Auth = () => {
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Veya
-                      </span>
+                      <span className="bg-background px-2 text-muted-foreground">Veya</span>
                     </div>
                   </div>
 
@@ -370,7 +398,7 @@ const Auth = () => {
                     onClick={handleGoogleLogin}
                     disabled={loading}
                   >
-                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                       <path
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                         fill="#4285F4"
@@ -394,8 +422,9 @@ const Auth = () => {
               </TabsContent>
             </Tabs>
           </CardContent>
+
           <CardFooter className="justify-center">
-            <Button variant="link" onClick={() => navigate("/")}>
+            <Button variant="link" onClick={() => navigate('/')}>
               Ana Sayfaya Dön
             </Button>
           </CardFooter>

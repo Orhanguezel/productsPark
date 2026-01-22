@@ -8,7 +8,7 @@ import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import type { ProductAdmin } from "@/integrations/metahub/rtk/types/products";
+import type { ProductAdmin } from "@/integrations/types";
 
 type Props = {
   formData: Partial<ProductAdmin>;

@@ -1,24 +1,25 @@
-// src/modules/profiles/controller.ts
+// =============================================================
+// FILE: src/modules/profiles/controller.ts
+// FINAL — add GET /profiles/:id (public)
+// =============================================================
 
 import type { RouteHandler, FastifyRequest } from 'fastify';
 import '@fastify/jwt';
+
 import { db } from '@/db/client';
 import { eq } from 'drizzle-orm';
+
 import { profiles, type ProfileRow, type ProfileInsert } from './schema';
-import { users } from '@/modules/auth/schema';
 import { profileUpsertSchema, type ProfileUpsertInput } from './validation';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 
 export type ProfileUpsertRequest = { profile: ProfileUpsertInput };
+export type ProfileIdParams = { id: string };
 
 type JwtUser = { sub?: unknown };
 
-// ✅ FE'ye döneceğimiz tip: profil column'ları + users.wallet_balance
-export type ProfileWithWallet = ProfileRow & {
-  wallet_balance: string; // decimal(10,2) → Drizzle select'te string
-};
-
 function getUserId(req: FastifyRequest): string {
+  // requireAuth sonrası fastify-jwt payload'ını req.user'a yazar.
   const payload = (req as unknown as { user?: JwtUser }).user;
   const subVal = payload?.sub;
   if (typeof subVal !== 'string' || subVal.length === 0) {
@@ -27,46 +28,47 @@ function getUserId(req: FastifyRequest): string {
   return subVal; // UUID
 }
 
-/**
- * ✅ Profili ve cüzdan bakiyesini 2 ayrı sorguyla al
- *   - profiles: profil alanları (ProfileRow)
- *   - users: wallet_balance
- *   Böylece Drizzle join'in "id: string | null" saçmalığıyla uğraşmıyoruz.
- */
-async function selectProfileWithWallet(userId: string): Promise<ProfileWithWallet | null> {
-  // 1) profil
-  const [profileRow] = await db
-    .select()
-    .from(profiles)
-    .where(eq(profiles.id, userId))
-    .limit(1);
+const profileIdParamsSchema = z.object({
+  id: z.string().uuid(),
+});
 
-  if (!profileRow) {
-    return null;
+// ---------------------------------------------------------------------
+// ✅ Public: GET /profiles/:id
+// ---------------------------------------------------------------------
+export const getProfileByIdPublic: RouteHandler<{ Params: ProfileIdParams }> = async (
+  req,
+  reply,
+) => {
+  try {
+    const { id } = profileIdParamsSchema.parse(req.params);
+
+    const rows = await db.select().from(profiles).where(eq(profiles.id, id)).limit(1);
+    const row: ProfileRow | undefined = rows[0];
+
+    if (!row) {
+      return reply.status(404).send({ error: { message: 'not_found' } });
+    }
+
+    return reply.send(row);
+  } catch (e: unknown) {
+    req.log.error(e);
+
+    if (e instanceof ZodError) {
+      return reply.status(400).send({ error: { message: 'validation_error', details: e.issues } });
+    }
+
+    return reply.status(500).send({ error: { message: 'profile_fetch_failed' } });
   }
+};
 
-  // 2) users.wallet_balance
-  const [userRow] = await db
-    .select({ wallet_balance: users.wallet_balance })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const wallet = userRow?.wallet_balance ?? '0.00';
-
-  const merged: ProfileWithWallet = {
-    ...profileRow,
-    wallet_balance: wallet,
-  };
-
-  return merged;
-}
-
-/** GET /profiles/v1/me */
+// ---------------------------------------------------------------------
+// Auth: GET /profiles/me
+// ---------------------------------------------------------------------
 export const getMyProfile: RouteHandler = async (req, reply) => {
   try {
     const userId = getUserId(req);
-    const row = await selectProfileWithWallet(userId);
+    const rows = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+    const row: ProfileRow | undefined = rows[0];
     return reply.send(row ?? null);
   } catch (e: unknown) {
     req.log.error(e);
@@ -77,7 +79,9 @@ export const getMyProfile: RouteHandler = async (req, reply) => {
   }
 };
 
-/** PUT /profiles/v1/me (upsert) */
+// ---------------------------------------------------------------------
+// Auth: PUT /profiles/me (upsert)
+// ---------------------------------------------------------------------
 export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = async (req, reply) => {
   try {
     const userId = getUserId(req);
@@ -92,14 +96,18 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
       ...(input.city !== undefined ? { city: input.city } : {}),
       ...(input.country !== undefined ? { country: input.country } : {}),
       ...(input.postal_code !== undefined ? { postal_code: input.postal_code } : {}),
-      // wallet_balance BU TABLODA YOK; users tablosunda tutuluyor.
+
+      // social (optional)
+      ...(input.website_url !== undefined ? { website_url: input.website_url } : {}),
+      ...(input.instagram_url !== undefined ? { instagram_url: input.instagram_url } : {}),
+      ...(input.facebook_url !== undefined ? { facebook_url: input.facebook_url } : {}),
+      ...(input.x_url !== undefined ? { x_url: input.x_url } : {}),
+      ...(input.linkedin_url !== undefined ? { linkedin_url: input.linkedin_url } : {}),
+      ...(input.youtube_url !== undefined ? { youtube_url: input.youtube_url } : {}),
+      ...(input.tiktok_url !== undefined ? { tiktok_url: input.tiktok_url } : {}),
     };
 
-    const existing = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.id, userId))
-      .limit(1);
+    const existing = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
 
     if (existing.length > 0) {
       await db
@@ -114,15 +122,12 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
       await db.insert(profiles).values(insertValues);
     }
 
-    // ✅ Güncel profili yine wallet_balance ile birlikte dön
-    const row = await selectProfileWithWallet(userId);
-    return reply.send(row);
+    const [row] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+    return reply.send(row ?? null);
   } catch (e: unknown) {
     req.log.error(e);
     if (e instanceof ZodError) {
-      return reply
-        .status(400)
-        .send({ error: { message: 'validation_error', details: e.issues } });
+      return reply.status(400).send({ error: { message: 'validation_error', details: e.issues } });
     }
     if (e instanceof Error && e.message === 'unauthorized') {
       return reply.status(401).send({ error: { message: 'unauthorized' } });

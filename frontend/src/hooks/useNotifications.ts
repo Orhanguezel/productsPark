@@ -1,93 +1,142 @@
 // =============================================================
 // FILE: src/hooks/useNotifications.ts
+// FINAL — Notifications hook (RTK + central types)
+// - Types from "@/integrations/types"
+// - RTK hooks from "@/integrations/hooks"
+// - strict/no-any
 // =============================================================
-import { useMemo } from "react";
-import { useAuth } from "./useAuth";
+
+import { useMemo, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+
 import {
-  useGetUnreadNotificationCountQuery,
   useListNotificationsQuery,
-  useMarkNotificationReadMutation,
-  useMarkAllNotificationsReadMutation,
+  useGetUnreadCountQuery,
+  useCreateNotificationMutation,
+  useUpdateNotificationMutation,
+  useMarkAllReadMutation,
   useDeleteNotificationMutation,
-} from "@/integrations/metahub/rtk/endpoints/notifications.endpoints";
-import type { Notification } from "@/integrations/metahub/rtk/types/notifications";
+} from '@/integrations/hooks';
+
+import type {
+  NotificationView,
+  NotificationsListParams,
+  CreateNotificationBody,
+} from '@/integrations/types';
 
 type UseNotificationsOptions = {
   /** Header için sadece sayım lazım ise false bırak (default: false) */
   fetchList?: boolean;
+
+  /** Liste query paramları (limit/offset/type/is_read vs.) */
+  listParams?: NotificationsListParams;
 };
 
 export function useNotifications(options?: UseNotificationsOptions) {
   const { user } = useAuth();
-  const enabled = !!user;
-  const fetchList = options?.fetchList ?? false;
 
-  // 🔢 Unread sayısı (hafif endpoint)
+  const enabled = !!user?.id;
+  const fetchList = options?.fetchList ?? false;
+  const listParams = options?.listParams;
+
+  // 🔢 Unread sayısı (hafif endpoint) -> {count:number}
   const {
     data: countData,
     isLoading: isLoadingCount,
     isFetching: isFetchingCount,
     refetch: refetchCount,
-  } = useGetUnreadNotificationCountQuery(undefined, {
+  } = useGetUnreadCountQuery(undefined, {
     skip: !enabled,
   });
 
-  // 📋 Tam liste (isteğe bağlı)
+  // 📋 Tam liste (isteğe bağlı) -> NotificationView[]
   const {
     data: listData,
     isLoading: isLoadingList,
     isFetching: isFetchingList,
     refetch: refetchList,
-  } = useListNotificationsQuery(undefined, {
+  } = useListNotificationsQuery(listParams ?? undefined, {
     skip: !enabled || !fetchList,
   });
 
-  const [markNotificationReadMutation] = useMarkNotificationReadMutation();
-  const [markAllReadMutation] = useMarkAllNotificationsReadMutation();
+  const [createNotificationMutation] = useCreateNotificationMutation();
+  const [updateNotificationMutation] = useUpdateNotificationMutation();
+  const [markAllReadMutation] = useMarkAllReadMutation();
   const [deleteNotificationMutation] = useDeleteNotificationMutation();
 
-  const items = useMemo<Notification[]>(
-    () => (listData?.items ?? []) as Notification[],
+  const items = useMemo<NotificationView[]>(
+    () => (Array.isArray(listData) ? listData : []),
     [listData],
   );
 
-  const unreadCount =
-    typeof countData === "number"
-      ? countData
-      : listData?.unreadCount ?? 0;
+  const unreadCount = typeof countData?.count === 'number' ? countData.count : 0;
 
   const isLoading = isLoadingCount || isLoadingList;
   const isFetching = isFetchingCount || isFetchingList;
 
-  const markRead = async (id: string) => {
-    if (!enabled) return;
-    await markNotificationReadMutation({ id, is_read: true }).unwrap();
-    void refetchCount();
-    if (fetchList) void refetchList();
-  };
+  const markRead = useCallback(
+    async (id: string) => {
+      if (!enabled) return;
 
-  const markAllRead = async () => {
+      await updateNotificationMutation({
+        id,
+        body: { is_read: true },
+      }).unwrap();
+
+      void refetchCount();
+      if (fetchList) void refetchList();
+    },
+    [enabled, updateNotificationMutation, refetchCount, fetchList, refetchList],
+  );
+
+  const markAllRead = useCallback(async () => {
     if (!enabled) return;
+
     await markAllReadMutation().unwrap();
-    void refetchCount();
-    if (fetchList) void refetchList();
-  };
 
-  const remove = async (id: string) => {
-    if (!enabled) return;
-    await deleteNotificationMutation(id).unwrap();
     void refetchCount();
     if (fetchList) void refetchList();
-  };
+  }, [enabled, markAllReadMutation, refetchCount, fetchList, refetchList]);
+
+  const remove = useCallback(
+    async (id: string) => {
+      if (!enabled) return;
+
+      await deleteNotificationMutation({ id }).unwrap();
+
+      void refetchCount();
+      if (fetchList) void refetchList();
+    },
+    [enabled, deleteNotificationMutation, refetchCount, fetchList, refetchList],
+  );
+
+  const create = useCallback(
+    async (body: CreateNotificationBody) => {
+      if (!enabled) return null;
+
+      const created = await createNotificationMutation(body).unwrap();
+
+      void refetchCount();
+      if (fetchList) void refetchList();
+
+      return created;
+    },
+    [enabled, createNotificationMutation, refetchCount, fetchList, refetchList],
+  );
 
   return {
     enabled,
+
     unreadCount,
     items,
+
     isLoading,
     isFetching,
+
     refetchCount,
     refetchList,
+
+    create,
     markRead,
     markAllRead,
     remove,

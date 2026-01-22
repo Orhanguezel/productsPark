@@ -92,6 +92,8 @@ export const env = {
     DIRECT_REQUEST: toBool(process.env.PAYTR_DIRECT_REQUEST, false),
   },
 
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
+
   GOOGLE: {
     CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? "",
     CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",

@@ -15,7 +15,7 @@ import type {
 } from "./validation";
 
 
-const BASE_ADMIN = "/admin/topbar_settings";
+const BASE_ADMIN = "/topbar_settings";
 
 export async function registerTopbarAdmin(app: FastifyInstance) {
   app.get<{ Querystring: AdminTopbarListQuery }>(

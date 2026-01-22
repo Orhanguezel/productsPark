@@ -1,93 +1,167 @@
-// src/pages/admin/tickets/TicketList.tsx
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { AdminLayout } from "@/components/admin/AdminLayout";
+// =============================================================
+// FILE: src/pages/admin/tickets/TicketList.tsx
+// FINAL — Ticket List (Admin)
+// - AdminUserView.email is string | null => userMap email nullable
+// - userMap stores only the fields we need (id/full_name/email)
+// - formatUser handles null-safe rendering
+// =============================================================
+
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AdminLayout } from '@/components/admin/AdminLayout';
 import {
-  Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious,
-} from "@/components/ui/pagination";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Eye, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 import {
   useListSupportTicketsAdminQuery,
   useUpdateSupportTicketAdminMutation,
   useDeleteSupportTicketAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/support_admin.endpoints";
-import { useListUsersAdminMiniQuery } from "@/integrations/metahub/rtk/endpoints/admin/users_admin.endpoints";
+  useAdminListQuery,
+} from '@/integrations/hooks';
 
 import type {
-  SupportTicket, SupportTicketStatus, SupportTicketPriority
-} from "@/integrations/metahub/rtk/types/support";
+  SupportTicket,
+  SupportTicketStatus,
+  SupportTicketPriority,
+  AdminUserView,
+} from '@/integrations/types';
 
-type FilterStatus = SupportTicketStatus | "all";
+type FilterStatus = SupportTicketStatus | 'all';
 
 const priorityText: Record<SupportTicketPriority, string> = {
-  urgent: "Acil",
-  high: "Yüksek",
-  medium: "Orta",
-  low: "Düşük",
+  urgent: 'Acil',
+  high: 'Yüksek',
+  medium: 'Orta',
+  low: 'Düşük',
 };
+
 const priorityColor = (p: SupportTicketPriority) => {
   switch (p) {
-    case "urgent": return "bg-red-500";
-    case "high": return "bg-orange-500";
-    case "medium": return "bg-yellow-500";
-    case "low": return "bg-green-500";
+    case 'urgent':
+      return 'bg-red-500';
+    case 'high':
+      return 'bg-orange-500';
+    case 'medium':
+      return 'bg-yellow-500';
+    case 'low':
+      return 'bg-green-500';
   }
 };
+
+// UI için mini user view (email nullable!)
+type MiniUser = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+function toMiniUser(u: AdminUserView): MiniUser {
+  return {
+    id: u.id,
+    full_name: u.full_name ?? null,
+    email: u.email ?? null,
+  };
+}
 
 export default function TicketList() {
   const navigate = useNavigate();
 
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>("open");
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('open');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const { data: allTickets = [], isLoading, refetch } = useListSupportTicketsAdminQuery(
-    { ...(filterStatus !== "all" ? { status: filterStatus as SupportTicketStatus } : {}) },
-  );
+  const {
+    data: allTickets = [],
+    isLoading,
+    refetch,
+  } = useListSupportTicketsAdminQuery({
+    ...(filterStatus !== 'all' ? { status: filterStatus as SupportTicketStatus } : {}),
+  });
 
   const tickets = allTickets as SupportTicket[];
 
   const filtered = useMemo(
-    () => (filterStatus === "all" ? tickets : tickets.filter((t) => t.status === filterStatus)),
+    () => (filterStatus === 'all' ? tickets : tickets.filter((t) => t.status === filterStatus)),
     [tickets, filterStatus],
   );
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
-  useEffect(() => { setCurrentPage(1); }, [filterStatus]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus]);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginated = filtered.slice(startIndex, startIndex + itemsPerPage);
 
   // sayfadaki user_id’ler için mini user bilgisi
-  const pageUserIds = useMemo(
-    () => Array.from(new Set(paginated.map(t => t.user_id).filter(Boolean))),
-    [paginated]
+  const pageUserIds = useMemo(() => {
+    const ids = paginated.map((t) => t.user_id).filter((x): x is string => !!x);
+    return Array.from(new Set(ids));
+  }, [paginated]);
+
+  const { data: miniUsers = [] } = useAdminListQuery(
+    { q: pageUserIds.join(',') },
+    {
+      skip: pageUserIds.length === 0,
+    },
   );
-  const { data: miniUsers = [] } = useListUsersAdminMiniQuery(pageUserIds, {
-    skip: pageUserIds.length === 0,
-  });
+
   const userMap = useMemo(() => {
-    const m = new Map<string, { id: string; full_name: string | null; email: string }>();
-    for (const u of miniUsers) m.set(u.id, u);
+    // ✅ email nullable
+    const m = new Map<string, MiniUser>();
+    (miniUsers as AdminUserView[]).forEach((u) => {
+      m.set(u.id, toMiniUser(u));
+    });
     return m;
   }, [miniUsers]);
 
   const formatUser = (userId: string) => {
     const u = userMap.get(userId);
     if (!u) return userId;
-    return u.full_name ? `${u.full_name} (${u.email})` : u.email;
+
+    // email null ise daha düzgün fallback
+    if (u.full_name && u.email) return `${u.full_name} (${u.email})`;
+    if (u.full_name) return u.full_name;
+    if (u.email) return u.email;
+    return userId;
   };
 
   const [updateTicket] = useUpdateSupportTicketAdminMutation();
@@ -96,20 +170,20 @@ export default function TicketList() {
   const handleStatusChange = async (ticketId: string, newStatus: SupportTicketStatus) => {
     try {
       await updateTicket({ id: ticketId, patch: { status: newStatus } }).unwrap();
-      toast.success("Durum güncellendi");
+      toast.success('Durum güncellendi');
       refetch();
     } catch {
-      toast.error("Durum güncellenemedi");
+      toast.error('Durum güncellenemedi');
     }
   };
 
   const handleDelete = async (ticketId: string) => {
     try {
       await deleteTicket(ticketId).unwrap();
-      toast.success("Destek talebi silindi");
+      toast.success('Destek talebi silindi');
       refetch();
     } catch {
-      toast.error("Destek talebi silinemedi");
+      toast.error('Destek talebi silinemedi');
     }
   };
 
@@ -117,7 +191,11 @@ export default function TicketList() {
     <AdminLayout title="Destek Yönetimi">
       <div className="space-y-4 max-w-full overflow-x-hidden">
         {/* Sekmeler */}
-        <Tabs value={filterStatus} onValueChange={(v) => setFilterStatus(v as FilterStatus)} className="w-full">
+        <Tabs
+          value={filterStatus}
+          onValueChange={(v) => setFilterStatus(v as FilterStatus)}
+          className="w-full"
+        >
           <TabsList className="w-full flex flex-wrap gap-2">
             <TabsTrigger value="open">Açık</TabsTrigger>
             <TabsTrigger value="in_progress">İşlemde</TabsTrigger>
@@ -147,7 +225,9 @@ export default function TicketList() {
                 <TableBody>
                   {paginated.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">Ticket bulunamadı</TableCell>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        Ticket bulunamadı
+                      </TableCell>
                     </TableRow>
                   ) : (
                     paginated.map((t) => (
@@ -161,13 +241,17 @@ export default function TicketList() {
                         </TableCell>
 
                         <TableCell>
-                          <Badge className={priorityColor(t.priority)}>{priorityText[t.priority]}</Badge>
+                          <Badge className={priorityColor(t.priority)}>
+                            {priorityText[t.priority]}
+                          </Badge>
                         </TableCell>
 
                         <TableCell>
                           <Select
                             value={t.status}
-                            onValueChange={(v) => handleStatusChange(t.id, v as SupportTicketStatus)}
+                            onValueChange={(v) =>
+                              handleStatusChange(t.id, v as SupportTicketStatus)
+                            }
                           >
                             <SelectTrigger className="w-[180px]">
                               <SelectValue />
@@ -181,11 +265,15 @@ export default function TicketList() {
                           </Select>
                         </TableCell>
 
-                        <TableCell>{new Date(t.created_at).toLocaleDateString("tr-TR")}</TableCell>
+                        <TableCell>{new Date(t.created_at).toLocaleDateString('tr-TR')}</TableCell>
 
                         <TableCell className="text-right min-w-[190px]">
                           <div className="flex items-center justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => navigate(`/admin/tickets/${t.id}`)}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/admin/tickets/${t.id}`)}
+                            >
                               <Eye className="h-4 w-4 mr-2" />
                               Görüntüle
                             </Button>
@@ -196,11 +284,13 @@ export default function TicketList() {
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </AlertDialogTrigger>
+
                               <AlertDialogContent>
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Destek Talebini Sil</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+                                    Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem
+                                    geri alınamaz.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -238,7 +328,9 @@ export default function TicketList() {
                           {formatUser(t.user_id)}
                         </p>
                       </div>
-                      <Badge className={priorityColor(t.priority)}>{priorityText[t.priority]}</Badge>
+                      <Badge className={priorityColor(t.priority)}>
+                        {priorityText[t.priority]}
+                      </Badge>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -258,12 +350,16 @@ export default function TicketList() {
                       </Select>
 
                       <span className="text-xs text-muted-foreground ml-auto">
-                        {new Date(t.created_at).toLocaleDateString("tr-TR")}
+                        {new Date(t.created_at).toLocaleDateString('tr-TR')}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/admin/tickets/${t.id}`)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/admin/tickets/${t.id}`)}
+                      >
                         <Eye className="h-4 w-4 mr-2" />
                         Görüntüle
                       </Button>
@@ -278,7 +374,8 @@ export default function TicketList() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Destek Talebini Sil</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+                              Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem geri
+                              alınamaz.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -309,6 +406,7 @@ export default function TicketList() {
                   }}
                 />
               </PaginationItem>
+
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <PaginationItem key={page}>
                   <PaginationLink
@@ -323,6 +421,7 @@ export default function TicketList() {
                   </PaginationLink>
                 </PaginationItem>
               ))}
+
               <PaginationItem>
                 <PaginationNext
                   href="#"

@@ -1,8 +1,18 @@
+// =============================================================
+// FILE: src/db/seed/index.ts
+// FINAL — SQL Seed Runner (argon2 hash inject)
+// - DROP/CREATE (opsiyonel --no-drop)
+// - --only=10,20,30 filtre desteği
+// - SQL placeholder inject: {{ADMIN_EMAIL}}, {{ADMIN_ID}}, {{ADMIN_PASSWORD_HASH}}
+// - Session vars set: @ADMIN_EMAIL, @ADMIN_ID, @ADMIN_PASSWORD_HASH
+// =============================================================
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
-import bcrypt from 'bcryptjs';
+import { hash as argonHash } from 'argon2';
+
 import { env } from '@/core/env';
 import { cleanSql, splitStatements, logStep } from './utils';
 
@@ -20,7 +30,11 @@ function parseFlags(argv: string[]): Flags {
   for (const a of argv.slice(2)) {
     if (a === '--no-drop') flags.noDrop = true;
     else if (a.startsWith('--only=')) {
-      flags.only = a.replace('--only=', '').split(',').map(s => s.trim());
+      flags.only = a
+        .replace('--only=', '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
   }
   return flags;
@@ -29,7 +43,9 @@ function parseFlags(argv: string[]): Flags {
 function assertSafeToDrop(dbName: string) {
   const allowDrop = process.env.ALLOW_DROP === 'true';
   const isProd = process.env.NODE_ENV === 'production';
-  const isSystem = ['mysql','information_schema','performance_schema','sys'].includes(dbName.toLowerCase());
+  const isSystem = ['mysql', 'information_schema', 'performance_schema', 'sys'].includes(
+    dbName.toLowerCase(),
+  );
   if (isSystem) throw new Error(`Sistem DB'si drop edilemez: ${dbName}`);
   if (isProd && !allowDrop) throw new Error('Prod ortamda DROP için ALLOW_DROP=true bekleniyor.');
 }
@@ -38,7 +54,7 @@ async function dropAndCreate(root: mysql.Connection) {
   assertSafeToDrop(env.DB.name);
   await root.query(`DROP DATABASE IF EXISTS \`${env.DB.name}\`;`);
   await root.query(
-    `CREATE DATABASE \`${env.DB.name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+    `CREATE DATABASE \`${env.DB.name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
   );
 }
 
@@ -60,7 +76,6 @@ async function createConnToDb(): Promise<mysql.Connection> {
     password: env.DB.password,
     database: env.DB.name,
     multipleStatements: true,
-    // unicode_ci ile uyumlu
     charset: 'utf8mb4_unicode_ci',
   });
 }
@@ -72,50 +87,60 @@ function shouldRun(file: string, flags: Flags) {
   return prefix ? flags.only.includes(prefix) : false;
 }
 
-/** admin değişkenlerini ENV'den oku + bcrypt üret */
-function getAdminVars() {
-  const email = (process.env.ADMIN_EMAIL || 'orhanguzell@gmail.com').trim();
-  const id = (process.env.ADMIN_ID || '4f618a8d-6fdb-498c-898a-395d368b2193').trim();
-  const plainPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const passwordHash = bcrypt.hashSync(plainPassword, 12);
-  return { email, id, passwordHash };
-}
-
 /** SQL string güvenli tek tırnak escape */
 function sqlStr(v: string) {
   return v.replaceAll("'", "''");
 }
 
+/** admin değişkenlerini ENV'den oku + argon2 hash üret */
+async function getAdminVars(): Promise<{ email: string; id: string; passwordHash: string }> {
+  const email = (process.env.ADMIN_EMAIL || 'orhanguzell@gmail.com').trim();
+  const id = (process.env.ADMIN_ID || '4f618a8d-6fdb-498c-898a-395d368b2193').trim();
+  const plainPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+  // argon2id default (v=19) — auth verify ile uyumlu
+  const passwordHash = await argonHash(plainPassword);
+
+  return { email, id, passwordHash };
+}
+
 /** Dosyayı oku, temizle, admin değişkenleri enjekte et ve opsiyonel yer tutucu değiştir */
-function prepareSqlForRun(rawSql: string, admin: { email: string; id: string; passwordHash: string }) {
+function prepareSqlForRun(
+  rawSql: string,
+  admin: { email: string; id: string; passwordHash: string },
+) {
   // Dosyadaki comment/boşluk temizliği
   let sql = cleanSql(rawSql);
 
-  // Header ile session değişkenlerini set et (dosyada COALESCE olsa bile önce biz set ediyoruz)
+  // Header ile session değişkenlerini set et
   const header = [
     `SET @ADMIN_EMAIL := '${sqlStr(admin.email)}';`,
     `SET @ADMIN_ID := '${sqlStr(admin.id)}';`,
-    `SET @ADMIN_PASSWORD_HASH := '${sqlStr(admin.passwordHash)}';`
+    `SET @ADMIN_PASSWORD_HASH := '${sqlStr(admin.passwordHash)}';`,
   ].join('\n');
 
-  // Eski yer tutucu kalıplarını da destekle (örn: {{ADMIN_BCRYPT}})
+  // Placeholder destekleri
   sql = sql
-    .replaceAll('{{ADMIN_BCRYPT}}', admin.passwordHash)
+    .replaceAll('{{ADMIN_BCRYPT}}', admin.passwordHash) // legacy adı kalsın; artık argon hash basıyoruz
     .replaceAll('{{ADMIN_PASSWORD_HASH}}', admin.passwordHash)
     .replaceAll('{{ADMIN_EMAIL}}', admin.email)
     .replaceAll('{{ADMIN_ID}}', admin.id);
 
-  // En üstte header'ı ekle
+  // En üstte header
   sql = `${header}\n${sql}`;
 
   return sql;
 }
 
-async function runSqlFile(conn: mysql.Connection, absPath: string, adminVars: { email: string; id: string; passwordHash: string }) {
+async function runSqlFile(
+  conn: mysql.Connection,
+  absPath: string,
+  adminVars: { email: string; id: string; passwordHash: string },
+) {
   const name = path.basename(absPath);
   logStep(`⏳ ${name} çalışıyor...`);
-  const raw = fs.readFileSync(absPath, 'utf8');
 
+  const raw = fs.readFileSync(absPath, 'utf8');
   const sql = prepareSqlForRun(raw, adminVars);
   const statements = splitStatements(sql);
 
@@ -127,6 +152,7 @@ async function runSqlFile(conn: mysql.Connection, absPath: string, adminVars: { 
     if (!stmt) continue;
     await conn.query(stmt);
   }
+
   logStep(`✅ ${name} bitti`);
 }
 
@@ -152,16 +178,17 @@ async function main() {
 
   try {
     // 3) Admin değişkenlerini hazırla (tek sefer)
-    const ADMIN = getAdminVars();
+    const ADMIN = await getAdminVars();
 
     // 4) SQL klasörünü bul (öncelik env, sonra dist/sql, yoksa src/sql)
     const envDir = process.env.SEED_SQL_DIR && process.env.SEED_SQL_DIR.trim();
     const distSql = path.resolve(__dirname, 'sql');
-    const srcSql  = path.resolve(__dirname, '../../../src/db/seed/sql');
-    const sqlDir  = envDir ? path.resolve(envDir) : (fs.existsSync(distSql) ? distSql : srcSql);
+    const srcSql = path.resolve(__dirname, '../../../src/db/seed/sql');
+    const sqlDir = envDir ? path.resolve(envDir) : fs.existsSync(distSql) ? distSql : srcSql;
 
-    const files = fs.readdirSync(sqlDir)
-      .filter(f => f.endsWith('.sql'))
+    const files = fs
+      .readdirSync(sqlDir)
+      .filter((f) => f.endsWith('.sql'))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     for (const f of files) {
@@ -172,6 +199,7 @@ async function main() {
       }
       await runSqlFile(conn, abs, ADMIN);
     }
+
     logStep('🎉 Seed tamamlandı.');
   } finally {
     await conn.end();

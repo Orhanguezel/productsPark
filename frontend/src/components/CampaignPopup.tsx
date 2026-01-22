@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 
-import { useListPopupsQuery } from "@/integrations/metahub/rtk/endpoints/popups.endpoints";
+import { useListPopupsPublicQuery } from '@/integrations/hooks';
 
 export const CampaignPopup = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,7 +31,7 @@ export const CampaignPopup = () => {
   const isAdminPage = location.pathname.startsWith("/admin");
 
   // ✅ Artık RTK'dan çekiyoruz
-  const { data: popups } = useListPopupsQuery(
+  const { data: popups } = useListPopupsPublicQuery(
     { is_active: 1 }, // sadece aktif popuplar
     {
       skip: isAdminPage, // admin sayfalarında hiç çağırma

@@ -19,7 +19,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import type { TopProduct } from "./types";
+import type { TopProduct } from '@/integrations/types';
 
 const COLORS = [
   "hsl(var(--chart-1))",

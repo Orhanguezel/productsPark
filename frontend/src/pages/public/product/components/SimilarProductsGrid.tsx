@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Star } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
-import type { Product } from "./productDetail.types";
+import type { Product } from '@/integrations/types';
 
 interface SimilarProductsGridProps {
   products: Product[];

@@ -14,8 +14,8 @@ import {
   useCreateFaqAdminMutation,
   useUpdateFaqAdminMutation,
   useRemoveFaqAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/faqs_admin.endpoints";
-import type { Faq } from "@/integrations/metahub/rtk/types/faqs";
+} from "@/integrations/hooks";
+import type { Faq } from "@/integrations/types";
 import { toast } from "sonner";
 
 /** FE içinde kullanılacak lokal Faq modeli */

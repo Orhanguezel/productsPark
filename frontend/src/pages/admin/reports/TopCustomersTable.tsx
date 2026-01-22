@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { TopCustomer } from "./types";
+import type { TopCustomer } from '@/integrations/types';
 
 interface TopCustomersTableProps {
   title: string;

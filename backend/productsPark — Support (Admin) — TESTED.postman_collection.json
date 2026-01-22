@@ -1,0 +1,1221 @@
+{
+	"info": {
+		"_postman_id": "a8e7c6d1-3c2f-4ef0-9d9d-3b0f7a4c9a11",
+		"name": "productsPark — Support + Telegram (Admin) — TESTED",
+		"description": "Support tickets (public/protected/admin) + Telegram admin endpoints (inbound/autoreply/test/send/event). Includes auth helper, chained ids, and negative/validation checks.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 - Auth",
+			"item": [
+				{
+					"name": "Admin Login — POST /auth/login (set access_token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200/201', function () {",
+									"  pm.expect([200,201]).to.include(pm.response.code);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"// token alan adını projene göre uyarlayabilirsin",
+									"const token = json.access_token || json.token || (json.data && (json.data.access_token || json.data.token));",
+									"pm.test('Token exists', function(){",
+									"  pm.expect(token).to.be.ok;",
+									"});",
+									"",
+									"if (token) {",
+									"  pm.collectionVariables.set('access_token', String(token));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "10 - Support (Public)",
+			"item": [
+				{
+					"name": "List Tickets (public) — GET /support_tickets",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('x-total-count header exists', function(){",
+									"  pm.expect(pm.response.headers.has('x-total-count')).to.be.true;",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Array response', function(){",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"",
+									"if (json.length) {",
+									"  pm.collectionVariables.set('ticketIdFromList', json[0].id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/support_tickets?limit=20&offset=0&sort=created_at&order=desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"support_tickets"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "sort",
+									"value": "created_at"
+								},
+								{
+									"key": "order",
+									"value": "desc"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ticket (public) — GET /support_tickets/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200 or 404', function () {",
+									"  pm.expect([200,404]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has id + subject', function(){",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('subject');",
+									"  });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/support_tickets/{{ticketIdFromList}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"support_tickets",
+								"{{ticketIdFromList}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Replies by Ticket (public) — GET /ticket_replies/by-ticket/:ticketId",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Array response', function(){",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/ticket_replies/by-ticket/{{ticketIdFromList}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket_replies",
+								"by-ticket",
+								"{{ticketIdFromList}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "15 - Support (Protected / User)",
+			"item": [
+				{
+					"name": "Create Ticket (protected) — POST /support_tickets (set ticketId)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 201', function(){",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Created has id', function(){",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(String(json.id)).to.have.length(36);",
+									"});",
+									"pm.collectionVariables.set('ticketId', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{testUserId}}\",\n  \"subject\": \"{{testTicketSubject}}\",\n  \"message\": \"{{testTicketMessage}}\",\n  \"priority\": \"{{testTicketPriority}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/support_tickets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"support_tickets"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Patch Ticket (protected) — PATCH /support_tickets/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200 or 403 or 404', function(){",
+									"  pm.expect([200,403,404]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Updated message from user\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/support_tickets/{{ticketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"support_tickets",
+								"{{ticketId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Reply (protected, non-admin) — POST /ticket_replies (set replyId)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 201', function(){",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Created reply has id', function(){",
+									"  pm.expect(json).to.have.property('id');",
+									"});",
+									"pm.collectionVariables.set('replyId', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ticket_id\": \"{{ticketId}}\",\n  \"message\": \"User reply message\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket_replies",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket_replies"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "20 - Support (Admin)",
+			"item": [
+				{
+					"name": "Admin List Tickets — GET /admin/support_tickets",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"pm.test('x-total-count header exists', function(){",
+									"  pm.expect(pm.response.headers.has('x-total-count')).to.be.true;",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Array response', function(){",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"if (json.length) {",
+									"  pm.collectionVariables.set('adminTicketIdFromList', json[0].id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/support_tickets?limit=20&offset=0&sort=created_at&order=desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"support_tickets"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "sort",
+									"value": "created_at"
+								},
+								{
+									"key": "order",
+									"value": "desc"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Get Ticket — GET /admin/support_tickets/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200 or 404', function(){",
+									"  pm.expect([200,404]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/support_tickets/{{ticketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"support_tickets",
+								"{{ticketId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Patch Ticket (status/priority) — PATCH /admin/support_tickets/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200 or 404', function(){",
+									"  pm.expect([200,404]).to.include(pm.response.code);",
+									"});",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Updated has status/priority', function(){",
+									"    pm.expect(json).to.have.property('status');",
+									"    pm.expect(json).to.have.property('priority');",
+									"  });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"in_progress\",\n  \"priority\": \"high\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/support_tickets/{{ticketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"support_tickets",
+								"{{ticketId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Toggle Close — POST /admin/support_tickets/:id/close",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200 or 404', function(){",
+									"  pm.expect([200,404]).to.include(pm.response.code);",
+									"});",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Closed', function(){",
+									"    pm.expect(String(json.status)).to.eql('closed');",
+									"  });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/support_tickets/{{ticketId}}/close",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"support_tickets",
+								"{{ticketId}}",
+								"close"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Toggle Reopen — POST /admin/support_tickets/:id/reopen",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200 or 404', function(){",
+									"  pm.expect([200,404]).to.include(pm.response.code);",
+									"});",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Open', function(){",
+									"    pm.expect(String(json.status)).to.eql('open');",
+									"  });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/support_tickets/{{ticketId}}/reopen",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"support_tickets",
+								"{{ticketId}}",
+								"reopen"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin List Replies — GET /admin/ticket_replies/by-ticket/:ticketId",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Array response', function(){",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/ticket_replies/by-ticket/{{ticketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"ticket_replies",
+								"by-ticket",
+								"{{ticketId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Create Reply — POST /admin/ticket_replies (fires email+telegram ticket_replied)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 201', function(){",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Reply has id', function(){",
+									"  pm.expect(json).to.have.property('id');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ticket_id\": \"{{ticketId}}\",\n  \"user_id\": \"{{testUserId}}\",\n  \"message\": \"Admin reply: {{testTicketReplyMessage}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/ticket_replies",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"ticket_replies"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "30 - Telegram (Admin)",
+			"item": [
+				{
+					"name": "Get AutoReply — GET /admin/telegram/autoreply",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('shape', function(){",
+									"  pm.expect(json).to.have.property('enabled');",
+									"  pm.expect(json).to.have.property('template');",
+									"  pm.expect(json).to.have.property('mode');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update AutoReply — POST /admin/telegram/autoreply",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('{ok:true}', function(){",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": true,\n  \"template\": \"{{autoReplyTemplateNew}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/autoreply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"autoreply"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Telegram Test — POST /admin/telegram/test",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('{ok:true}', function(){",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chat_id\": \"{{telegramChatIdOverride}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/test",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"test"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Telegram Send (generic) — POST /admin/telegram/send",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 201', function(){",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('{ok:true}', function(){",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Manual Telegram\",\n  \"message\": \"Hello from Postman\",\n  \"chat_id\": \"{{telegramChatIdOverride}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/send",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"send"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Event Send (new_ticket) — POST /admin/telegram/event",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 201', function(){",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('{ok:true}', function(){",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event\": \"new_ticket\",\n  \"chat_id\": \"{{telegramChatIdOverride}}\",\n  \"data\": {\n    \"user_name\": \"{{testUserName}}\",\n    \"subject\": \"{{testTicketSubject}}\",\n    \"priority\": \"{{testTicketPriority}}\",\n    \"message\": \"{{testTicketMessage}}\",\n    \"created_at\": \"{{nowIso}}\",\n    \"category\": \"support\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/event",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"event"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Event Send (ticket_replied) — POST /admin/telegram/event",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 201', function(){",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('{ok:true}', function(){",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event\": \"ticket_replied\",\n  \"chat_id\": \"{{telegramChatIdOverride}}\",\n  \"data\": {\n    \"user_name\": \"{{testUserName}}\",\n    \"subject\": \"{{testTicketSubject}}\",\n    \"priority\": \"{{testTicketPriority}}\",\n    \"message\": \"Reply: {{testTicketReplyMessage}}\",\n    \"created_at\": \"{{nowIso}}\",\n    \"category\": \"support\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/event",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"event"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Inbound — GET /admin/telegram/inbound",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 200', function(){",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('Has items', function(){",
+									"  pm.expect(json).to.have.property('items');",
+									"  pm.expect(Array.isArray(json.items)).to.be.true;",
+									"});",
+									"if (json.next_cursor) {",
+									"  pm.collectionVariables.set('inboundCursor', json.next_cursor);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/inbound?limit=20&cursor={{inboundCursor}}&q={{inboundQ}}&chat_id={{inboundChatId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"inbound"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "cursor",
+									"value": "{{inboundCursor}}"
+								},
+								{
+									"key": "q",
+									"value": "{{inboundQ}}"
+								},
+								{
+									"key": "chat_id",
+									"value": "{{inboundChatId}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "99 - Negative / Policy Checks",
+			"item": [
+				{
+					"name": "Create Ticket (validation error) — POST /support_tickets (expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 400', function(){",
+									"  pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"not-uuid\",\n  \"subject\": \"\",\n  \"message\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/support_tickets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"support_tickets"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Telegram Event (missing event) — POST /admin/telegram/event (expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('HTTP 400', function(){",
+									"  pm.response.to.have.status(400);",
+									"});",
+									"const json = pm.response.json();",
+									"pm.test('validation_error', function(){",
+									"  pm.expect(json).to.have.property('error');",
+									"  pm.expect(json.error).to.have.property('message', 'validation_error');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/telegram/event",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"telegram",
+								"event"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8081/api"
+		},
+		{
+			"key": "admin_email",
+			"value": "orhanguzell@gmail.com"
+		},
+		{
+			"key": "admin_password",
+			"value": "admin123"
+		},
+		{
+			"key": "access_token",
+			"value": ""
+		},
+		{
+			"key": "testUserId",
+			"value": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+		},
+		{
+			"key": "testUserName",
+			"value": "Orhan"
+		},
+		{
+			"key": "testTicketSubject",
+			"value": "Postman Test Ticket"
+		},
+		{
+			"key": "testTicketPriority",
+			"value": "medium"
+		},
+		{
+			"key": "testTicketMessage",
+			"value": "Hello from Postman. This is a support ticket test."
+		},
+		{
+			"key": "testTicketReplyMessage",
+			"value": "We received your ticket, we will get back soon."
+		},
+		{
+			"key": "ticketId",
+			"value": ""
+		},
+		{
+			"key": "ticketIdFromList",
+			"value": ""
+		},
+		{
+			"key": "adminTicketIdFromList",
+			"value": ""
+		},
+		{
+			"key": "telegramChatIdOverride",
+			"value": ""
+		},
+		{
+			"key": "autoReplyTemplateNew",
+			"value": "Test auto reply (productsPark)"
+		},
+		{
+			"key": "inboundQ",
+			"value": ""
+		},
+		{
+			"key": "inboundChatId",
+			"value": ""
+		},
+		{
+			"key": "inboundCursor",
+			"value": ""
+		},
+		{
+			"key": "nowIso",
+			"value": "2026-01-17T12:00:00.000Z"
+		}
+	]
+}

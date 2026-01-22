@@ -11,7 +11,7 @@ import {
   adminDeleteSiteSetting,
 } from './admin.controller';
 
-const BASE = '/admin/site_settings';
+const BASE = '/site_settings';
 
 export async function registerSiteSettingsAdmin(app: FastifyInstance) {
   app.get(`${BASE}`,           { preHandler: [requireAuth] }, adminListSiteSettings);

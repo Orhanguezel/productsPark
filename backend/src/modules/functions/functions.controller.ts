@@ -2,6 +2,7 @@
 // FILE: src/modules/functions/functions.controller.ts
 // =============================================================
 import type { FastifyReply, FastifyRequest } from "fastify";
+import crypto from "crypto";
 import { sendMailRaw } from "@/modules/mail/service";
 
 /* -------------------- küçük yardımcılar -------------------- */
@@ -26,6 +27,75 @@ function getBaseUrl(req: FastifyRequest): string {
   return `${proto}://${host}`.replace(/\/+$/, "");
 }
 
+function safeString(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  return s.length ? s : undefined;
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  // hex/base64 vb. farklı uzunluklar için güvenli karşılaştırma
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+/**
+ * Shopier callback signature doğrulama:
+ * - Algoritma entegrasyona göre değişebilir.
+ * - Bu implementasyon "HMAC-SHA256" örnek doğrulamadır.
+ * - Env'de SHOPIER_CALLBACK_SECRET varsa doğrular, yoksa doğrulamaz (accept mode).
+ *
+ * Varsayım: signature = HMAC_SHA256(secret, `${platform_order_id}|${payment_id}|${status}|${random_nr}|${API_key}`)
+ * Eğer Shopier dokümanınız farklı ise bu stringi değiştirirsiniz.
+ */
+function verifyShopierSignature(args: {
+  platform_order_id: string;
+  payment_id: string;
+  status: string;
+  random_nr?: string;
+  API_key?: string;
+  signature: string;
+}): { ok: boolean; reason?: string } {
+  const secret = process.env.SHOPIER_CALLBACK_SECRET;
+  if (!secret) {
+    return { ok: true, reason: "secret_not_configured" };
+  }
+
+  const payload = [
+    args.platform_order_id,
+    args.payment_id,
+    args.status,
+    args.random_nr || "",
+    args.API_key || "",
+  ].join("|");
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(payload, "utf8")
+    .digest("hex");
+
+  const ok = timingSafeEqual(expected, args.signature);
+  return ok ? { ok: true } : { ok: false, reason: "invalid_signature" };
+}
+
+/**
+ * Çok basit idempotency:
+ * - Prod'da bunun DB seviyesinde tutulması daha doğru (orders/payments tablosu).
+ * - Şimdilik process memory’de cache: restart olursa sıfırlanır.
+ */
+const shopierSeen = new Map<string, number>();
+function shopierIdempotencyKey(platform_order_id: string, payment_id: string): string {
+  return `${platform_order_id}::${payment_id}`;
+}
+function shopierMarkSeen(key: string) {
+  shopierSeen.set(key, Date.now());
+}
+function shopierIsSeen(key: string): boolean {
+  return shopierSeen.has(key);
+}
+
 /* ==================================================================
    SHOPIER
    FE beklediği shape: { success, form_action, form_data }
@@ -46,11 +116,96 @@ export async function shopierCreatePayment(
   return reply.send({ success: true, form_action, form_data });
 }
 
+type ShopierCallbackBody = {
+  platform_order_id?: string;
+  status?: string;
+  payment_id?: string;
+  signature?: string;
+
+  random_nr?: string;
+  API_key?: string;
+};
+
 export async function shopierCallback(
-  _req: FastifyRequest,
+  req: FastifyRequest,
   reply: FastifyReply,
 ) {
-  return reply.send({ success: true });
+  const body = (req.body as ShopierCallbackBody) || {};
+
+  const platform_order_id = safeString(body.platform_order_id);
+  const status = safeString(body.status);
+  const payment_id = safeString(body.payment_id);
+  const signature = safeString(body.signature);
+
+  const random_nr = safeString(body.random_nr);
+  const API_key = safeString(body.API_key);
+
+  // Zorunlu alan doğrulama
+  if (!platform_order_id || !status || !payment_id || !signature) {
+    req.log.warn(
+      { body_keys: Object.keys(body || {}), platform_order_id, status, payment_id },
+      "shopier-callback missing required fields",
+    );
+    return reply.code(400).send({ success: false, error: "missing_fields" });
+  }
+
+  // Idempotency: aynı event tekrar gelirse 200 OK dön
+  const idemKey = shopierIdempotencyKey(platform_order_id, payment_id);
+  if (shopierIsSeen(idemKey)) {
+    req.log.info(
+      { platform_order_id, payment_id, status },
+      "shopier-callback duplicate (idempotent ok)",
+    );
+    return reply.send({ success: true });
+  }
+
+  // Signature verify (opsiyonel)
+  const sig = verifyShopierSignature({
+    platform_order_id,
+    payment_id,
+    status,
+    random_nr,
+    API_key,
+    signature,
+  });
+
+  if (!sig.ok) {
+    req.log.warn(
+      { platform_order_id, payment_id, status, reason: sig.reason },
+      "shopier-callback signature invalid",
+    );
+    return reply.code(401).send({ success: false, error: sig.reason || "unauthorized" });
+  }
+
+  // İşleme al
+  try {
+    // Burada gerçek entegrasyonda şunları yaparsınız:
+    // - platform_order_id ile order/payment kaydı bul
+    // - status başarılı ise ödeme durumunu paid yap
+    // - fulfillment tetikle (kod üret, stok düş, email gönder vb.)
+    // - audit log
+
+    // Şimdilik sadece log + idempotency mark
+    shopierMarkSeen(idemKey);
+
+    req.log.info(
+      {
+        platform_order_id,
+        payment_id,
+        status,
+        signature_verified: process.env.SHOPIER_CALLBACK_SECRET ? true : "skipped",
+      },
+      "shopier-callback accepted",
+    );
+
+    return reply.send({ success: true });
+  } catch (err) {
+    req.log.error(
+      { err, platform_order_id, payment_id, status },
+      "shopier-callback failed",
+    );
+    return reply.code(500).send({ success: false, error: "shopier_callback_failed" });
+  }
 }
 
 /* ==================================================================
@@ -465,3 +620,146 @@ ${xmlBody}</urlset>`;
     .type("application/xml; charset=utf-8")
     .send(xml);
 }
+
+
+/* ==================================================================
+   TEST MAIL
+   - FE: POST /functions/send-test-mail { to?: string }
+   - If "to" missing: try req.user.email (if auth plugin attaches user)
+   ================================================================== */
+
+type SendTestMailBody = {
+  to?: string;
+};
+
+type AuthUserShape = { email?: unknown };
+
+/** req.user shape projeden projeye değişebilir; tolerant okuyoruz */
+function pickReqUserEmail(req: FastifyRequest): string | undefined {
+  const u = (req as unknown as { user?: AuthUserShape }).user;
+  const email = u?.email;
+  if (typeof email !== 'string') return undefined;
+  const s = email.trim();
+  return s.length ? s : undefined;
+}
+
+export async function sendTestMail(req: FastifyRequest, reply: FastifyReply) {
+  const body = (req.body as SendTestMailBody) || {};
+
+  // öncelik: body.to
+  const to = typeof body.to === 'string' && body.to.trim() ? body.to.trim() : undefined;
+
+  // fallback: req.user.email (auth varsa)
+  const fallbackTo = pickReqUserEmail(req);
+
+  const target = to || fallbackTo;
+
+  if (!target) {
+    return reply.code(400).send({
+      ok: false,
+      message: 'missing_to',
+    });
+  }
+
+  const siteName = process.env.SITE_NAME || 'Platform';
+  const now = new Date();
+  const stamp = now.toISOString();
+
+  const subject = `${siteName} — SMTP Test (${stamp})`;
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
+      <h2 style="font-size:18px;margin-bottom:8px;">SMTP Test Maili</h2>
+      <p style="margin:0 0 12px 0;">
+        Bu e-posta SMTP ayarlarınızın çalıştığını doğrulamak için gönderildi.
+      </p>
+      <div style="margin:16px 0;padding:12px;border-radius:8px;background:#f9fafb;">
+        <div><strong>Zaman:</strong> ${stamp}</div>
+        <div><strong>Alıcı:</strong> ${target}</div>
+      </div>
+      <p style="margin-top:16px;">
+        <strong>${siteName}</strong>
+      </p>
+    </div>
+  `;
+
+  const text = [
+    'SMTP Test Maili',
+    '',
+    'Bu e-posta SMTP ayarlarınızın çalıştığını doğrulamak için gönderildi.',
+    `Zaman: ${stamp}`,
+    `Alici: ${target}`,
+    '',
+    siteName,
+  ].join('\n');
+
+  try {
+    await sendMailRaw({
+      to: target,
+      subject,
+      html,
+      text,
+    });
+
+    req.log.info({ to: target }, 'send-test-mail success');
+    return reply.send({ ok: true });
+  } catch (err) {
+    req.log.error({ err, to: target }, 'send-test-mail failed');
+    return reply.code(500).send({
+      ok: false,
+      message: 'send_test_mail_failed',
+    });
+  }
+}
+
+
+
+type TelegramSendTestBody = {
+  bot_token?: string;
+  chat_id?: string;
+  message?: string;
+  parse_mode?: 'HTML' | 'MarkdownV2';
+};
+
+export async function telegramSendTest(req: FastifyRequest, reply: FastifyReply) {
+  const body = (req.body as TelegramSendTestBody) || {};
+
+  const bot_token = safeString(body.bot_token);
+  const chat_id = safeString(body.chat_id);
+  const message = safeString(body.message);
+  const parse_mode = body.parse_mode === 'HTML' || body.parse_mode === 'MarkdownV2' ? body.parse_mode : undefined;
+
+  if (!bot_token || !chat_id || !message) {
+    return reply.code(400).send({ ok: false, message: 'missing_fields' });
+  }
+
+  const url = `https://api.telegram.org/bot${bot_token}/sendMessage`;
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id,
+        text: message,
+        ...(parse_mode ? { parse_mode } : {}),
+        disable_web_page_preview: true,
+      }),
+    });
+
+    const data = (await resp.json()) as unknown;
+
+    if (!resp.ok) {
+      req.log.warn({ status: resp.status, data }, 'telegram-send-test failed');
+      return reply.code(502).send({ ok: false, message: 'telegram_api_error' });
+    }
+
+    req.log.info({ chat_id }, 'telegram-send-test success');
+    return reply.send({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, 'telegram-send-test exception');
+    return reply.code(500).send({ ok: false, message: 'telegram_send_failed' });
+  }
+}
+
+

@@ -36,19 +36,17 @@ import { toast } from "sonner";
 import {
   useListSupportTicketsQuery,
   useCreateSupportTicketMutation,
-} from "@/integrations/metahub/rtk/endpoints/support_tickets.endpoints";
-import {
   useListTicketRepliesByTicketQuery,
   useCreateTicketReplyMutation,
-} from "@/integrations/metahub/rtk/endpoints/ticket_replies.endpoints";
-import { useSendTelegramNotificationMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+  useSendTelegramNotificationMutation
+} from "@/integrations/hooks";
 
 import type {
   SupportTicket,
   SupportTicketPriority,
   SupportTicketStatus,
   TicketReply,
-} from "@/integrations/metahub/rtk/types/support";
+} from "@/integrations/types";
 
 /* --------- Status/Priority sözlükleri (admin ile birebir) --------- */
 

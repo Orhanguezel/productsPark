@@ -12,7 +12,7 @@ import {
 import { requireAuth } from "@/common/middleware/auth";
 
 export async function registerPopupsAdmin(app: FastifyInstance) {
-  const base = "/admin/popups";
+  const base = "/popups";
   app.get(base,            { preHandler: [requireAuth] }, adminListPopups);
   app.get(`${base}/:id`,   { preHandler: [requireAuth] }, adminGetPopup);
   app.post(base,           { preHandler: [requireAuth] }, adminCreatePopup);

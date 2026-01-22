@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useDeleteUserOrdersMutation } from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
+import { useDeleteUserOrdersMutation } from "@/integrations/hooks";
 
 export default function DeleteUserOrders() {
   const [email, setEmail] = useState("kececimelih@gmail.com");

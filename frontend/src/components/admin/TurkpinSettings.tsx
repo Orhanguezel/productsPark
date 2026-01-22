@@ -20,16 +20,18 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { RefreshCw } from "lucide-react";
-import { useListApiProvidersQuery } from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
+import {  } from "@/integrations/hooks";
 import {
   useTurkpinGameListMutation,
   useTurkpinProductListMutation,
-} from "@/integrations/metahub/rtk/endpoints/functions.endpoints";
-import type { ApiProvider } from "@/integrations/metahub/rtk/types/apiProviders";
+  useListApiProvidersQuery
+} from "@/integrations/hooks";
+
 import type {
   TurkpinGame,
   TurkpinProduct,
-} from "@/integrations/metahub/rtk/types/turkpin";
+  ApiProvider
+} from "@/integrations/types";
 
 interface TurkpinSettingsProps {
   formData: any;

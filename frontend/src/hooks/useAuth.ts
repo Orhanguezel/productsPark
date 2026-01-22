@@ -1,17 +1,21 @@
 // =============================================================
 // FILE: src/hooks/useAuth.ts
+// FINAL — Auth hook (admin check correct + user_id guaranteed)
 // =============================================================
 
-import type { User } from "@/integrations/metahub/rtk/types/users";
-
+import type { AuthUser } from '@/integrations/types';
 import {
-  useGetSessionQuery,
+  useAuthMeQuery,
   useStatusQuery,
-  useLogoutMutation,
-} from "@/integrations/metahub/rtk/endpoints/auth.endpoints";
+  useAuthLogoutMutation,
+  useListUserRolesQuery,
+} from '@/integrations/hooks';
+
+import { useDispatch } from 'react-redux';
+import { baseApi } from '@/integrations/baseApi';
 
 type UseAuthReturn = {
-  user: User | null;
+  user: AuthUser | null;
   session: null;
   loading: boolean;
   isAuthenticated: boolean;
@@ -19,45 +23,77 @@ type UseAuthReturn = {
   signOut: () => Promise<void>;
 };
 
+type AnyObj = Record<string, unknown>;
+
+const toRoleArray = (v: unknown): string[] => {
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof v === 'string') return v.trim() ? [v.trim()] : [];
+  return [];
+};
+
+const resolveUserId = (u: AuthUser | null): string | null => {
+  if (!u) return null;
+
+  // Primary
+  const direct = (u as { id?: unknown }).id;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+
+  // Fallbacks (backend variations)
+  const o = u as unknown as AnyObj;
+
+  const userId = o.user_id;
+  if (typeof userId === 'string' && userId.trim()) return userId.trim();
+
+  const sub = o.sub;
+  if (typeof sub === 'string' && sub.trim()) return sub.trim();
+
+  return null;
+};
+
 export const useAuth = (): UseAuthReturn => {
-  // /auth/user -> { user }
-  const {
-    data: meData,
-    isLoading: meLoading,
-    isError: meError,
-  } = useGetSessionQuery();
+  const dispatch = useDispatch();
 
-  // /auth/status -> { authenticated, is_admin, user? }
-  const {
-    data: statusData,
-    isLoading: statusLoading,
-    isError: statusError,
-  } = useStatusQuery();
-
-  const [logoutMutation] = useLogoutMutation();
+  const { data: meData, isLoading: meLoading, isError: meError } = useAuthMeQuery();
+  const { data: statusData, isLoading: statusLoading, isError: statusError } = useStatusQuery();
+  const [logoutMutation] = useAuthLogoutMutation();
 
   const loading = meLoading || statusLoading;
   const hasError = meError || statusError;
 
-  // meData?.user zaten core/types.User tipinde → ekstra cast'e gerek yok
-  const user: User | null =
-    !hasError && meData?.user ? meData.user : null;
+  const rawUser: AuthUser | null = !hasError ? meData ?? null : null;
 
-  const isAuthenticated = !!statusData?.authenticated && !!user;
-  const isAdmin = !!statusData?.is_admin;
+  const statusAuthenticated = !!statusData?.authenticated;
+  const isAuthenticated = loading ? !!rawUser : statusAuthenticated && !!rawUser;
+
+  const roles = toRoleArray((rawUser as unknown as { roles?: unknown })?.roles);
+  const isAdminFromUser = roles.map((r) => r.toLowerCase()).includes('admin');
+
+  // ✅ user_id artık garanti
+  const userId = resolveUserId(rawUser);
+
+  // ✅ fallback check: user_roles?user_id=...&role=admin&limit=1
+  const { data: adminRoleRows } = useListUserRolesQuery(
+    userId ? { user_id: userId, role: 'admin', limit: 1, offset: 0 } : undefined,
+    {
+      skip: !userId || isAdminFromUser,
+      refetchOnMountOrArgChange: true,
+    },
+  );
+
+  const isAdmin = isAuthenticated && (isAdminFromUser || !!adminRoleRows?.length);
 
   const signOut = async () => {
     try {
       await logoutMutation().unwrap();
-      // Cookie temizlenince sonraki /auth/user & /auth/status anonim dönecek
     } catch (e) {
-      console.error("Logout failed", e);
-      // İstersen burada toast vs atabilirsin
+      console.error('Logout failed', e);
+    } finally {
+      dispatch(baseApi.util.resetApiState());
     }
   };
 
   return {
-    user: isAuthenticated ? user : null,
+    user: isAuthenticated ? rawUser : null,
     session: null,
     loading,
     isAuthenticated,

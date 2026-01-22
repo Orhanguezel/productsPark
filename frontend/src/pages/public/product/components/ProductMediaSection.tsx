@@ -1,23 +1,28 @@
 // =============================================================
 // FILE: src/pages/public/components/ProductMediaSection.tsx
+// FINAL — central types safe (no null index) + typed icon map
 // =============================================================
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
+import { Badge as UiBadge } from '@/components/ui/badge';
+import { Zap, Shield, Clock, Headphones, Sparkles } from 'lucide-react';
+import type { Product } from '@/integrations/types';
+
+interface ProductMediaSectionProps {
+  product: Product;
+  gallery: string[]; // ✅ no nulls
+  selectedImage: number;
+  onSelectImage: (index: number) => void;
+}
+
+type IconName = 'Zap' | 'Shield' | 'Clock' | 'Headphones' | 'Sparkles';
+type IconComponent = typeof Zap;
+
+const ICON_MAP: Record<IconName, IconComponent> = {
   Zap,
   Shield,
   Clock,
   Headphones,
   Sparkles,
-} from "lucide-react";
-import type { Product } from "./productDetail.types";
-
-interface ProductMediaSectionProps {
-  product: Product;
-  gallery: (string | null)[];
-  selectedImage: number;
-  onSelectImage: (index: number) => void;
-}
+};
 
 const ProductMediaSection = ({
   product,
@@ -26,65 +31,67 @@ const ProductMediaSection = ({
   onSelectImage,
 }: ProductMediaSectionProps) => {
   const placeholder =
-    "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=600&fit=crop";
+    'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=600&fit=crop';
 
-  const iconMap: Record<string, any> = {
-    Zap,
-    Shield,
-    Clock,
-    Headphones,
-    Sparkles,
-  };
+  // ✅ clamp index (gallery boş olsa bile güvenli)
+  const safeIndex =
+    gallery.length > 0 ? Math.min(Math.max(0, selectedImage), gallery.length - 1) : 0;
+
+  const mainSrc = gallery.length > 0 ? gallery[safeIndex] : product.image_url ?? placeholder;
 
   return (
     <div className="space-y-4">
       {/* Ana görsel */}
       <div className="relative aspect-video rounded-lg overflow-hidden shadow-card">
-        {product.original_price && (
-          <Badge className="absolute top-4 left-4 z-10 bg-primary text-primary-foreground">
+        {typeof product.original_price === 'number' && product.original_price > 0 ? (
+          <UiBadge className="absolute top-4 left-4 z-10 bg-primary text-primary-foreground">
             İndirimde
-          </Badge>
-        )}
+          </UiBadge>
+        ) : null}
+
         <img
-          src={gallery[selectedImage] || placeholder}
+          src={mainSrc || placeholder}
           alt={product.name}
           className="w-full h-full object-cover"
         />
       </div>
 
       {/* Thumbnail galerisi */}
-      {gallery.length > 1 && (
+      {gallery.length > 1 ? (
         <div className="grid grid-cols-3 gap-4">
           {gallery.map((img, idx) => (
             <button
-              key={idx}
+              key={`${img}-${idx}`}
               onClick={() => onSelectImage(idx)}
               className={`aspect-video rounded-lg overflow-hidden border-2 transition-all ${
-                selectedImage === idx
-                  ? "border-primary shadow-elegant"
-                  : "border-border hover:border-primary/50"
+                safeIndex === idx
+                  ? 'border-primary shadow-elegant'
+                  : 'border-border hover:border-primary/50'
               }`}
+              type="button"
             >
               <img
                 src={img || placeholder}
-                alt={`Gallery ${idx + 1}`}
+                alt={`${product.name} görsel ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
             </button>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Ürün rozetleri */}
-      {product.badges && product.badges.length > 0 && (
+      {Array.isArray(product.badges) && product.badges.length > 0 ? (
         <div className="grid grid-cols-2 gap-3">
           {product.badges
-            .filter((badge) => badge.active)
-            .map((badge, index) => {
-              const Icon = iconMap[badge.icon] || Zap;
+            .filter((b) => Boolean(b?.active))
+            .map((b, index) => {
+              const iconName = (b.icon ?? '') as IconName;
+              const Icon = iconName && ICON_MAP[iconName] ? ICON_MAP[iconName] : Zap;
+
               return (
                 <div
-                  key={index}
+                  key={`${b.text}-${index}`}
                   className="group relative overflow-hidden rounded-lg bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-4 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:scale-105"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -93,14 +100,14 @@ const ProductMediaSection = ({
                       <Icon className="w-5 h-5 text-primary" />
                     </div>
                     <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                      {badge.text}
+                      {b.text}
                     </span>
                   </div>
                 </div>
               );
             })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

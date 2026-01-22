@@ -1,21 +1,28 @@
 // =============================================================
 // FILE: MenuManagementPage.tsx
+// FINAL — menu_item.ts + footer.ts + RTK endpoints compatible
+// - Uses MenuItem[] (normalized) from RTK
+// - Uses UpsertMenuItemBody for create/update
+// - Uses UpsertFooterSectionBody for footer section create/update
 // =============================================================
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
+import * as React from 'react';
 
-import HeaderMenuForm from "./HeaderMenuForm";
-import FooterMenuForm from "./FooterMenuForm";
-import FooterSectionForm from "./FooterSectionForm";
-import HeaderMenuList from "./HeaderMenuList";
-import FooterSectionList from "./FooterSectionList";
-import FooterMenuList from "./FooterMenuList";
+import { AdminLayout } from '@/components/admin/AdminLayout';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+
+import { Plus } from 'lucide-react';
+import { toast } from 'sonner';
+
+import HeaderMenuForm from './HeaderMenuForm';
+import FooterMenuForm from './FooterMenuForm';
+import FooterSectionForm from './FooterSectionForm';
+
+import HeaderMenuList from './HeaderMenuList';
+import FooterSectionList from './FooterSectionList';
+import FooterMenuList from './FooterMenuList';
 
 import {
   useListMenuItemsAdminQuery,
@@ -23,30 +30,25 @@ import {
   useUpdateMenuItemAdminMutation,
   useDeleteMenuItemAdminMutation,
   useReorderMenuItemsAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/menu_admin.endpoints";
-
-import {
   useListFooterSectionsAdminQuery,
   useCreateFooterSectionAdminMutation,
   useUpdateFooterSectionAdminMutation,
   useDeleteFooterSectionAdminMutation,
   useReorderFooterSectionsAdminMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/footer_sections_admin.endpoints";
-
-import {
   useListCustomPagesAdminQuery,
-} from "@/integrations/metahub/rtk/endpoints/admin/custom_pages_admin.endpoints";
+} from '@/integrations/hooks';
 
-import type { MenuItemAdmin } from "@/integrations/metahub/rtk/types/menu";
 import type {
   FooterSection,
+  MenuItem,
   UpsertFooterSectionBody,
-} from "@/integrations/metahub/rtk/types/footer";
+  UpsertMenuItemBody,
+} from '@/integrations/types';
 
 type Page = { id: string; title: string; slug: string };
 
 export default function MenuManagementPage() {
-  // MENU ITEMS
+  // ===================== MENU ITEMS (normalized MenuItem[]) =====================
   const {
     data: allMenuItems = [],
     isLoading: menuLoading,
@@ -58,7 +60,7 @@ export default function MenuManagementPage() {
   const [deleteMenuItem] = useDeleteMenuItemAdminMutation();
   const [reorderMenuItems] = useReorderMenuItemsAdminMutation();
 
-  // FOOTER SECTIONS
+  // ===================== FOOTER SECTIONS =====================
   const {
     data: allSections = [],
     isLoading: sectionsLoading,
@@ -70,169 +72,153 @@ export default function MenuManagementPage() {
   const [deleteSection] = useDeleteFooterSectionAdminMutation();
   const [reorderSections] = useReorderFooterSectionsAdminMutation();
 
-  // CUSTOM PAGES (published) – RTK admin endpoint
-  const {
-    data: customPages = [],
-    isLoading: pagesLoading,
-  } = useListCustomPagesAdminQuery();
+  // ===================== CUSTOM PAGES =====================
+  const { data: customPages = [], isLoading: pagesLoading } = useListCustomPagesAdminQuery();
 
-  const pages: Page[] = useMemo(
-    () =>
-      (customPages || []).map((p) => ({
-        id: p.id,
-        title: p.title,
-        slug: p.slug,
-      })),
-    [customPages]
-  );
+  const pages: Page[] = React.useMemo(() => {
+    return (customPages || []).map((p: any) => ({
+      id: String(p?.id ?? ''),
+      title: String(p?.title ?? ''),
+      slug: String(p?.slug ?? ''),
+    }));
+  }, [customPages]);
 
-  // ===== Normalize (location'a asla dokunma) =====
-  const normalizedMenu = useMemo(() => {
-    return allMenuItems.map((i) => {
-      const display_order = i.display_order ?? i.position ?? i.order_num ?? 0;
-      return { ...i, display_order };
-    });
+  // ===================== DERIVED LISTS =====================
+  const headerItems: MenuItem[] = React.useMemo(() => {
+    return allMenuItems
+      .filter((i) => i.location === 'header')
+      .slice()
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
   }, [allMenuItems]);
 
-  const headerItems = useMemo(
-    () =>
-      normalizedMenu
-        .filter((i) => i.location === "header")
-        .sort((a, b) => a.display_order - b.display_order),
-    [normalizedMenu]
-  );
+  const footerItems: MenuItem[] = React.useMemo(() => {
+    // legacy safety: bazı kayıtlar section_id dolu ama location hatalı/null gelebilir
+    return allMenuItems
+      .filter((i) => i.location === 'footer' || i.section_id != null)
+      .slice()
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  }, [allMenuItems]);
 
-  const footerItems = useMemo(
-    () =>
-      normalizedMenu
-        .filter((i) => i.location === "footer" || i.section_id != null)
-        .sort((a, b) => a.display_order - b.display_order),
-    [normalizedMenu]
-  );
+  const footerSections: FooterSection[] = React.useMemo(() => {
+    return (allSections || [])
+      .slice()
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  }, [allSections]);
 
-  const footerSections = useMemo(
-    () => (allSections || []).slice().sort((a, b) => a.display_order - b.display_order),
-    [allSections]
-  );
+  // ===================== DIALOG STATES =====================
+  const [openHeaderForm, setOpenHeaderForm] = React.useState(false);
+  const [openFooterForm, setOpenFooterForm] = React.useState(false);
+  const [openSectionForm, setOpenSectionForm] = React.useState(false);
 
-  // ===== Dialog States =====
-  const [openHeaderForm, setOpenHeaderForm] = useState(false);
-  const [openFooterForm, setOpenFooterForm] = useState(false);
-  const [openSectionForm, setOpenSectionForm] = useState(false);
-
-  const [editingItem, setEditingItem] = useState<MenuItemAdmin | null>(null);
-  const [editingSection, setEditingSection] = useState<FooterSection | null>(null);
+  const [editingItem, setEditingItem] = React.useState<MenuItem | null>(null);
+  const [editingSection, setEditingSection] = React.useState<FooterSection | null>(null);
 
   const loading = menuLoading || sectionsLoading || pagesLoading;
 
-  // ===== Actions: MENU ITEMS =====
-  async function handleUpsertHeaderItem(
-    body: Omit<MenuItemAdmin, "id" | "display_order">
-  ) {
+  // ===================== ACTIONS: MENU ITEMS =====================
+  async function handleUpsertHeaderItem(body: UpsertMenuItemBody) {
     try {
       if (editingItem) {
         await updateMenuItem({ id: editingItem.id, body }).unwrap();
-        toast.success("Menü öğesi güncellendi");
+        toast.success('Menü öğesi güncellendi');
       } else {
-        await createMenuItem({
-          ...body,
-          display_order: headerItems.length,
-        }).unwrap();
-        toast.success("Menü öğesi eklendi");
+        await createMenuItem({ ...body, display_order: headerItems.length }).unwrap();
+        toast.success('Menü öğesi eklendi');
       }
+
       setEditingItem(null);
       refetchMenu();
     } catch {
-      toast.error("Kayıt sırasında hata oluştu");
+      toast.error('Kayıt sırasında hata oluştu');
     }
   }
 
-  async function handleUpsertFooterItem(
-    body: Omit<MenuItemAdmin, "id" | "display_order">
-  ) {
+  async function handleUpsertFooterItem(body: UpsertMenuItemBody) {
     try {
       if (editingItem) {
         await updateMenuItem({ id: editingItem.id, body }).unwrap();
-        toast.success("Menü öğesi güncellendi");
+        toast.success('Menü öğesi güncellendi');
       } else {
-        await createMenuItem({
-          ...body,
-          display_order: footerItems.length,
-        }).unwrap();
-        toast.success("Menü öğesi eklendi");
+        await createMenuItem({ ...body, display_order: footerItems.length }).unwrap();
+        toast.success('Menü öğesi eklendi');
       }
+
       setEditingItem(null);
       refetchMenu();
     } catch {
-      toast.error("Kayıt sırasında hata oluştu");
+      toast.error('Kayıt sırasında hata oluştu');
     }
   }
 
   async function handleDeleteItem(id: string) {
-    if (!confirm("Bu menü öğesini silmek istediğinizden emin misiniz?")) return;
+    if (!confirm('Bu menü öğesini silmek istediğinizden emin misiniz?')) return;
+
     try {
       await deleteMenuItem(id).unwrap();
-      toast.success("Menü öğesi silindi");
+      toast.success('Menü öğesi silindi');
       refetchMenu();
     } catch {
-      toast.error("Silme işlemi başarısız");
+      toast.error('Silme işlemi başarısız');
     }
   }
 
-  async function handleReorderMenu(items: { id: string; display_order: number }[]) {
+  async function handleReorderMenu(items: Array<{ id: string; display_order: number }>) {
     try {
       await reorderMenuItems(items).unwrap();
-      toast.success("Sıralama güncellendi");
+      toast.success('Sıralama güncellendi');
       refetchMenu();
     } catch {
-      toast.error("Sıralama güncellenirken hata oluştu");
+      toast.error('Sıralama güncellenirken hata oluştu');
     }
   }
 
-  // ===== Actions: FOOTER SECTIONS =====
-  async function handleUpsertSection(b: UpsertFooterSectionBody) {
+  // ===================== ACTIONS: FOOTER SECTIONS =====================
+  async function handleUpsertSection(body: UpsertFooterSectionBody) {
     try {
       if (editingSection) {
-        await updateSection({ id: editingSection.id, body: b }).unwrap();
-        toast.success("Bölüm güncellendi");
+        await updateSection({ id: editingSection.id, body }).unwrap();
+        toast.success('Bölüm güncellendi');
       } else {
-        await createSection(b).unwrap();
-        toast.success("Bölüm eklendi");
+        await createSection(body).unwrap();
+        toast.success('Bölüm eklendi');
       }
+
       setEditingSection(null);
       refetchSections();
     } catch {
-      toast.error("Kayıt sırasında hata oluştu");
+      toast.error('Kayıt sırasında hata oluştu');
     }
   }
 
   async function handleDeleteSection(id: string) {
     if (
       !confirm(
-        "Bu bölümü silmek istediğinizden emin misiniz? Bölüme ait menü öğeleri bölümsüz olacaktır."
+        'Bu bölümü silmek istediğinizden emin misiniz? Bölüme ait menü öğeleri bölümsüz olacaktır.',
       )
     )
       return;
+
     try {
       await deleteSection(id).unwrap();
-      toast.success("Bölüm silindi");
+      toast.success('Bölüm silindi');
       refetchSections();
-      refetchMenu(); // bölüme bağlı öğelerin yeri değişebilir
+      refetchMenu(); // section_id null’a dönen menu item’lar olabilir
     } catch {
-      toast.error("Silme işlemi başarısız");
+      toast.error('Silme işlemi başarısız');
     }
   }
 
-  async function handleReorderSections(items: { id: string; display_order: number }[]) {
+  async function handleReorderSections(items: Array<{ id: string; display_order: number }>) {
     try {
       await reorderSections(items).unwrap();
-      toast.success("Bölüm sıralaması güncellendi");
+      toast.success('Bölüm sıralaması güncellendi');
       refetchSections();
     } catch {
-      toast.error("Sıralama güncellenirken hata oluştu");
+      toast.error('Sıralama güncellenirken hata oluştu');
     }
   }
 
+  // ===================== RENDER =====================
   return (
     <AdminLayout title="Menü Yönetimi">
       <Tabs defaultValue="header" className="w-full">
@@ -241,7 +227,7 @@ export default function MenuManagementPage() {
           <TabsTrigger value="footer">Footer Menü</TabsTrigger>
         </TabsList>
 
-        {/* ===== HEADER ===== */}
+        {/* ===================== HEADER ===================== */}
         <TabsContent value="header" className="mt-6 space-y-4">
           <div className="flex justify-end">
             <Button
@@ -269,17 +255,15 @@ export default function MenuManagementPage() {
             open={openHeaderForm}
             loading={loading}
             pages={pages}
-            initial={editingItem ?? undefined}
-            selectedItem={editingItem ?? undefined}
+            initial={editingItem}
+            selectedItem={editingItem}
             defaultOrder={headerItems.length}
-            onClose={() => {
-              setOpenHeaderForm(false);
-            }}
+            onClose={() => setOpenHeaderForm(false)}
             onSubmit={handleUpsertHeaderItem}
           />
         </TabsContent>
 
-        {/* ===== FOOTER ===== */}
+        {/* ===================== FOOTER ===================== */}
         <TabsContent value="footer" className="mt-6 space-y-4">
           <FooterSectionList
             sections={footerSections}
@@ -331,23 +315,19 @@ export default function MenuManagementPage() {
             loading={loading}
             pages={pages}
             sections={footerSections}
-            initial={editingItem ?? undefined}
-            selectedItem={editingItem ?? undefined}
+            initial={editingItem}
+            selectedItem={editingItem}
             defaultOrder={footerItems.length}
-            onClose={() => {
-              setOpenFooterForm(false);
-            }}
+            onClose={() => setOpenFooterForm(false)}
             onSubmit={handleUpsertFooterItem}
           />
 
           <FooterSectionForm
             open={openSectionForm}
             loading={loading}
-            initial={editingSection ?? undefined}
+            initial={editingSection}
             defaultOrder={footerSections.length}
-            onClose={() => {
-              setOpenSectionForm(false);
-            }}
+            onClose={() => setOpenSectionForm(false)}
             onSubmit={handleUpsertSection}
           />
         </TabsContent>

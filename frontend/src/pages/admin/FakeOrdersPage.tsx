@@ -8,7 +8,7 @@ import { useState } from "react";
 import {
   useListFakeOrderNotificationsQuery,
   useDeleteFakeOrderNotificationMutation,
-} from "@/integrations/metahub/rtk/endpoints/fake_notifications.endpoints";
+} from "@/integrations/hooks";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 

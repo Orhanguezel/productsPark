@@ -1,15 +1,18 @@
-// Tek tip kaynağı
+// =============================================================
+// FILE: src/modules/wallet/wallet.types.ts
+// FINAL — single source of truth for wallet domain types
+// =============================================================
 
-export const WALLET_DEPOSIT_STATUS = ["pending", "approved", "rejected"] as const;
-export type WalletDepositStatus = typeof WALLET_DEPOSIT_STATUS[number];
+export const WALLET_DEPOSIT_STATUS = ['pending', 'approved', 'rejected'] as const;
+export type WalletDepositStatus = (typeof WALLET_DEPOSIT_STATUS)[number];
 
-export const WALLET_TXN_TYPES = ["deposit", "withdrawal", "purchase", "refund"] as const;
-export type WalletTransactionType = typeof WALLET_TXN_TYPES[number];
+export const WALLET_TXN_TYPES = ['deposit', 'withdrawal', 'purchase', 'refund'] as const;
+export type WalletTransactionType = (typeof WALLET_TXN_TYPES)[number];
 
 export type WalletDepositRequest = {
   id: string;
   user_id: string;
-  amount: number;                // FE/BE arası: her zaman number olarak normalize edeceğiz
+  amount: number; // normalized (FE/BE)
   payment_method: string;
   payment_proof: string | null;
   status: WalletDepositStatus;
@@ -22,7 +25,7 @@ export type WalletDepositRequest = {
 export type WalletTransaction = {
   id: string;
   user_id: string;
-  amount: number;                // normalize
+  amount: number; // normalized
   type: WalletTransactionType;
   description: string | null;
   order_id: string | null;

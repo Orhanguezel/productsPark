@@ -3,11 +3,12 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { ShoppingBag } from "lucide-react";
 import {
-  useGetPublicFakeNotificationSettingsQuery,   // ⬅️ değişti
+  useGetPublicFakeNotificationSettingsQuery, 
   useListPublicFakeOrdersQuery,
   useGetPublicRandomFakeOrderQuery,
-} from "@/integrations/metahub/rtk/endpoints/fake_notifications.endpoints";
-import type { FakeOrderNotification } from "@/integrations/metahub/rtk/types/fakeNotifications";
+} from '@/integrations/hooks';
+
+import type { FakeOrderNotification } from "@/integrations/types";
 
 export function FakeOrderNotification() {
   const { data: settings } = useGetPublicFakeNotificationSettingsQuery(); // ⬅️ değişti

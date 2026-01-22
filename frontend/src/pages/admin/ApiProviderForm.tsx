@@ -14,7 +14,7 @@ import {
   useGetApiProviderQuery,
   useCreateApiProviderMutation,
   useUpdateApiProviderMutation,
-} from "@/integrations/metahub/rtk/endpoints/admin/api_providers.endpoints";
+} from "@/integrations/hooks";
 
 export default function ApiProviderForm() {
   const { id } = useParams();

@@ -11,7 +11,7 @@ import {
   adminCreateReplyBodySchema,
   adminActionSchema,
 } from "./validation";
-import { fireTicketRepliedEventsForTicket } from "./controller";
+import { fireTicketRepliedEvents } from './controller';
 
 export const SupportAdminController = {
   /** GET /admin/support_tickets */
@@ -137,7 +137,7 @@ export const SupportAdminController = {
 
       // 🔔 Admin yanıtı → notification + mail
       try {
-        await fireTicketRepliedEventsForTicket({
+        await fireTicketRepliedEvents({
           req,
           ticketId: body.ticket_id,
           replyMessage: body.message,

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const urlOrEmptyToNull = z
   .string()
@@ -6,7 +6,15 @@ const urlOrEmptyToNull = z
   .url()
   .optional()
   .nullable()
-  .or(z.literal("").transform(() => null));
+  .or(z.literal('').transform(() => null));
+
+const categorySchema = z
+  .string()
+  .max(120)
+  .transform((s) => s.trim())
+  .optional()
+  .nullable()
+  .transform((v) => (v == null ? null : v.trim() ? v.trim() : null));
 
 export const blogCreateSchema = z.object({
   title: z.string().min(1).max(255),
@@ -14,7 +22,9 @@ export const blogCreateSchema = z.object({
   excerpt: z.string().max(500).optional().nullable(),
   content: z.string().min(1),
 
-  // Resim girişi: URL ya da storage asset (biri yeter, ikisi varsa asset öncelikli)
+  // ✅ NEW
+  category: categorySchema,
+
   featured_image: urlOrEmptyToNull.optional(),
   featured_image_asset_id: z.string().uuid().optional().nullable(),
   featured_image_alt: z.string().max(255).optional().nullable(),
@@ -23,8 +33,8 @@ export const blogCreateSchema = z.object({
   meta_title: z.string().max(255).optional().nullable(),
   meta_description: z.string().max(500).optional().nullable(),
   is_published: z.coerce.boolean().optional(),
+  is_featured: z.coerce.boolean().optional(),
   published_at: z.coerce.date().optional().nullable(),
-  // revision açıklaması (log yoksa şimdilik no-op)
   revision_reason: z.string().max(255).optional(),
 });
 
@@ -34,6 +44,9 @@ export const blogUpdateSchema = z.object({
   excerpt: z.string().max(500).optional().nullable(),
   content: z.string().min(1).optional(),
 
+  // ✅ NEW
+  category: categorySchema,
+
   featured_image: urlOrEmptyToNull.optional(),
   featured_image_asset_id: z.string().uuid().optional().nullable(),
   featured_image_alt: z.string().max(255).optional().nullable(),
@@ -42,6 +55,7 @@ export const blogUpdateSchema = z.object({
   meta_title: z.string().max(255).optional().nullable(),
   meta_description: z.string().max(500).optional().nullable(),
   is_published: z.coerce.boolean().optional(),
+  is_featured: z.coerce.boolean().optional(),
   published_at: z.coerce.date().optional().nullable(),
   revision_reason: z.string().max(255).optional(),
 });

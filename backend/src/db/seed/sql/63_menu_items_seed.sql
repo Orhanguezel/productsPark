@@ -23,13 +23,13 @@ VALUES
   NULL, 'footer', '59583ef1-0ba1-4c7c-b806-84fd204b52b9', 'custom', NULL, NULL,  2, 1),
 
 -- ================= FOOTER: Kurumsal =================
-('71c28444-7b6e-47ae-92be-f59206a1b820', 'Gizlilik Politikası',    '/gizlilik-politikasi',
+('71c28444-7b6e-47ae-92be-f59206a1b820', 'Gizlilik Politikası',    '/gizlilik-sozlesmesi',
   NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  3, 1),
 
 ('3d325c92-d59e-4730-8301-5c9bcff463bc', 'KVKK',                   '/kvkk',
   NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  4, 1),
 
-('9fa999a9-9e47-4a3c-9dac-6afba197d79c', 'İade ve Değişim',        '/iade-degisim',
+('9fa999a9-9e47-4a3c-9dac-6afba197d79c', 'İade ve Değişim',        '/iade-sartlari',
   NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  5, 1),
 
 ('d8ec7f51-384f-400a-9ac6-3a179cb89087', 'Ödeme Yöntemleri',       '/odeme-yontemleri',

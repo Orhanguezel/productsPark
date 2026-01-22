@@ -1,4 +1,4 @@
--- EMAIL_TEMPLATES SEED
+-- EMAIL_TEMPLATES SEED (FINAL)
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
@@ -75,4 +75,13 @@ VALUES
  'Hesabiniz Oluşturuldu - {{site_name}}',
  '<h1 class=\"ql-align-center\">Hesabınız Oluşturuldu</h1><p>Merhaba <strong>{{user_name}}</strong>,</p><p>{{site_name}} ailesine hoş geldiniz! Hesabınız başarıyla oluşturuldu.</p><p><br></p><p>E-posta: <strong>{{user_email}}</strong></p><p>Herhangi bir sorunuz olursa bizimle iletişime geçmekten çekinmeyin.</p><p>Saygılarımızla,</p><p>{{site_name}} Ekibi</p>',
  JSON_ARRAY('user_name','user_email','site_name'),
- 1, NULL, '2025-10-09 19:38:58.000', '2025-10-13 15:06:38.000');
+ 1, NULL, '2025-10-09 19:38:58.000', '2025-10-13 15:06:38.000'),
+
+-- password_changed (EKLENDI - KRITIK)
+('b6b2cbe1-3cf9-4d5a-8e56-6c1c9b0b2d10',
+ 'password_changed',
+ 'Password Changed',
+ 'Şifreniz Güncellendi - {{site_name}}',
+ '<h1 class=\"ql-align-center\">Şifreniz Güncellendi</h1><p>Merhaba <strong>{{user_name}}</strong>,</p><p>Hesap şifreniz başarıyla değiştirildi.</p><p>Eğer bu işlemi siz yapmadıysanız lütfen en kısa sürede bizimle iletişime geçin.</p><p>Saygılarımızla,</p><p>{{site_name}} Ekibi</p>',
+ JSON_ARRAY('user_name','site_name'),
+ 1, NULL, '2025-10-09 19:38:58.000', '2025-10-09 19:38:58.000');

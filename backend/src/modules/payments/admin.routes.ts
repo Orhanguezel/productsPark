@@ -40,126 +40,131 @@ import {
   listPaymentEventsAdminHandler,
 } from './admin.payments.controller';
 
+const BASE = '/payment_providers';
+const PAYMENT_REQUESTS_BASE = '/payment_requests';
+const PAYMENT_SESSIONS_BASE = '/payment_sessions';
+const PAYMENTS_BASE = '/payments';
+
 export async function registerPaymentsAdmin(app: FastifyInstance) {
   // --- Payment Providers (admin) ---
   app.get(
-    '/admin/payment_providers',
+    BASE,
     { config: { auth: true } },
     listPaymentProvidersAdminHandler
   );
   app.get(
-    '/admin/payment_providers/:id',
+    `${BASE}/:id`,
     { config: { auth: true } },
     getPaymentProviderAdminByIdHandler
   );
   app.post(
-    '/admin/payment_providers',
+    BASE,
     { config: { auth: true } },
     createPaymentProviderAdminHandler
   );
   app.patch(
-    '/admin/payment_providers/:id',
+    `${BASE}/:id`,
     { config: { auth: true } },
     updatePaymentProviderAdminHandler
   );
   app.delete(
-    '/admin/payment_providers/:id',
+    `${BASE}/:id`,
     { config: { auth: true } },
     deletePaymentProviderAdminHandler
   );
 
   // --- Payment Requests (admin) ---
   app.get(
-    '/admin/payment_requests',
+    PAYMENT_REQUESTS_BASE,
     { config: { auth: true } },
     listPaymentRequestsAdminHandler
   );
   app.get(
-    '/admin/payment_requests/:id',
+    `${PAYMENT_REQUESTS_BASE}/:id`,
     { config: { auth: true } },
     getPaymentRequestAdminByIdHandler
   );
   app.patch(
-    '/admin/payment_requests/:id',
+    `${PAYMENT_REQUESTS_BASE}/:id`,
     { config: { auth: true } },
     updatePaymentRequestAdminHandler
   );
   app.patch(
-    '/admin/payment_requests/:id/status',
+    `${PAYMENT_REQUESTS_BASE}/:id/status`,
     { config: { auth: true } },
     setPaymentRequestStatusAdminHandler
   );
   app.delete(
-    '/admin/payment_requests/:id',
+    `${PAYMENT_REQUESTS_BASE}/:id`,
     { config: { auth: true } },
     deletePaymentRequestAdminHandler
   );
 
   // --- Payment Sessions (admin) ---
   app.get(
-    '/admin/payment_sessions',
+    PAYMENT_SESSIONS_BASE,
     { config: { auth: true } },
     listPaymentSessionsAdminHandler
   );
   app.get(
-    '/admin/payment_sessions/:id',
+    `${PAYMENT_SESSIONS_BASE}/:id`,
     { config: { auth: true } },
     getPaymentSessionAdminByIdHandler
   );
   app.post(
-    '/admin/payment_sessions',
+    PAYMENT_SESSIONS_BASE,
     { config: { auth: true } },
     createPaymentSessionAdminHandler
   );
   app.post(
-    '/admin/payment_sessions/:id/capture',
+    `${PAYMENT_SESSIONS_BASE}/:id/capture`,
     { config: { auth: true } },
     capturePaymentSessionAdminHandler
   );
   app.post(
-    '/admin/payment_sessions/:id/cancel',
+    `${PAYMENT_SESSIONS_BASE}/:id/cancel`,
     { config: { auth: true } },
     cancelPaymentSessionAdminHandler
   );
   app.post(
-    '/admin/payment_sessions/:id/sync',
+    `${PAYMENT_SESSIONS_BASE}/:id/sync`,
     { config: { auth: true } },
     syncPaymentSessionAdminHandler
   );
 
   // --- Payments (admin) ---
   app.get(
-    '/admin/payments',
+    PAYMENTS_BASE,
     { config: { auth: true } },
     listPaymentsAdminHandler
   );
   app.get(
-    '/admin/payments/:id',
+    `${PAYMENTS_BASE}/:id`,
     { config: { auth: true } },
     getPaymentAdminByIdHandler
   );
   app.post(
-    '/admin/payments/:id/capture',
+    `${PAYMENTS_BASE}/:id/capture`,
     { config: { auth: true } },
     capturePaymentAdminHandler
   );
   app.post(
-    '/admin/payments/:id/refund',
+    `${PAYMENTS_BASE}/:id/refund`,
     { config: { auth: true } },
     refundPaymentAdminHandler
   );
   app.post(
-    '/admin/payments/:id/void',
+    `${PAYMENTS_BASE}/:id/void`,
     { config: { auth: true } },
     voidPaymentAdminHandler
   );
   app.post(
-    '/admin/payments/:id/sync',
+    `${PAYMENTS_BASE}/:id/sync`,
     { config: { auth: true } },
     syncPaymentAdminHandler
   );
   app.get(
-    '/admin/payments/:id/events',
+    `${PAYMENTS_BASE}/:id/events`,
     { config: { auth: true } },
     listPaymentEventsAdminHandler
   );

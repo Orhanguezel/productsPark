@@ -1,0 +1,1469 @@
+{
+	"info": {
+		"_postman_id": "4d6c0d4f-0b9d-4b8c-8d5e-6a3a7a7c9c10",
+		"name": "Orders — Public + Admin — FINAL",
+		"description": "Orders module: public/auth (list mine, list mine by-user, get mine by id, create, checkout from cart, patch order, patch item) + admin/auth+admin (list orders, get order, list items, list all completed items, patch status w/ payment gating, cancel, refund, patch fulfillment, timeline list/add note, delete). Includes positive + negative validation tests. Public uses Bearer {{userToken}}, Admin uses Bearer {{adminToken}}.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 - Setup / Helpers",
+			"item": [
+				{
+					"name": "Check User Token (GET /orders?limit=1)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Has userToken', function () {",
+									"  const t = pm.environment.get('userToken') || pm.collectionVariables.get('userToken');",
+									"  pm.expect(t && String(t).trim().length > 10).to.be.true;",
+									"});",
+									"",
+									"pm.test('HTTP 200 or 401', function () {",
+									"  pm.expect([200, 401]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Response is an array', function () {",
+									"    pm.expect(Array.isArray(json)).to.be.true;",
+									"  });",
+									"  if (Array.isArray(json) && json.length) {",
+									"    pm.collectionVariables.set('lastUserOrderId', String(json[0].id || ''));",
+									"    pm.collectionVariables.set('lastUserOrderNumber', String(json[0].number || json[0].order_number || ''));",
+									"  }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/orders?limit=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Check Admin Token (GET /admin/orders?limit=1)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Has adminToken', function () {",
+									"  const t = pm.environment.get('adminToken') || pm.collectionVariables.get('adminToken');",
+									"  pm.expect(t && String(t).trim().length > 10).to.be.true;",
+									"});",
+									"",
+									"pm.test('HTTP 200 or 403/401', function () {",
+									"  pm.expect([200, 401, 403]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const h = pm.response.headers.get('x-total-count');",
+									"  pm.test('x-total-count header present', function () {",
+									"    pm.expect(h).to.not.equal(undefined);",
+									"  });",
+									"  const json = pm.response.json();",
+									"  pm.test('Response is an array', function () {",
+									"    pm.expect(Array.isArray(json)).to.be.true;",
+									"  });",
+									"  if (Array.isArray(json) && json.length) {",
+									"    pm.collectionVariables.set('adminFirstOrderId', String(json[0].id || ''));",
+									"    pm.collectionVariables.set('adminFirstOrderNumber', String(json[0].order_number || ''));",
+									"  }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders?limit=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "10 - Orders (Public / Auth Required)",
+			"item": [
+				{
+					"name": "List My Orders (ok) — GET /orders?order=desc&sort=created_at&limit=20",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"",
+									"if (Array.isArray(json) && json.length) {",
+									"  pm.collectionVariables.set('lastUserOrderId', String(json[0].id || ''));",
+									"  pm.collectionVariables.set('lastUserOrderNumber', String(json[0].number || json[0].order_number || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/orders?limit=20&offset=0&sort=created_at&order=desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "sort",
+									"value": "created_at"
+								},
+								{
+									"key": "order",
+									"value": "desc"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List My Orders By User (ok/forbidden) — GET /orders/by-user/:userId",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200 or 403', function () {",
+									"  pm.expect([200, 403]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Response is an array', function () {",
+									"    pm.expect(Array.isArray(json)).to.be.true;",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/orders/by-user/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders",
+								"by-user",
+								"{{userId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Order (ok) — GET /orders/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has id/items', function () {",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(json).to.have.property('items');",
+									"  pm.expect(Array.isArray(json.items)).to.be.true;",
+									"});",
+									"",
+									"pm.collectionVariables.set('lastUserOrderId', String(json.id || ''));",
+									"pm.collectionVariables.set('lastUserOrderNumber', String(json.number || json.order_number || ''));",
+									"",
+									"if (Array.isArray(json.items) && json.items.length) {",
+									"  pm.collectionVariables.set('lastOrderItemId', String(json.items[0].id || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/orders/{{lastUserOrderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders",
+								"{{lastUserOrderId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order (ok) — POST /orders",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 201', function () {",
+									"  pm.response.to.have.status(201);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has id/order_number/items', function () {",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(json).to.have.property('order_number');",
+									"  pm.expect(json).to.have.property('items');",
+									"  pm.expect(Array.isArray(json.items)).to.be.true;",
+									"});",
+									"",
+									"pm.collectionVariables.set('createdOrderId', String(json.id || ''));",
+									"pm.collectionVariables.set('createdOrderNumber', String(json.order_number || ''));",
+									"",
+									"if (Array.isArray(json.items) && json.items.length) {",
+									"  pm.collectionVariables.set('createdOrderFirstItemId', String(json.items[0].id || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-locale",
+								"value": "{{locale}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"payment_method\": \"wallet\",\n  \"payment_status\": \"pending\",\n  \"coupon_code\": null,\n  \"notes\": \"Postman createOrder\",\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"product_name\": \"Test Product\",\n      \"quantity\": 1,\n      \"price\": \"10.50\",\n      \"options\": {\"color\": \"red\"}\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Checkout From Cart (ok) — POST /orders/checkout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 201 or 400(pricing_required/cart_empty)', function () {",
+									"  pm.expect([201, 400, 409]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 201) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has id/items', function () {",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('items');",
+									"    pm.expect(Array.isArray(json.items)).to.be.true;",
+									"  });",
+									"  pm.collectionVariables.set('checkoutOrderId', String(json.id || ''));",
+									"  pm.collectionVariables.set('checkoutOrderNumber', String(json.order_number || ''));",
+									"} else {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has error.message', function () {",
+									"    pm.expect(json).to.have.property('error');",
+									"    pm.expect(json.error).to.have.property('message');",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cart_item_ids\": [\"{{cartItemId}}\"],\n  \"pricing\": [\n    {\"product_id\": \"{{productId}}\", \"product_name\": \"Test Product\", \"price\": \"10.50\"}\n  ],\n  \"payment_method\": \"wallet\",\n  \"payment_status\": \"pending\",\n  \"coupon_code\": null,\n  \"notes\": \"Postman checkout\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/orders/checkout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders",
+								"checkout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update My Order (ok) — PATCH /orders/:id (notes/coupon_code/payment fields)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has id/updated_at', function () {",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(json).to.have.property('updated_at');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notes\": \"User updated notes via Postman\",\n  \"coupon_code\": null,\n  \"payment_provider\": null,\n  \"payment_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/orders/{{createdOrderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders",
+								"{{createdOrderId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update My Order Item (ok) — PATCH /order_items/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has id/options', function () {",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(json).to.have.property('options');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"delivery_status\": \"processing\",\n  \"options\": {\"size\": \"L\"}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/order_items/{{createdOrderFirstItemId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"order_items",
+								"{{createdOrderFirstItemId}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "20 - Orders (Admin / Auth + Admin)",
+			"item": [
+				{
+					"name": "Admin List Orders (ok) — GET /admin/orders?limit=20&order=desc",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('x-total-count header present', function () {",
+									"  const h = pm.response.headers.get('x-total-count');",
+									"  pm.expect(h).to.not.equal(undefined);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"",
+									"if (Array.isArray(json) && json.length) {",
+									"  pm.collectionVariables.set('adminFirstOrderId', String(json[0].id || ''));",
+									"  pm.collectionVariables.set('adminFirstOrderNumber', String(json[0].order_number || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders?limit=20&offset=0&sort=created_at&order=desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "sort",
+									"value": "created_at"
+								},
+								{
+									"key": "order",
+									"value": "desc"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Get Order (ok) — GET /admin/orders/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has id/order_number', function () {",
+									"  pm.expect(json).to.have.property('id');",
+									"  pm.expect(json).to.have.property('order_number');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminFirstOrderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminFirstOrderId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin List Order Items (ok) — GET /admin/orders/:id/items",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});",
+									"",
+									"if (Array.isArray(json) && json.length) {",
+									"  pm.collectionVariables.set('adminFirstOrderItemId', String(json[0].id || ''));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminFirstOrderId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminFirstOrderId}}",
+								"items"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin List All Completed Items (ok) — GET /admin/orders/items?limit=100",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/items?limit=100&offset=0",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"items"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Update Order Status (payment gate may 409) — PATCH /admin/orders/:id/status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200 or 409(payment_required) or 404', function () {",
+									"  pm.expect([200, 409, 404]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has id/status', function () {",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('status');",
+									"  });",
+									"} else {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has error.message', function () {",
+									"    pm.expect(json).to.have.property('error');",
+									"    pm.expect(json.error).to.have.property('message');",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"processing\",\n  \"note\": \"Admin moved to processing (payment gate may block)\",\n  \"payment_status\": \"paid\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminFirstOrderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminFirstOrderId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Cancel Order (ok) — POST /admin/orders/:id/cancel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200 or 404', function () {",
+									"  pm.expect([200, 404]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has id/status', function () {",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('status');",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Cancelled via Postman\",\n  \"refund\": false,\n  \"note\": \"Admin cancel\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminCancelOrderId}}/cancel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminCancelOrderId}}",
+								"cancel"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Refund Order (payment gate: 409 if not paid) — POST /admin/orders/:id/refund",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200 or 409(payment_required_for_refund) or 404', function () {",
+									"  pm.expect([200, 409, 404]).to.include(pm.response.code);",
+									"});",
+									"",
+									"if (pm.response.code !== 200) {",
+									"  const json = pm.response.json();",
+									"  pm.test('Has error.message', function () {",
+									"    pm.expect(json).to.have.property('error');",
+									"    pm.expect(json.error).to.have.property('message');",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": \"5.00\",\n  \"reason\": \"Refund via Postman\",\n  \"note\": \"Admin refund\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminRefundOrderId}}/refund",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminRefundOrderId}}",
+								"refund"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Update Fulfillment (ok) — PATCH /admin/orders/:id/fulfillment",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200 or 404', function () {",
+									"  pm.expect([200, 404]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tracking_number\": \"TRK-123\",\n  \"tracking_url\": \"https://example.com/track/TRK-123\",\n  \"carrier\": \"DHL\",\n  \"shipped_at\": \"2026-01-21T10:00:00.000Z\",\n  \"status\": \"fulfilled\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminFirstOrderId}}/fulfillment",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminFirstOrderId}}",
+								"fulfillment"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin List Timeline (ok) — GET /admin/orders/:id/timeline",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Response is an array', function () {",
+									"  pm.expect(Array.isArray(json)).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminFirstOrderId}}/timeline",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminFirstOrderId}}",
+								"timeline"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Add Timeline Note (ok) — POST /admin/orders/:id/timeline",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 200', function () {",
+									"  pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('ok=true', function () {",
+									"  pm.expect(json).to.have.property('ok', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Admin note via Postman\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminFirstOrderId}}/timeline",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminFirstOrderId}}",
+								"timeline"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Delete Order (ok) — DELETE /admin/orders/:id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 204 or 404', function () {",
+									"  pm.expect([204, 404]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{adminDeleteOrderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{adminDeleteOrderId}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "99 - Negative / Validation Checks",
+			"item": [
+				{
+					"name": "List Orders (unauthorized) — GET /orders (no token expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 401', function () {",
+									"  pm.response.to.have.status(401);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/orders?limit=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Order (not found) — GET /orders/:id (random uuid expect 404 or 500)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 404 or 401', function () {",
+									"  pm.expect([404, 401]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/orders/{{randomUuid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders",
+								"{{randomUuid}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order (validation error) — POST /orders (items empty expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 400', function () {",
+									"  pm.response.to.have.status(400);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test('Has error.message=validation_error', function () {",
+									"  pm.expect(json).to.have.property('error');",
+									"  pm.expect(json.error).to.have.property('message');",
+									"  pm.expect(String(json.error.message)).to.eql('validation_error');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{userToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"payment_method\": \"wallet\",\n  \"items\": []\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Update Status (not found) — PATCH /admin/orders/:id/status (random uuid expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('HTTP 404 or 400', function () {",
+									"  pm.expect([404, 400]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "content-type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"processing\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/orders/{{randomUuid}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"orders",
+								"{{randomUuid}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8081/api"
+		},
+		{
+			"key": "userToken",
+			"value": ""
+		},
+		{
+			"key": "adminToken",
+			"value": ""
+		},
+		{
+			"key": "locale",
+			"value": "tr-TR"
+		},
+		{
+			"key": "userId",
+			"value": ""
+		},
+		{
+			"key": "productId",
+			"value": "00000000-0000-0000-0000-000000000000"
+		},
+		{
+			"key": "cartItemId",
+			"value": "00000000-0000-0000-0000-000000000000"
+		},
+		{
+			"key": "randomUuid",
+			"value": "00000000-0000-0000-0000-000000000000"
+		},
+		{
+			"key": "lastUserOrderId",
+			"value": ""
+		},
+		{
+			"key": "lastUserOrderNumber",
+			"value": ""
+		},
+		{
+			"key": "lastOrderItemId",
+			"value": ""
+		},
+		{
+			"key": "createdOrderId",
+			"value": ""
+		},
+		{
+			"key": "createdOrderNumber",
+			"value": ""
+		},
+		{
+			"key": "createdOrderFirstItemId",
+			"value": ""
+		},
+		{
+			"key": "checkoutOrderId",
+			"value": ""
+		},
+		{
+			"key": "checkoutOrderNumber",
+			"value": ""
+		},
+		{
+			"key": "adminFirstOrderId",
+			"value": ""
+		},
+		{
+			"key": "adminFirstOrderNumber",
+			"value": ""
+		},
+		{
+			"key": "adminFirstOrderItemId",
+			"value": ""
+		},
+		{
+			"key": "adminCancelOrderId",
+			"value": "{{adminFirstOrderId}}"
+		},
+		{
+			"key": "adminRefundOrderId",
+			"value": "{{adminFirstOrderId}}"
+		},
+		{
+			"key": "adminDeleteOrderId",
+			"value": "{{adminFirstOrderId}}"
+		}
+	]
+}

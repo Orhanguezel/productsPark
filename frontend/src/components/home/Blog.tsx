@@ -6,12 +6,15 @@ import { ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-import type { BlogPost } from "@/integrations/metahub/rtk/types/blog";
-import { useListBlogPostsQuery } from "@/integrations/metahub/rtk/endpoints/blog_posts.endpoints";
+import type {
+  BlogPost,
+  SiteSetting,
+} from "@/integrations/types";
 import {
+  useListBlogPostsQuery,
   useListSiteSettingsQuery,
-  type SiteSetting,
-} from "@/integrations/metahub/rtk/endpoints/site_settings.endpoints";
+} from "@/integrations/hooks";
+
 
 const DEFAULT_SETTINGS = {
   home_blog_badge: "Blog Yazılarımız",

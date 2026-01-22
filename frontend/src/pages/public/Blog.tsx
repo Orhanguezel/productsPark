@@ -1,192 +1,244 @@
 // =============================================================
-// FILE: src/pages/Blog.tsx  (veya senin Blog sayfan nerede ise)
+// FILE: src/pages/Blog.tsx
+// FINAL — Blog List Page (SEO via SeoHelmet, no duplicates)
+// - Canonical/hreflang: RouteSeoLinks (global)
+// - Global defaults: GlobalSeo (global)
+// - Route SEO: SeoHelmet only
+// - No fallback images
 // =============================================================
 
-import { Helmet } from "react-helmet-async";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Calendar, User } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useSeoSettings } from "@/hooks/useSeoSettings";
+import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { useListBlogPostsQuery } from "@/integrations/metahub/rtk/endpoints/blog_posts.endpoints";
-import type { BlogPost } from "@/integrations/metahub/rtk/types/blog";
+import Navbar from '@/components/layout/Navbar';
+import Footer from '@/components/layout/Footer';
+import SeoHelmet from '@/components/seo/SeoHelmet';
 
-const Blog = () => {
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, User } from 'lucide-react';
+
+import { useSeoSettings } from '@/hooks/useSeoSettings';
+import { useListBlogPostsQuery } from '@/integrations/hooks';
+import type { PageState } from '@/integrations/types';
+import {
+  hasText,
+  nonEmpty,
+  imgSrc,
+  formatDateTR,
+  pickFeatured,
+  getOrigin,
+} from '@/integrations/types';
+
+const Blog: React.FC = () => {
   const navigate = useNavigate();
-  const { settings } = useSeoSettings();
 
-  // 🔹 RTK: Blog postları çek (yayında olanlar, created_at desc)
+  // SEO keys are still coming from site_settings (fallbacks live inside useSeoSettings only if you want them).
+  // Here we explicitly use "no fallbacks" pattern via nonEmpty().
+  const { flat, loading: seoLoading } = useSeoSettings({ seoOnly: true });
+
   const {
     data: allPosts = [],
     isLoading,
     isError,
   } = useListBlogPostsQuery({
     is_published: true,
-    sort: "created_at",
-    order: "desc",
+    sort: 'created_at',
+    order: 'desc',
   });
 
-  // Öne çıkan yazı + diğerleri
-  const featuredPost: BlogPost | null =
-    allPosts.find((p) => p.is_featured) ?? allPosts[0] ?? null;
+  const featuredPost = useMemo(() => pickFeatured(allPosts), [allPosts]);
 
-  const posts: BlogPost[] = featuredPost
-    ? allPosts.filter((p) => p.id !== featuredPost.id)
-    : allPosts;
+  const posts = useMemo(() => {
+    if (!featuredPost) return allPosts;
+    return allPosts.filter((p) => p.id !== featuredPost.id);
+  }, [allPosts, featuredPost]);
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-    return new Date(dateString).toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  };
+  const pageState: PageState = useMemo(() => {
+    if (isLoading || seoLoading) return 'loading';
+    if (isError) return 'error';
+    if (!allPosts.length) return 'empty';
+    return 'ready';
+  }, [isLoading, seoLoading, isError, allPosts.length]);
 
-  const fallbackImage =
-    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=400&fit=crop";
+  // Route-level SEO (no fallbacks)
+  const seoTitle = nonEmpty(flat?.seo_blog_title);
+  const seoDesc = nonEmpty(flat?.seo_blog_description);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">Yükleniyor...</p>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  // og:url best-effort (canonical is global via RouteSeoLinks)
+  const url = useMemo(() => {
+    const origin = getOrigin();
+    return origin ? `${origin}/blog` : '';
+  }, []);
 
-  if (isError || !allPosts.length) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">
-            Şu anda görüntülenecek blog yazısı bulunamadı.
-          </p>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  const featuredImage = featuredPost ? imgSrc(featuredPost.image_url) : null;
+  const featuredDate = featuredPost ? formatDateTR(featuredPost.created_at) : '';
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Helmet>
-        <title>{settings.seo_blog_title}</title>
-        <meta name="description" content={settings.seo_blog_description} />
-        <meta property="og:title" content={settings.seo_blog_title} />
-        <meta property="og:description" content={settings.seo_blog_description} />
-        <meta property="og:type" content="website" />
-      </Helmet>
+      <SeoHelmet
+        title={seoTitle || null}
+        description={seoDesc || null}
+        ogType="website"
+        url={url || null}
+        // Optional: list page OG image only if you want it.
+        // If omitted, GlobalSeo’s og_default_image (if set) covers you globally.
+        imageUrl={featuredImage || null}
+      />
 
       <Navbar />
 
-      {/* Hero Section */}
       <section className="gradient-hero text-white py-16">
         <div className="container mx-auto px-4 text-center">
           <p className="text-primary-glow mb-4">— Blog</p>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Haberler ve Rehberler
-          </h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">Haberler ve Rehberler</h1>
           <p className="text-xl text-white/80 max-w-2xl mx-auto">
             Dijital ürünler hakkında güncel bilgiler, ipuçları ve rehberler
           </p>
         </div>
       </section>
 
-      {/* Featured Post */}
-      {featuredPost && (
+      {pageState === 'loading' ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">Yükleniyor...</p>
+        </div>
+      ) : null}
+
+      {pageState === 'error' ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">Blog yazıları yüklenirken bir hata oluştu.</p>
+        </div>
+      ) : null}
+
+      {pageState === 'empty' ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">Şu anda görüntülenecek blog yazısı bulunamadı.</p>
+        </div>
+      ) : null}
+
+      {pageState === 'ready' ? (
         <section className="py-12">
           <div className="container mx-auto px-4">
-            <Card
-              className="overflow-hidden cursor-pointer hover:shadow-elegant transition-all duration-300 mb-12"
-              onClick={() => navigate(`/blog/${featuredPost.slug}`)}
-            >
-              <div className="grid grid-cols-1 lg:grid-cols-2">
-                <div className="relative h-64 lg:h-auto">
-                  <img
-                    src={featuredPost.image_url || fallbackImage}
-                    alt={featuredPost.title}
-                    className="w-full h-full object-cover"
-                  />
-                  <Badge className="absolute top-4 left-4 bg-primary text-primary-foreground">
-                    Öne Çıkan
-                  </Badge>
-                </div>
-                <CardContent className="p-8 flex flex-col justify-center">
-                  <Badge className="w-fit mb-4" variant="secondary">
-                    {featuredPost.category ?? "Genel"}
-                  </Badge>
-                  <h2 className="text-3xl font-bold mb-4 hover:text-primary transition-colors">
-                    {featuredPost.title}
-                  </h2>
-                  <p className="text-muted-foreground mb-6">
-                    {featuredPost.excerpt ?? ""}
-                  </p>
-                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      {featuredPost.author_name ?? "Admin"}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      {formatDate(featuredPost.created_at)}
-                    </div>
-                    <span>
-                      {featuredPost.read_time ?? "Okuma süresi"}
-                    </span>
-                  </div>
-                </CardContent>
-              </div>
-            </Card>
-
-            {/* Blog Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {posts.map((post) => (
-                <Card
-                  key={post.id}
-                  className="group overflow-hidden cursor-pointer hover:shadow-elegant transition-all duration-300"
-                  onClick={() => navigate(`/blog/${post.slug}`)}
-                >
-                  <CardHeader className="p-0">
-                    <div className="relative overflow-hidden aspect-video">
+            {featuredPost ? (
+              <Card
+                className="overflow-hidden cursor-pointer hover:shadow-elegant transition-all duration-300 mb-12"
+                onClick={() => navigate(`/blog/${featuredPost.slug}`)}
+                role="button"
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-2">
+                  {featuredImage ? (
+                    <div className="relative h-64 lg:h-auto">
                       <img
-                        src={post.image_url || fallbackImage}
-                        alt={post.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        src={featuredImage}
+                        alt={featuredPost.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
                       />
+                      <Badge className="absolute top-4 left-4 bg-primary text-primary-foreground">
+                        Öne Çıkan
+                      </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <Badge className="mb-3" variant="secondary">
-                      {post.category ?? "Genel"}
-                    </Badge>
-                    <h3 className="text-xl font-bold mb-3 group-hover:text-primary transition-colors line-clamp-2">
-                      {post.title}
-                    </h3>
-                    <p className="text-muted-foreground mb-4 line-clamp-3">
-                      {post.excerpt ?? ""}
-                    </p>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {formatDate(post.created_at)}
-                      </div>
-                      <span>{post.read_time ?? "Okuma süresi"}</span>
+                  ) : null}
+
+                  <CardContent className="p-8 flex flex-col justify-center">
+                    {hasText(featuredPost.category) ? (
+                      <Badge className="w-fit mb-4" variant="secondary">
+                        {featuredPost.category}
+                      </Badge>
+                    ) : null}
+
+                    <h2 className="text-3xl font-bold mb-4 hover:text-primary transition-colors">
+                      {featuredPost.title}
+                    </h2>
+
+                    {hasText(featuredPost.excerpt) ? (
+                      <p className="text-muted-foreground mb-6">{featuredPost.excerpt}</p>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
+                      {hasText(featuredPost.author_name) ? (
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4" />
+                          {featuredPost.author_name}
+                        </div>
+                      ) : null}
+
+                      {featuredDate ? (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          {featuredDate}
+                        </div>
+                      ) : null}
+
+                      {hasText(featuredPost.read_time) ? (
+                        <span>{featuredPost.read_time}</span>
+                      ) : null}
                     </div>
                   </CardContent>
-                </Card>
-              ))}
+                </div>
+              </Card>
+            ) : null}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {posts.map((post) => {
+                const image = imgSrc(post.image_url);
+                const date = formatDateTR(post.created_at);
+                const readTime = nonEmpty(post.read_time);
+
+                return (
+                  <Card
+                    key={post.id}
+                    className="group overflow-hidden cursor-pointer hover:shadow-elegant transition-all duration-300"
+                    onClick={() => navigate(`/blog/${post.slug}`)}
+                    role="button"
+                  >
+                    {image ? (
+                      <CardHeader className="p-0">
+                        <div className="relative overflow-hidden aspect-video">
+                          <img
+                            src={image}
+                            alt={post.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        </div>
+                      </CardHeader>
+                    ) : null}
+
+                    <CardContent className="p-6">
+                      {hasText(post.category) ? (
+                        <Badge className="mb-3" variant="secondary">
+                          {post.category}
+                        </Badge>
+                      ) : null}
+
+                      <h3 className="text-xl font-bold mb-3 group-hover:text-primary transition-colors line-clamp-2">
+                        {post.title}
+                      </h3>
+
+                      {hasText(post.excerpt) ? (
+                        <p className="text-muted-foreground mb-4 line-clamp-3">{post.excerpt}</p>
+                      ) : null}
+
+                      {date || readTime ? (
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          {date ? (
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              {date}
+                            </div>
+                          ) : null}
+                          {readTime ? <span>{readTime}</span> : null}
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
         </section>
-      )}
+      ) : null}
 
       <Footer />
     </div>

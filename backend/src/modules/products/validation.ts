@@ -1,7 +1,26 @@
 // =============================================================
 // FILE: src/modules/products/validation.ts
 // =============================================================
+
 import { z } from "zod";
+
+const tryParseJson = (v: unknown) => {
+  if (typeof v !== "string") return v;
+  const s = v.trim();
+  if (!s) return v;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return v;
+  }
+};
+
+const jsonArray = <T extends z.ZodTypeAny>(item: T) =>
+  z.preprocess(tryParseJson, z.array(item));
+
+const jsonStringArray = () =>
+  z.preprocess(tryParseJson, z.array(z.string()));
+
 
 const toNullIfEmpty = (v: unknown) => {
   if (typeof v === "string" && v.trim() === "") return null;
@@ -45,40 +64,36 @@ export const productCreateSchema = z.object({
   featured_image_asset_id: z.string().min(1).max(200).optional().nullable(),
   featured_image_alt: z.string().max(255).optional().nullable(),
 
-  gallery_urls: z.array(z.string().url()).optional().nullable(),
-  gallery_asset_ids: z.array(z.string().min(1)).optional().nullable(),
+  gallery_urls: jsonStringArray().optional().nullable(),
+  gallery_asset_ids: jsonArray(z.string().min(1)).optional().nullable(),
 
   features: z.array(z.string()).optional().nullable(),
 
   rating: z.coerce.number().min(0).max(5).optional(),
   review_count: z.coerce.number().int().min(0).optional(),
+  sales_count: z.coerce.number().int().min(0).optional(),
 
   product_type: z.string().max(50).optional().nullable(),
-  delivery_type: z
-    .enum(["manual", "auto_stock", "file", "api"])
+  delivery_type: z.enum(['manual', 'auto_stock', 'file', 'api']).optional().nullable(),
+
+  custom_fields: jsonArray(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      type: z.enum(['text', 'email', 'phone', 'url', 'textarea']),
+      placeholder: z.string().optional().nullable(),
+      required: z.boolean().default(false),
+    }),
+  )
     .optional()
     .nullable(),
 
-  custom_fields: z
-    .array(
-      z.object({
-        id: z.string(),
-        label: z.string(),
-        type: z.enum(["text", "email", "phone", "url", "textarea"]),
-        placeholder: z.string().optional().nullable(),
-        required: z.boolean().default(false),
-      })
-    )
-    .optional()
-    .nullable(),
-
-  quantity_options: z
-    .array(
-      z.object({
-        quantity: z.coerce.number().int().min(1),
-        price: z.coerce.number().min(0),
-      })
-    )
+  quantity_options: jsonArray(
+    z.object({
+      quantity: z.coerce.number().int().min(0), // min(1) yerine min(0)
+      price: z.coerce.number().min(0),
+    }),
+  )
     .optional()
     .nullable(),
 
@@ -98,14 +113,13 @@ export const productCreateSchema = z.object({
   demo_embed_enabled: z.coerce.number().int().min(0).max(1).optional().default(0),
   demo_button_text: z.string().max(100).optional().nullable(),
 
-  badges: z
-    .array(
-      z.object({
-        text: z.string(),
-        icon: z.string().optional().nullable(),
-        active: z.boolean(),
-      })
-    )
+  badges: jsonArray(
+    z.object({
+      text: z.string(),
+      icon: z.string().optional().nullable(),
+      active: z.boolean(),
+    }),
+  )
     .optional()
     .nullable(),
 

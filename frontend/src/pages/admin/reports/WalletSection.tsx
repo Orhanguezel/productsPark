@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { RevenueStats, TopCustomer } from "./types";
+import type { RevenueStats, TopCustomer } from '@/integrations/types';
 import { TopCustomersTable } from "./TopCustomersTable";
 
 interface WalletSectionProps {

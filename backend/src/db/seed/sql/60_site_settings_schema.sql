@@ -1,7 +1,11 @@
+-- =============================================================
+-- FILE: 60_site_settings.schema.sql
+-- FINAL — site_settings table (idempotent)
+-- =============================================================
+
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
--- İdempotent: tabloyu her seferinde sıfırdan oluştur
 DROP TABLE IF EXISTS `site_settings`;
 
 CREATE TABLE `site_settings` (

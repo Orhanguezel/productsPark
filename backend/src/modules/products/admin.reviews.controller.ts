@@ -11,14 +11,9 @@ import {
   productReviewUpdateSchema,
 } from "./validation";
 
-const now = () => new Date();
+import { now, toBool, toNumber } from '@/modules/_shared/common';
 
-function toBool(v: unknown): boolean {
-  if (typeof v === "boolean") return v;
-  const s = String(v ?? "").toLowerCase();
-  return s === "1" || s === "true";
-}
-const toNumber = (v: unknown) => (v == null ? 0 : Number(v) || 0);
+
 
 /* rating & review_count aggregate */
 async function recomputeRatingAndCount(productId: string) {

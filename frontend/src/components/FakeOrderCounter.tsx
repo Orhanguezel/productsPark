@@ -1,65 +1,56 @@
-// src/components/FakeOrderCounter.tsx
+// =============================================================
+// FILE: src/components/FakeOrderCounter.tsx
+// FINAL — Order counters (RTK + OrderView aligned, strict-safe)
+// - uses OrderView.total (normalized final amount)
+// - no legacy final_amount/total_amount access
+// =============================================================
 
-import { useMemo } from "react";
-import { useListOrdersQuery } from "@/integrations/metahub/rtk/endpoints/orders.endpoints";
+import React, { useMemo } from 'react';
+import { useListOrdersQuery } from '@/integrations/hooks';
+import type { OrderView } from '@/integrations/types';
 
-interface CounterData {
+type CounterData = {
   total_sales: number;
   total_orders: number;
   active_users: number;
-}
+};
 
-export const FakeOrderCounter = () => {
-  // Tüm siparişleri (veya ihtiyaç halinde filtreli) çek
-  const { data: orders = [], isLoading } = useListOrdersQuery({});
+export const FakeOrderCounter: React.FC = () => {
+  // Public orders list (params optional; {} da olur ama void daha temiz)
+  const { data, isLoading, isFetching } = useListOrdersQuery(undefined);
+
+  const orders: OrderView[] = useMemo(
+    () => (Array.isArray(data) ? (data as OrderView[]) : []),
+    [data],
+  );
 
   const counters: CounterData = useMemo(() => {
-    if (!orders.length) {
-      return {
-        total_sales: 0,
-        total_orders: 0,
-        active_users: 0,
-      };
-    }
+    const total_orders = orders.length;
 
     const total_sales = orders.reduce((sum, order) => {
-      // normalizeOrder zaten final_amount dolduruyor
-      const amount =
-        typeof order.final_amount === "number"
-          ? order.final_amount
-          : typeof order.total_amount === "number"
-          ? order.total_amount
-          : 0;
-
+      // OrderView.total = final_amount (legacy) normalize edilmiş alan
+      const amount = Number.isFinite(order.total) ? order.total : 0;
       return sum + amount;
     }, 0);
 
-    const total_orders = orders.length;
-
-    // Aktif kullanıcı: benzersiz user_id sayısı (fallback: sipariş sayısına göre tahmin)
     const userIds = new Set(
-      orders
-        .map((o) => o.user_id)
-        .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
+      orders.map((o) => o.user_id).filter((id) => typeof id === 'string' && id.trim() !== ''),
     );
-    const active_users =
-      userIds.size > 0
-        ? userIds.size
-        : Math.max(1, Math.floor(total_orders * 0.3));
 
-    return {
-      total_sales,
-      total_orders,
-      active_users,
-    };
+    const active_users =
+      userIds.size > 0 ? userIds.size : Math.max(0, Math.floor(total_orders * 0.3));
+
+    return { total_sales, total_orders, active_users };
   }, [orders]);
 
-  const totalSalesText = `₺${counters.total_sales.toLocaleString("tr-TR", {
+  const loading = isLoading || isFetching;
+
+  const totalSalesText = `₺${counters.total_sales.toLocaleString('tr-TR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 
-  const totalOrdersText = counters.total_orders.toLocaleString("tr-TR");
+  const totalOrdersText = counters.total_orders.toLocaleString('tr-TR');
 
   return (
     <div className="bg-card rounded-lg p-6 shadow-lg border border-border">
@@ -67,19 +58,19 @@ export const FakeOrderCounter = () => {
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">Toplam Satış</p>
           <p className="text-2xl font-bold text-primary">
-            {isLoading ? "Yükleniyor..." : totalSalesText}
+            {loading ? 'Yükleniyor...' : totalSalesText}
           </p>
         </div>
+
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">Toplam Sipariş</p>
-          <p className="text-2xl font-bold text-primary">
-            {isLoading ? "—" : totalOrdersText}
-          </p>
+          <p className="text-2xl font-bold text-primary">{loading ? '—' : totalOrdersText}</p>
         </div>
+
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">Aktif Kullanıcı</p>
           <p className="text-2xl font-bold text-primary">
-            {isLoading ? "—" : counters.active_users}
+            {loading ? '—' : counters.active_users.toLocaleString('tr-TR')}
           </p>
         </div>
       </div>

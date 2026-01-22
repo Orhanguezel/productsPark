@@ -1,4 +1,10 @@
--- USERS / AUTH
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+SET collation_connection = utf8mb4_unicode_ci;
+SET time_zone = '+00:00';
+
+-- =========================
+-- USERS
+-- =========================
 CREATE TABLE IF NOT EXISTS users (
   id                CHAR(36)       NOT NULL,
   email             VARCHAR(255)   NOT NULL,
@@ -17,18 +23,9 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY users_email_unique (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS user_roles (
-  id          CHAR(36)     NOT NULL,
-  user_id     CHAR(36)     NOT NULL,
-  role        ENUM('admin','moderator','user') NOT NULL DEFAULT 'user',
-  created_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  UNIQUE KEY user_roles_user_id_role_unique (user_id, role),
-  KEY user_roles_user_id_idx (user_id),
-  CONSTRAINT fk_user_roles_user
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+-- =========================
+-- REFRESH TOKENS
+-- =========================
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id           CHAR(36)     NOT NULL,
   user_id      CHAR(36)     NOT NULL,
@@ -41,22 +38,55 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   KEY refresh_tokens_user_id_idx (user_id),
   KEY refresh_tokens_expires_at_idx (expires_at),
   CONSTRAINT fk_refresh_tokens_user
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users (id)
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =========================
+-- PROFILES (BACKEND SCHEMA İLE BİREBİR)
+-- =========================
 CREATE TABLE IF NOT EXISTS profiles (
   id             CHAR(36)      NOT NULL,
   full_name      TEXT          DEFAULT NULL,
   phone          VARCHAR(64)   DEFAULT NULL,
   avatar_url     TEXT          DEFAULT NULL,
+
   address_line1  VARCHAR(255)  DEFAULT NULL,
   address_line2  VARCHAR(255)  DEFAULT NULL,
   city           VARCHAR(128)  DEFAULT NULL,
   country        VARCHAR(128)  DEFAULT NULL,
   postal_code    VARCHAR(32)   DEFAULT NULL,
+
+  website_url    VARCHAR(2048) DEFAULT NULL,
+  instagram_url  VARCHAR(2048) DEFAULT NULL,
+  facebook_url   VARCHAR(2048) DEFAULT NULL,
+  x_url          VARCHAR(2048) DEFAULT NULL,
+  linkedin_url   VARCHAR(2048) DEFAULT NULL,
+  youtube_url    VARCHAR(2048) DEFAULT NULL,
+  tiktok_url     VARCHAR(2048) DEFAULT NULL,
+
   created_at     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
   PRIMARY KEY (id),
   CONSTRAINT fk_profiles_id_users_id
-    FOREIGN KEY (id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (id) REFERENCES users (id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =========================
+-- USER ROLES
+-- =========================
+CREATE TABLE IF NOT EXISTS user_roles (
+  id         CHAR(36) NOT NULL,
+  user_id    CHAR(36) NOT NULL,
+  role       ENUM('admin','moderator','user') NOT NULL DEFAULT 'user',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY user_roles_user_id_role_unique (user_id, role),
+  KEY user_roles_user_id_idx (user_id),
+  KEY user_roles_role_idx (role),
+  CONSTRAINT fk_user_roles_user
+    FOREIGN KEY (user_id) REFERENCES users (id)
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
