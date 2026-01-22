@@ -51,7 +51,7 @@ import './support_tickets.endpoints';
 import './ticket_replies.endpoints';
 
 import './notifications.endpoints';
-import './fake_notifications.endpoints';
+import './fake_public_notifications.endpoints';
 
 import './payment_providers.endpoints';
 import './payment_requests.endpoints';

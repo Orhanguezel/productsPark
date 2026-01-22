@@ -1,6 +1,6 @@
 // =============================================================
 // FILE: src/components/admin/AdminLayout.tsx
-// FINAL — Admin Layout (status/roles + MenuValue + Telegram tab support)
+// FINAL — Admin Layout (adds payments module tab support)
 // =============================================================
 
 import React, { useEffect } from 'react';
@@ -48,6 +48,9 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     if (path.includes('/deposit-requests')) return 'deposit-requests';
     if (path.includes('/payment-requests')) return 'payment-requests';
     if (path.includes('/wallet-transactions')) return 'wallet-transactions';
+
+    // ✅ NEW: payments module
+    if (path.includes('/payments')) return 'payments';
 
     if (path.includes('/tickets')) return 'tickets';
     if (path.includes('/contacts')) return 'contacts';

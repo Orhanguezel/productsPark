@@ -1,6 +1,7 @@
 // =============================================================
 // FILE: src/modules/wallet/controller.ts
 // FINAL — Public Wallet Controller (me + create deposit)
+// - ✅ userId: trim + UUID validate (prevents blank/invalid ids)
 // - ✅ /me/balance returns a number (computed from wallet_transactions)
 // =============================================================
 
@@ -16,16 +17,22 @@ import { sendTemplatedEmail } from '@/modules/email-templates/mailer';
 import { sendTelegramEvent } from '@/modules/telegram/service';
 
 /* ---------------- auth helper ---------------- */
+
 type JwtUser = { sub?: unknown; id?: unknown };
 
-const getUserIdFromReq = (req: FastifyRequest): string => {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function getUserIdFromReq(req: FastifyRequest): string {
   const payload = (req as any).user as JwtUser | undefined;
-  const id = payload?.id;
-  const sub = payload?.sub;
-  const value = (typeof id === 'string' && id) || (typeof sub === 'string' && sub) || '';
-  if (!value) throw new Error('unauthorized');
-  return value;
-};
+  const raw = payload?.id ?? payload?.sub ?? null;
+  if (raw == null) throw new Error('unauthorized');
+
+  const userId = String(raw).trim();
+  if (!userId) throw new Error('unauthorized');
+  if (!UUID_RE.test(userId)) throw new Error('unauthorized');
+
+  return userId;
+}
 
 const getLocaleFromReq = (req: FastifyRequest): string | undefined => {
   const header =
@@ -143,7 +150,7 @@ export async function createDepositRequestCtrl(req: FastifyRequest, reply: Fasti
     const userId = getUserIdFromReq(req);
 
     const item = await createDepositRequest({
-      user_id: userId,
+      user_id: userId, // ✅ JWT overrides any FE user_id
       amount: parsed.data.amount,
       payment_method: parsed.data.payment_method,
       payment_proof: parsed.data.payment_proof ?? null,
@@ -179,6 +186,7 @@ export async function createDepositRequestCtrl(req: FastifyRequest, reply: Fasti
   } catch (e: any) {
     req.log.error(e, 'POST /wallet/deposit_requests failed');
     if (e?.message === 'invalid_amount') return reply.code(400).send({ message: 'invalid_amount' });
+    if (e?.message === 'user_not_found') return reply.code(404).send({ message: 'user_not_found' });
     if (e?.message === 'unauthorized') return reply.code(401).send({ message: 'unauthorized' });
     return reply.code(500).send({ message: 'request_failed_500' });
   }

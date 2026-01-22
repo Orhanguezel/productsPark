@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `api_providers` (
     CHECK (json_valid(`credentials`)),
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `api_providers_active_idx` (`is_active`),
   KEY `api_providers_type_idx` (`type`),

@@ -1,9 +1,9 @@
 // =============================================================
-// FILE: src/pages/admin/tickets/TicketList.tsx
+// FILE: src/pages/admin/ticket/TicketList.tsx
 // FINAL — Ticket List (Admin)
-// - AdminUserView.email is string | null => userMap email nullable
-// - userMap stores only the fields we need (id/full_name/email)
-// - formatUser handles null-safe rendering
+// - Fetches users by ids (not q)
+// - email nullable safe
+// - userMap stores only id/full_name/email
 // =============================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -85,7 +85,6 @@ const priorityColor = (p: SupportTicketPriority) => {
   }
 };
 
-// UI için mini user view (email nullable!)
 type MiniUser = {
   id: string;
   full_name: string | null;
@@ -137,19 +136,15 @@ export default function TicketList() {
     return Array.from(new Set(ids));
   }, [paginated]);
 
+  // ✅ IMPORTANT: ids ile çek (q değil)
   const { data: miniUsers = [] } = useAdminListQuery(
-    { q: pageUserIds.join(',') },
-    {
-      skip: pageUserIds.length === 0,
-    },
+    pageUserIds.length ? { ids: pageUserIds } : undefined,
+    { skip: pageUserIds.length === 0 },
   );
 
   const userMap = useMemo(() => {
-    // ✅ email nullable
     const m = new Map<string, MiniUser>();
-    (miniUsers as AdminUserView[]).forEach((u) => {
-      m.set(u.id, toMiniUser(u));
-    });
+    (miniUsers as AdminUserView[]).forEach((u) => m.set(u.id, toMiniUser(u)));
     return m;
   }, [miniUsers]);
 
@@ -157,10 +152,12 @@ export default function TicketList() {
     const u = userMap.get(userId);
     if (!u) return userId;
 
-    // email null ise daha düzgün fallback
-    if (u.full_name && u.email) return `${u.full_name} (${u.email})`;
-    if (u.full_name) return u.full_name;
-    if (u.email) return u.email;
+    const full = (u.full_name ?? '').trim();
+    const email = (u.email ?? '').trim();
+
+    if (full && email) return `${full} (${email})`;
+    if (full) return full;
+    if (email) return email;
     return userId;
   };
 
@@ -190,7 +187,6 @@ export default function TicketList() {
   return (
     <AdminLayout title="Destek Yönetimi">
       <div className="space-y-4 max-w-full overflow-x-hidden">
-        {/* Sekmeler */}
         <Tabs
           value={filterStatus}
           onValueChange={(v) => setFilterStatus(v as FilterStatus)}
@@ -222,6 +218,7 @@ export default function TicketList() {
                     <TableHead className="text-right">İşlemler</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
                   {paginated.length === 0 ? (
                     <TableRow>
@@ -241,17 +238,13 @@ export default function TicketList() {
                         </TableCell>
 
                         <TableCell>
-                          <Badge className={priorityColor(t.priority)}>
-                            {priorityText[t.priority]}
-                          </Badge>
+                          <Badge className={priorityColor(t.priority)}>{priorityText[t.priority]}</Badge>
                         </TableCell>
 
                         <TableCell>
                           <Select
                             value={t.status}
-                            onValueChange={(v) =>
-                              handleStatusChange(t.id, v as SupportTicketStatus)
-                            }
+                            onValueChange={(v) => handleStatusChange(t.id, v as SupportTicketStatus)}
                           >
                             <SelectTrigger className="w-[180px]">
                               <SelectValue />
@@ -289,8 +282,7 @@ export default function TicketList() {
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Destek Talebini Sil</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem
-                                    geri alınamaz.
+                                    Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -328,9 +320,7 @@ export default function TicketList() {
                           {formatUser(t.user_id)}
                         </p>
                       </div>
-                      <Badge className={priorityColor(t.priority)}>
-                        {priorityText[t.priority]}
-                      </Badge>
+                      <Badge className={priorityColor(t.priority)}>{priorityText[t.priority]}</Badge>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -374,8 +364,7 @@ export default function TicketList() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Destek Talebini Sil</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem geri
-                              alınamaz.
+                              Bu destek talebini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

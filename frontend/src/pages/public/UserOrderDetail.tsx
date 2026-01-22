@@ -1,9 +1,11 @@
 // =============================================================
 // FILE: src/pages/account/components/UserOrderDetail.tsx
-// FINAL — User order detail (RTK ile, HTML index hatası biter)
-// - fetch() KALDIRILDI
-// - backend: GET /orders/:id -> items response içinde var (ayrı /items yok)
-// - user kendi siparişini görebilir: backend zaten user_id kontrol ediyor
+// FINAL — User order detail (RTK)
+// - No fetch()
+// - GET /orders/:id -> items included (no separate /items)
+// - Removes "Customer info" card (not needed in account area)
+// - Robust unwrap for RTK response shapes (data/result/item/order)
+// - Safer date/clipboard handling
 // =============================================================
 
 import { useEffect, useMemo } from 'react';
@@ -29,23 +31,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { useGetOrderByIdQuery } from '@/integrations/hooks';
 
 import type { OrderItemView } from '@/integrations/types';
-import { normalizeOrderItemList } from '@/integrations/types';
+import { isPlainObject, normalizeOrderItemList, toNum } from '@/integrations/types';
 
 const safeLower = (v: unknown) =>
   String(v ?? '')
     .toLowerCase()
     .trim();
 
-const money = (v: unknown) => {
-  const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.'));
-  const x = Number.isFinite(n) ? n : 0;
-  return `₺${x.toFixed(2)}`;
-};
+const money = (v: unknown) => `₺${toNum(v, 0).toFixed(2)}`;
 
 function getHttpStatus(err: unknown): number | undefined {
-  // RTK Query error shape farklı olabilir; en yaygınlarını yakalıyoruz
   if (!err || typeof err !== 'object') return undefined;
-  const e = err as any;
+  const e = err as Record<string, any>;
   return (
     e?.status ??
     e?.originalStatus ??
@@ -56,25 +53,52 @@ function getHttpStatus(err: unknown): number | undefined {
   );
 }
 
+function unwrapOrderPayload(res: unknown): Record<string, unknown> | null {
+  if (!isPlainObject(res)) return null;
+
+  const o = res as Record<string, unknown>;
+  // Common wrappers
+  const candidates: unknown[] = [o.data, o.result, o.item, o.order];
+  for (const c of candidates) {
+    if (isPlainObject(c)) return c as Record<string, unknown>;
+  }
+
+  // Sometimes arrays
+  if (Array.isArray(o.data) && o.data[0] && isPlainObject(o.data[0])) {
+    return o.data[0] as Record<string, unknown>;
+  }
+
+  // Fallback: already the order object
+  return o;
+}
+
+function formatTrDateTime(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (!s) return '-';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s; // do not break UI
+  return d.toLocaleString('tr-TR');
+}
+
 export default function UserOrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
-  // auth yoksa çağırma; id yoksa çağırma
   const skip = !user?.id || !id;
 
   const { data, isLoading, isFetching, isError, error } = useGetOrderByIdQuery(String(id ?? ''), {
     skip,
   });
 
+  const order = useMemo(() => unwrapOrderPayload(data), [data]);
+
   // items backend response içinde
   const orderItems: OrderItemView[] = useMemo(() => {
-    const raw = (data as any)?.items ?? [];
-    return raw ? normalizeOrderItemList(raw) : [];
-  }, [data]);
+    const raw = order?.items ?? (data as any)?.items ?? [];
+    return normalizeOrderItemList(raw);
+  }, [order, data]);
 
-  const order = data as any;
   const isPaid = useMemo(
     () => safeLower(order?.payment_status) === 'paid',
     [order?.payment_status],
@@ -117,12 +141,17 @@ export default function UserOrderDetail() {
     navigate('/hesabim', { replace: true });
   }, [isError, error, navigate]);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('Kopyalandı!');
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Kopyalandı!');
+    } catch (e) {
+      console.error('clipboard error:', e);
+      toast.error('Kopyalama başarısız');
+    }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: unknown) => {
     const s = safeLower(status);
     const statusMap: Record<
       string,
@@ -136,7 +165,7 @@ export default function UserOrderDetail() {
       refunded: { label: 'İade Edildi', variant: 'outline' },
       failed: { label: 'Başarısız', variant: 'destructive' },
     };
-    const config = statusMap[s] || { label: status || '-', variant: 'outline' };
+    const config = statusMap[s] || { label: String(status ?? '-') || '-', variant: 'outline' };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
@@ -185,7 +214,9 @@ export default function UserOrderDetail() {
               </Button>
             </div>
 
-            <h1 className="text-3xl font-bold">Sipariş Detayı - {order.order_number}</h1>
+            <h1 className="text-3xl font-bold">
+              Sipariş Detayı - {String(order.order_number ?? '-')}
+            </h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
@@ -195,11 +226,11 @@ export default function UserOrderDetail() {
                 <CardContent className="space-y-2">
                   <div>
                     <p className="text-sm text-muted-foreground">Sipariş No</p>
-                    <p className="font-medium">{order.order_number}</p>
+                    <p className="font-medium">{String(order.order_number ?? '-')}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Durum</p>
-                    <div className="mt-1">{getStatusBadge(String(order.status))}</div>
+                    <div className="mt-1">{getStatusBadge(order.status)}</div>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Ödeme Durumu</p>
@@ -207,32 +238,24 @@ export default function UserOrderDetail() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Sipariş Tarihi</p>
-                    <p className="font-medium">
-                      {new Date(order.created_at).toLocaleString('tr-TR')}
-                    </p>
+                    <p className="font-medium">{formatTrDateTime(order.created_at)}</p>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Müşteri Bilgileri</CardTitle>
+                  <CardTitle>Ödeme</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div>
-                    <p className="text-sm text-muted-foreground">Ad Soyad</p>
-                    <p className="font-medium">{order.customer_name || '-'}</p>
+                    <p className="text-sm text-muted-foreground">Ödeme Yöntemi</p>
+                    <p className="font-medium">{String(order.payment_method ?? '-')}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">E-posta</p>
-                    <p className="font-medium">{order.customer_email || '-'}</p>
+                    <p className="text-sm text-muted-foreground">Toplam</p>
+                    <p className="font-medium">{money(order.total)}</p>
                   </div>
-                  {order.customer_phone ? (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Telefon</p>
-                      <p className="font-medium">{order.customer_phone}</p>
-                    </div>
-                  ) : null}
                 </CardContent>
               </Card>
             </div>
@@ -264,16 +287,16 @@ export default function UserOrderDetail() {
                               <div className="font-medium">{item.product_name || '-'}</div>
 
                               {item.selected_options &&
-                                Object.keys(item.selected_options).length > 0 && (
-                                  <div className="mt-1 text-xs text-muted-foreground space-y-1">
-                                    {Object.entries(item.selected_options).map(([k, v]) => (
-                                      <div key={k} className="flex items-start gap-1">
-                                        <span className="font-medium">•</span>
-                                        <span>{String(v)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                              Object.keys(item.selected_options).length > 0 ? (
+                                <div className="mt-1 text-xs text-muted-foreground space-y-1">
+                                  {Object.entries(item.selected_options).map(([k, v]) => (
+                                    <div key={k} className="flex items-start gap-1">
+                                      <span className="font-medium">•</span>
+                                      <span>{String(v)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
                             </div>
                           </TableCell>
 
@@ -323,7 +346,9 @@ export default function UserOrderDetail() {
                                     size="sm"
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => copyToClipboard(item.delivery_content || '')}
+                                    onClick={() =>
+                                      void copyToClipboard(item.delivery_content || '')
+                                    }
                                   >
                                     <Copy className="w-3 h-3 mr-1" />
                                     Bilgileri Kopyala
@@ -341,7 +366,7 @@ export default function UserOrderDetail() {
                                     size="sm"
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => copyToClipboard(item.activation_code || '')}
+                                    onClick={() => void copyToClipboard(item.activation_code || '')}
                                   >
                                     <Copy className="w-3 h-3 mr-1" />
                                     Kopyala
@@ -395,7 +420,7 @@ export default function UserOrderDetail() {
                     <span className="font-medium">{money(order.subtotal)}</span>
                   </div>
 
-                  {Number(order.discount || 0) > 0 ? (
+                  {toNum(order.discount, 0) > 0 ? (
                     <div className="flex justify-end gap-4">
                       <span className="text-muted-foreground">İndirim:</span>
                       <span className="font-medium text-green-600">-{money(order.discount)}</span>
@@ -416,7 +441,7 @@ export default function UserOrderDetail() {
                   <CardTitle>Notlar</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p>{order.notes}</p>
+                  <p>{String(order.notes)}</p>
                 </CardContent>
               </Card>
             ) : null}

@@ -1,9 +1,8 @@
 // =============================================================
 // FILE: src/components/admin/AdminSidebar.tsx
-// FINAL — Admin Sidebar (refreshed grouping + Telegram as separate menu)
-// - Adds: telegram
-// - Keeps routes same, only grouping/order updated
-// - exactOptionalPropertyTypes friendly
+// FINAL — Admin Sidebar (adds payments module menu)
+// - NEW: payments -> /admin/payments
+// - Keeps existing routes intact
 // =============================================================
 
 import React from 'react';
@@ -62,6 +61,9 @@ export type MenuValue =
   | 'coupons'
   | 'deposit-requests'
   | 'payment-requests'
+  | 'wallet-transactions'
+  // ✅ NEW
+  | 'payments'
   | 'tickets'
   | 'users'
   | 'email-templates'
@@ -102,6 +104,9 @@ const menuGroups: {
       { title: 'Kuponlar', icon: Ticket, value: 'coupons' },
       { title: 'Cüzdan Talepleri', icon: Wallet, value: 'deposit-requests' },
       { title: 'Ödeme Talepleri', icon: CreditCard, value: 'payment-requests' },
+
+      // ✅ NEW: separate payments module
+      { title: 'Ödeme Ayarları', icon: CreditCard, value: 'payments' },
     ],
   },
   {
@@ -148,6 +153,10 @@ const routeMap: Record<MenuValue, string> = {
   coupons: '/admin/coupons',
   'deposit-requests': '/admin/deposit-requests',
   'payment-requests': '/admin/payment-requests',
+  'wallet-transactions': '/admin/wallet-transactions',
+
+  // ✅ NEW
+  payments: '/admin/payments',
 
   tickets: '/admin/tickets',
   users: '/admin/users',

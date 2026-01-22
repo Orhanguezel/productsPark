@@ -14,6 +14,8 @@ import {
   toAdminCreateTicketReplyBody,
 } from '@/integrations/types';
 
+const BASE='admin/ticket_replies';
+
 const extendedApi = baseApi.enhanceEndpoints({
   addTagTypes: ['TicketReplies', 'SupportTickets'] as const,
 });
@@ -23,7 +25,7 @@ export const ticketRepliesAdminApi = extendedApi.injectEndpoints({
     /** GET /admin/ticket_replies/by-ticket/:ticketId */
     listTicketRepliesAdmin: b.query<TicketReply[], string>({
       query: (ticketId): FetchArgs => ({
-        url: `/admin/ticket_replies/by-ticket/${encodeURIComponent(ticketId)}`,
+        url: `${BASE}/by-ticket/${encodeURIComponent(ticketId)}`,
         method: 'GET',
       }),
       transformResponse: (res: unknown): TicketReply[] => normalizeTicketReplyList(res),
@@ -36,7 +38,7 @@ export const ticketRepliesAdminApi = extendedApi.injectEndpoints({
     /** POST /admin/ticket_replies */
     createTicketReplyAdmin: b.mutation<TicketReply, AdminCreateTicketReplyBody>({
       query: (body): FetchArgs => ({
-        url: '/admin/ticket_replies',
+        url: BASE,
         method: 'POST',
         body: toAdminCreateTicketReplyBody(body),
       }),
@@ -50,7 +52,7 @@ export const ticketRepliesAdminApi = extendedApi.injectEndpoints({
     /** DELETE /admin/ticket_replies/:id */
     deleteTicketReplyAdmin: b.mutation<{ ok: true }, { id: string; ticket_id?: string }>({
       query: ({ id }): FetchArgs => ({
-        url: `/admin/ticket_replies/${encodeURIComponent(id)}`,
+        url: `${BASE}/${encodeURIComponent(id)}`,
         method: 'DELETE',
       }),
       transformResponse: () => ({ ok: true as const }),

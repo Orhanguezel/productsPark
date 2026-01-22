@@ -21,10 +21,10 @@ const CouponList = lazy(() => import('../pages/admin/CouponList'));
 const CouponForm = lazy(() => import('../pages/admin/CouponForm'));
 const OrderList = lazy(() => import('../pages/admin/OrderList'));
 const OrderDetail = lazy(() => import('../pages/admin/OrderDetail'));
-const TicketList = lazy(() => import('../pages/admin/TicketList'));
-const TicketDetail = lazy(() => import('../pages/admin/TicketDetail'));
-const UserList = lazy(() => import('../pages/admin/UserList'));
-const UserEdit = lazy(() => import('../pages/admin/UserEdit'));
+const TicketList = lazy(() => import('../pages/admin/ticket/TicketList'));
+const TicketDetail = lazy(() => import('../pages/admin/ticket/TicketDetail'));
+const UserList = lazy(() => import('../pages/admin/users/UserList'));
+const UserEdit = lazy(() => import('../pages/admin/users/UserEdit'));
 const Settings = lazy(() => import('../pages/admin/settings/Settings'));
 const FakeOrdersPage = lazy(() => import('../pages/admin/FakeOrdersPage'));
 const FakeOrderForm = lazy(() => import('../pages/admin/FakeOrderForm'));
@@ -36,7 +36,8 @@ const MenuManagement = lazy(() => import('../pages/admin/menu/MenuManagement'));
 const ApiProviderList = lazy(() => import('../pages/admin/ApiProviderList'));
 const ApiProviderForm = lazy(() => import('../pages/admin/ApiProviderForm'));
 const TurkpinSettings = lazy(() => import('../pages/admin/TurkpinSettings'));
-const PaymentRequestList = lazy(() => import('../pages/admin/PaymentRequestList'));
+const PaymentRequestList = lazy(() => import('../pages/admin/payment/PaymentRequestList'));
+const AdminPaymentsPage = lazy(() => import('../pages/admin/payment/AdminPaymentsPage'));
 const PopupList = lazy(() => import('../pages/admin/PopupList'));
 const PopupForm = lazy(() => import('../pages/admin/PopupForm'));
 const EmailTemplateList = lazy(() => import('../pages/admin/EmailTemplateList'));
@@ -92,6 +93,7 @@ export default function AdminRoutes() {
 
       <Route path="deposit-requests" element={<DepositRequestList />} />
       <Route path="payment-requests" element={<PaymentRequestList />} />
+      <Route path="payments" element={<AdminPaymentsPage />} />
       
 
       <Route path="pages" element={<PageList />} />

@@ -6,8 +6,16 @@
 // - endpoint dosyalarında helper/normalizer yok
 // =============================================================
 
+import type { PaymentProviderKey } from '@/integrations/types';
 import type { QueryParams, PaymentStatus } from '@/integrations/types';
 import { toNum } from '@/integrations/types';
+
+
+export const PAYTR_KEY = 'paytr' as const;
+export const SHOPIER_KEY = 'shopier' as const;
+export const PAPARA_KEY = 'papara' as const;
+
+
 
 /* ----------------------------- domain types ----------------------------- */
 
@@ -141,6 +149,95 @@ export type ApiPaymentEventRow = Partial<{
   created_at: unknown;
   createdAt: unknown;
 }>;
+
+
+
+
+
+
+
+
+export type KnownProviderKey = typeof PAYTR_KEY | typeof SHOPIER_KEY | typeof PAPARA_KEY;
+
+export const PAYMENT_SITE_KEYS = [
+  'bank_transfer_enabled',
+  'bank_account_info',
+  'payment_methods',
+] as const;
+
+export type PaymentSiteKey = (typeof PAYMENT_SITE_KEYS)[number];
+
+/**
+ * site_settings.payment_methods (JSON) minimal shape
+ * - genişleyebilir; UI sadece wallet flag ile ilgileniyor.
+ */
+export type PaymentMethods = {
+  wallet_enabled?: boolean;
+};
+
+/**
+ * Provider edit form (admin UI)
+ * - genişlemeye açık; provider bazlı alanlar opsiyonel
+ */
+export type ProviderForm = {
+  enabled: boolean;
+
+  // PayTR
+  test_mode?: boolean;
+  card_commission?: number;
+  havale_enabled?: boolean;
+  havale_commission?: number;
+  merchant_id?: string;
+  merchant_key?: string;
+  merchant_salt?: string;
+
+  // Shopier
+  client_id?: string;
+  client_secret?: string;
+  commission?: number;
+
+  // Papara
+  api_key?: string;
+};
+
+/**
+ * Provider create default labels
+ */
+export const PROVIDER_DISPLAY_NAMES: Record<KnownProviderKey, string> = {
+  [PAYTR_KEY]: 'PayTR',
+  [SHOPIER_KEY]: 'Shopier',
+  [PAPARA_KEY]: 'Papara',
+};
+
+/**
+ * UI -> API provider key casting helper (if needed)
+ */
+export const asPaymentProviderKey = (k: KnownProviderKey): PaymentProviderKey => k;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ----------------------------- internal helpers ----------------------------- */
 

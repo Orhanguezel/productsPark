@@ -12,6 +12,8 @@ import type { FetchArgs } from '@reduxjs/toolkit/query';
 import type { TicketReply } from '@/integrations/types';
 import { normalizeTicketReply, normalizeTicketReplyList } from '@/integrations/types';
 
+const BASE='/ticket_replies';
+
 const extendedApi = baseApi.enhanceEndpoints({
   addTagTypes: ['TicketReplies', 'SupportTickets'] as const,
 });
@@ -21,7 +23,7 @@ export const ticketRepliesApi = extendedApi.injectEndpoints({
     /** GET /ticket_replies/by-ticket/:ticketId */
     listTicketRepliesByTicket: b.query<TicketReply[], string>({
       query: (ticketId): FetchArgs => ({
-        url: `/ticket_replies/by-ticket/${encodeURIComponent(ticketId)}`,
+        url: `${BASE}/by-ticket/${encodeURIComponent(ticketId)}`,
         method: 'GET',
       }),
       transformResponse: (res: unknown): TicketReply[] => normalizeTicketReplyList(res),
@@ -37,7 +39,7 @@ export const ticketRepliesApi = extendedApi.injectEndpoints({
       { ticket_id: string; user_id?: string | null; message: string; is_admin?: boolean }
     >({
       query: (body): FetchArgs => ({
-        url: '/ticket_replies',
+        url: BASE,
         method: 'POST',
         // BE uyumluluğu için hem snake hem camel gönder
         body: {

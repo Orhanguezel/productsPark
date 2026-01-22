@@ -1,6 +1,7 @@
 // =============================================================
 // FILE: src/modules/wallet/schema.ts
 // FINAL — Drizzle schema
+// - ✅ updatedAt $onUpdateFn uses new Date() (correct Drizzle pattern)
 // =============================================================
 
 import {
@@ -34,7 +35,7 @@ export const walletDepositRequests = mysqlTable('wallet_deposit_requests', {
   updatedAt: datetime('updated_at', { fsp: 3 })
     .notNull()
     .default(sql`CURRENT_TIMESTAMP(3)`)
-    .$onUpdateFn(() => sql`CURRENT_TIMESTAMP(3)`),
+    .$onUpdateFn(() => new Date()),
 });
 
 export const walletTransactions = mysqlTable('wallet_transactions', {

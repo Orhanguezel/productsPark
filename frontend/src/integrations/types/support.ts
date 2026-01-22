@@ -7,7 +7,7 @@
 // =============================================================
 
 import type { QueryParams } from '@/integrations/types';
-import { toStr, extractArray } from '@/integrations/types';
+import { toStr, extractArray,clamp } from '@/integrations/types';
 
 /* ----------------------------- primitives ----------------------------- */
 
@@ -229,7 +229,7 @@ export function normalizeTicketReplyList(res: unknown): TicketReply[] {
 
 /* ----------------------------- query/body mappers ----------------------------- */
 
-const clamp = (n: number, min = 1, max = 200) => Math.max(min, Math.min(max, n));
+
 
 export function toSupportListQuery(p?: SupportListParams | void): QueryParams | undefined {
   if (!p) return undefined;
