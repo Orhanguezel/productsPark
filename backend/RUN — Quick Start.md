@@ -52,5 +52,5 @@ pm2 logs productspark-backend --lines 100
 
 ```
 
-
+pm2 start ecosystem.config.cjs --env production
 
