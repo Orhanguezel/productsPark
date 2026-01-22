@@ -1,16 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@/common/middleware/auth';
 import {
-  listOrdersNormalized,        // GET /orders   ← RTK list
-  listOrdersByUserNormalized,  // GET /orders/by-user/:userId ← RTK list by user
-  getOrder,                    // GET /orders/:id ← hesap sayfası (raw + items + normalized)
+  listOrdersNormalized,
+  listOrdersByUserNormalized,
+  getOrder,
   createOrder,
   updateOrder,
   updateOrderItem,
   checkoutFromCart,
 } from './controller';
 
-const BASE = "/orders";
+const BASE = '/orders';
 
 export async function registerOrders(app: FastifyInstance) {
   app.get(`${BASE}`, { preHandler: [requireAuth] }, listOrdersNormalized);
@@ -21,5 +21,10 @@ export async function registerOrders(app: FastifyInstance) {
   app.post(`${BASE}/checkout`, { preHandler: [requireAuth] }, checkoutFromCart);
 
   app.patch(`${BASE}/:id`, { preHandler: [requireAuth] }, updateOrder);
-  app.patch('/order_items/:id', { preHandler: [requireAuth] }, updateOrderItem);
+
+  // ✅ preferred (scoped)
+  app.patch(`${BASE}/order_items/:id`, { preHandler: [requireAuth] }, updateOrderItem);
+
+  // ✅ backward compatible (if FE still calls this)
+  app.patch(`/order_items/:id`, { preHandler: [requireAuth] }, updateOrderItem);
 }

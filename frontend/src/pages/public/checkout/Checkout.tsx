@@ -1,7 +1,11 @@
 // =============================================================
-// FILE: src/pages/public/Checkout.tsx  (FINAL)
-// - Wallet balance is always number (safe coercion)
-// - Do NOT silently display 0 when API fails (log errors)
+// FILE: src/pages/public/Checkout.tsx
+// FINAL
+// - FE does NOT send email/telegram (backend handles)
+// - Coupon used_count RPC removed (backend redeems atomically)
+// - All enabled payment methods are available (backend-driven)
+// - Helpers moved to ./checkout/checkout.utils
+// - Types/helpers imported from integrations/types barrel
 // =============================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -19,70 +23,37 @@ import { CheckoutPaymentMethodsCard } from './components/CheckoutPaymentMethodsC
 import { CheckoutOrderSummaryCard } from './components/CheckoutOrderSummaryCard';
 
 import {
-  useCallRpcMutation,
   useCreateOrderMutation,
   useCreatePaymentRequestMutation,
   useDeleteCartItemMutation,
   useGetMyProfileQuery,
   useGetMyWalletBalanceQuery,
-  useGetSiteSettingByKeyQuery,
-  usePaytrGetTokenMutation,
-  useSendEmailMutation,
-  useSendTelegramNotificationMutation,
-  useShopierCreatePaymentMutation,
   useGetPublicPaymentMethodsQuery,
+  usePaytrGetTokenMutation,
+  useShopierCreatePaymentMutation,
 } from '@/integrations/hooks';
 
 import type {
-  CreateOrderBody,
-  CreateOrderItemBody,
   CheckoutData,
+  CreateOrderBody,
   OrderPaymentMethod,
   PublicPaymentMethod,
 } from '@/integrations/types';
 
-import { normalizeCheckoutData, CheckoutPaymentMethodOption } from '@/integrations/types';
+import { normalizeCheckoutData, toNum, toBool, isPlainObject } from '@/integrations/types';
 
-/* ---------------- helpers ---------------- */
+import type { CheckoutPaymentMethodOption } from '@/integrations/types';
 
-type BankTransferKind = 'havale' | 'eft';
-
-const isRecord = (x: unknown): x is Record<string, unknown> =>
-  !!x && typeof x === 'object' && !Array.isArray(x);
-
-const optStr = (v: unknown): string | undefined => {
-  if (typeof v !== 'string') return undefined;
-  const s = v.trim();
-  return s ? s : undefined;
-};
-
-const toNum = (v: unknown, d = 0): number => {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string') {
-    const n = Number(v.replace(',', '.'));
-    return Number.isFinite(n) ? n : d;
-  }
-  if (v && typeof v === 'object') {
-    const rec = v as Record<string, unknown>;
-    if (rec.balance != null) return toNum(rec.balance, d);
-    if (rec.data && typeof rec.data === 'object' && (rec.data as any).balance != null) {
-      return toNum((rec.data as any).balance, d);
-    }
-  }
-  const n = Number(v ?? NaN);
-  return Number.isFinite(n) ? n : d;
-};
-
-const getCommissionRateFromMethod = (m?: PublicPaymentMethod | null): number => {
-  if (!m) return 0;
-
-  const cr = (m as unknown as Record<string, unknown>)['commission_rate'];
-  if (typeof cr === 'number' && Number.isFinite(cr)) return cr;
-
-  const cfg = isRecord((m as any).config) ? ((m as any).config as Record<string, unknown>) : null;
-  const c = cfg ? (cfg as any).commission : undefined;
-  return toNum(c, 0);
-};
+import {
+  type BankTransferKind,
+  buildCheckoutPaymentOptions,
+  buildOrderItemsFromCheckout,
+  extractWalletBalance,
+  getCheckoutTotal,
+  getCommissionRateFromMethod,
+  money2,
+  extractCustomerInfo
+} from './checkout.utils';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -96,23 +67,17 @@ const Checkout = () => {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
+  // Payment
   const [paymentMethods, setPaymentMethods] = useState<CheckoutPaymentMethodOption[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<string>('');
-
   const [bankTransferKind, setBankTransferKind] = useState<BankTransferKind>('havale');
+
+  // Wallet
   const [walletBalance, setWalletBalance] = useState<number>(0);
 
   const { data: publicMethodsResp } = useGetPublicPaymentMethodsQuery();
-
-  const { data: siteTitleSetting } = useGetSiteSettingByKeyQuery('site_title');
-  const { data: newOrderTelegramSetting } = useGetSiteSettingByKeyQuery('new_order_telegram');
-  const { data: newPaymentRequestTelegramSetting } = useGetSiteSettingByKeyQuery(
-    'new_payment_request_telegram',
-  );
-
   const { data: profileData } = useGetMyProfileQuery();
 
-  // ❗️default 0 yok, hatayı gizlemiyoruz
   const {
     data: walletBalanceRaw,
     isError: walletBalanceError,
@@ -126,17 +91,13 @@ const Checkout = () => {
 
   const [createOrder] = useCreateOrderMutation();
   const [createPaymentRequest] = useCreatePaymentRequestMutation();
-
   const [paytrGetToken] = usePaytrGetTokenMutation();
   const [shopierCreatePayment] = useShopierCreatePaymentMutation();
-  const [sendEmail] = useSendEmailMutation();
-  const [sendTelegramNotification] = useSendTelegramNotificationMutation();
 
-  const [callRpc] = useCallRpcMutation();
   const [deleteCartItem] = useDeleteCartItemMutation();
 
   // ----------------------------------------------------------
-  // 0) guests kapalı: checkout sayfasına auth şartı
+  // 0) Auth guard
   // ----------------------------------------------------------
   useEffect(() => {
     if (authLoading) return;
@@ -147,71 +108,68 @@ const Checkout = () => {
   }, [authLoading, user, navigate]);
 
   // ----------------------------------------------------------
-  // 1) İlk yükleme: checkoutData
+  // 1) load checkoutData from sessionStorage
   // ----------------------------------------------------------
   useEffect(() => {
-    const initCheckout = async () => {
-      const raw = sessionStorage.getItem('checkoutData');
+    if (authLoading) return;
+    if (!user) return;
 
-      if (!raw) {
+    const raw = sessionStorage.getItem('checkoutData');
+    if (!raw) {
+      toast.error('Sepetinizde ürün bulunmuyor');
+      navigate('/sepet', { replace: true });
+      return;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const normalized = normalizeCheckoutData(parsed);
+
+      const cartItems = (normalized as any)?.cartItems;
+      if (!Array.isArray(cartItems) || cartItems.length === 0) {
         toast.error('Sepetinizde ürün bulunmuyor');
         navigate('/sepet', { replace: true });
         return;
       }
 
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        const normalized = normalizeCheckoutData(parsed);
-
-        if (
-          !normalized ||
-          !Array.isArray((normalized as any).cartItems) ||
-          (normalized as any).cartItems.length === 0
-        ) {
-          toast.error('Sepetinizde ürün bulunmuyor');
-          navigate('/sepet', { replace: true });
-          return;
-        }
-
-        setCheckoutData(normalized as CheckoutData);
-      } catch (error) {
-        console.error('Checkout data parse error:', error);
-        toast.error('Bir hata oluştu');
-        navigate('/sepet', { replace: true });
-      }
-    };
-
-    if (authLoading) return;
-    if (!user) return;
-    void initCheckout();
+      setCheckoutData(normalized as CheckoutData);
+    } catch (err) {
+      // do not mask failures
+      console.error('Checkout data parse error:', err);
+      toast.error('Bir hata oluştu');
+      navigate('/sepet', { replace: true });
+    }
   }, [authLoading, user, navigate]);
 
   // ----------------------------------------------------------
-  // 2) Profil bilgisi → customer info
+  // 2) profile -> customer info
   // ----------------------------------------------------------
-  useEffect(() => {
-    if (!user || !profileData) return;
-    setCustomerName(profileData.full_name ?? '');
-    setCustomerEmail(user.email ?? '');
-    setCustomerPhone(profileData.phone ?? '');
-  }, [user, profileData]);
+ useEffect(() => {
+   if (!user) return;
+
+   const info = extractCustomerInfo(profileData, user);
+
+   // Only hydrate if currently empty (do not overwrite user's edits)
+   setCustomerName((prev) => (prev.trim() ? prev : info.name));
+   setCustomerEmail((prev) => (prev.trim() ? prev : info.email));
+   setCustomerPhone((prev) => (prev.trim() ? prev : info.phone));
+ }, [user, profileData]);
 
   // ----------------------------------------------------------
-  // 2.b) Wallet balance (authoritative)
+  // 3) wallet balance (authoritative)
   // ----------------------------------------------------------
   useEffect(() => {
     if (!user) return;
 
     if (walletBalanceError) {
       console.error('wallet balance error:', walletBalanceErrObj);
-      // fallback: profile’dan varsa
-      const fallback = toNum((profileData as any)?.wallet_balance, 0);
-      setWalletBalance(fallback);
+      // fallback to profile field if present
+      setWalletBalance(toNum((profileData as any)?.wallet_balance, 0));
       return;
     }
 
-    if (walletBalanceRaw !== undefined) {
-      setWalletBalance(toNum(walletBalanceRaw, 0));
+    if (typeof walletBalanceRaw !== 'undefined') {
+      setWalletBalance(extractWalletBalance(walletBalanceRaw, 0));
       return;
     }
 
@@ -220,117 +178,49 @@ const Checkout = () => {
   }, [user, walletBalanceRaw, walletBalanceError, walletBalanceErrObj, profileData]);
 
   // ----------------------------------------------------------
-  // 3) public/payment-methods → paymentMethods (UI)
+  // 4) public payment methods -> UI options
   // ----------------------------------------------------------
   useEffect(() => {
-    if (!publicMethodsResp) return;
     if (!user) return;
+    const methods = (publicMethodsResp?.methods ?? []) as PublicPaymentMethod[];
+    if (!Array.isArray(methods)) return;
 
-    const next: CheckoutPaymentMethodOption[] = [];
-
-    const backendMethods = (publicMethodsResp.methods || [])
-      .filter((m) => m && m.enabled)
-      .map((m) => {
-        const id = String(m.key || '').trim();
-        const name = String(m.display_name || m.key || '').trim() || id;
-
-        if (m.type === 'bank_transfer') {
-          const cfg = isRecord(m.config) ? m.config : null;
-
-          const hv =
-            cfg && isRecord((cfg as any).havale)
-              ? ((cfg as any).havale as Record<string, unknown>)
-              : null;
-
-          const ef =
-            cfg && isRecord((cfg as any).eft) ? ((cfg as any).eft as Record<string, unknown>) : null;
-
-          const fallback = (bankTransferKind === 'eft' ? ef : hv) ?? hv ?? ef;
-
-          return {
-            id,
-            name,
-            enabled: true,
-            ...(fallback && optStr((fallback as any).iban)
-              ? { iban: String((fallback as any).iban) }
-              : {}),
-            ...(fallback && optStr((fallback as any).account_holder)
-              ? { account_holder: String((fallback as any).account_holder) }
-              : {}),
-            ...(fallback && optStr((fallback as any).bank_name)
-              ? { bank_name: String((fallback as any).bank_name) }
-              : {}),
-          } satisfies CheckoutPaymentMethodOption;
-        }
-
-        return { id, name, enabled: true } satisfies CheckoutPaymentMethodOption;
-      });
-
-    next.push(...backendMethods);
-
-    if (!next.some((x) => String((x as any).id) === 'wallet')) {
-      next.unshift({ id: 'wallet', name: 'Cüzdan', enabled: true } as CheckoutPaymentMethodOption);
-    }
+    const next = buildCheckoutPaymentOptions({
+      methods,
+      bankTransferKind,
+      ensureWallet: true,
+    });
 
     setPaymentMethods(next);
 
-    const first = next.length ? next[0] : undefined;
+    const first = next[0]?.id ?? '';
     setSelectedPayment((prev) => {
-      if (prev && next.some((m) => String((m as any).id) === prev)) return prev;
-      return String((first as any)?.id ?? '');
+      if (prev && next.some((m) => m.id === prev)) return prev;
+      return String(first);
     });
   }, [publicMethodsResp, user, bankTransferKind]);
 
   const selectedPublicMethod = useMemo(() => {
-    if (!publicMethodsResp?.methods?.length) return null;
-    if (!selectedPayment) return null;
-    return publicMethodsResp.methods.find((m) => m.key === selectedPayment) ?? null;
+    const methods = publicMethodsResp?.methods ?? [];
+    if (!Array.isArray(methods) || !selectedPayment) return null;
+    return (
+      (methods as PublicPaymentMethod[]).find((m) => (m as any)?.key === selectedPayment) ?? null
+    );
   }, [publicMethodsResp, selectedPayment]);
 
   const commissionRate = useMemo(() => {
+    // wallet has no commission on FE (if backend wants commission, it should return total already)
     if (!selectedPayment || selectedPayment === 'wallet') return 0;
     return getCommissionRateFromMethod(selectedPublicMethod);
   }, [selectedPayment, selectedPublicMethod]);
-
-  const buildOrderItems = (): CreateOrderItemBody[] => {
-    if (!checkoutData) return [];
-    const items = (checkoutData as any).cartItems as any[];
-
-    return items.map((item) => {
-      const priceNum = Number(item?.products?.price ?? 0);
-      const quantityNum = Number(item?.quantity ?? 1);
-      const totalNum = priceNum * quantityNum;
-
-      return {
-        product_id: String(item?.products?.id ?? ''),
-        product_name: String(item?.products?.name ?? ''),
-        quantity: quantityNum,
-        price: priceNum.toFixed(2),
-        total: totalNum.toFixed(2),
-        options: item?.selected_options ?? null,
-      };
-    });
-  };
-
-  const incrementCouponUsage = async () => {
-    const coupon = (checkoutData as any)?.appliedCoupon;
-    if (!coupon?.id) return;
-
-    try {
-      await callRpc({
-        name: 'exec_sql',
-        args: { sql: `UPDATE coupons SET used_count = used_count + 1 WHERE id = '${coupon.id}'` },
-      }).unwrap();
-    } catch (err) {
-      console.error('Coupon usage increment RPC error:', err);
-    }
-  };
 
   const clearCartAfterOrder = async () => {
     if (!checkoutData) return;
 
     try {
       const items = (checkoutData as any).cartItems as any[];
+      if (!Array.isArray(items)) return;
+
       await Promise.all(
         items.map(async (ci) => {
           if (!ci?.id) return;
@@ -352,20 +242,11 @@ const Checkout = () => {
     if (!checkoutData) return;
 
     try {
-      const cfg = isRecord(selectedPublicMethod?.config)
-        ? (selectedPublicMethod!.config as Record<string, unknown>)
+      const cfg = isPlainObject((selectedPublicMethod as any)?.config)
+        ? ((selectedPublicMethod as any).config as Record<string, unknown>)
         : null;
 
-      const hv =
-        cfg && isRecord((cfg as any).havale)
-          ? ((cfg as any).havale as Record<string, unknown>)
-          : null;
-
-      const ef =
-        cfg && isRecord((cfg as any).eft) ? ((cfg as any).eft as Record<string, unknown>) : null;
-
-      const selectedAccount = bankTransferKind === 'eft' ? (ef ?? hv) : (hv ?? ef);
-
+      // keep existing flow: store details for the bank transfer info page
       const paymentData = {
         customerName,
         customerEmail,
@@ -382,31 +263,34 @@ const Checkout = () => {
       sessionStorage.setItem('havalepaymentData', JSON.stringify(paymentData));
       sessionStorage.setItem('bankTransferKind', bankTransferKind);
       sessionStorage.setItem('bankTransferConfig', JSON.stringify(cfg ?? null));
-      sessionStorage.setItem('bankTransferAccount', JSON.stringify(selectedAccount ?? null));
 
       navigate('/odeme-bilgileri');
-    } catch (error) {
-      console.error('Bank transfer navigate error:', error);
-      toast.error(error instanceof Error ? error.message : 'Bir hata oluştu');
+    } catch (err) {
+      console.error('Bank transfer navigate error:', err);
+      toast.error(err instanceof Error ? err.message : 'Bir hata oluştu');
     }
   };
 
   const handleSubmit = async () => {
-    if (!checkoutData) return;
-    if (!user) return;
+    if (!checkoutData || !user) return;
 
     if (!customerName.trim()) return void toast.error('Lütfen ad soyad girin');
     if (!customerEmail.trim()) return void toast.error('Lütfen e-posta adresinizi girin');
     if (!customerPhone.trim()) return void toast.error('Lütfen telefon numaranızı girin');
 
-    if (selectedPayment === 'bank_transfer') return void (await goBankTransferInfo());
+    // bank transfer = separate info page
+    if (selectedPayment === 'bank_transfer') {
+      await goBankTransferInfo();
+      return;
+    }
 
-    if (selectedPayment === 'paytr') return;
-    if (selectedPayment === 'shopier') return;
+    const checkoutTotal = getCheckoutTotal(checkoutData);
+    const commission =
+      selectedPayment && selectedPayment !== 'wallet' ? (checkoutTotal * commissionRate) / 100 : 0;
+    const finalTotal = checkoutTotal + commission;
 
-    const checkoutTotal = toNum((checkoutData as any)?.total, 0);
-
-    if (selectedPayment === 'wallet' && walletBalance < checkoutTotal) {
+    // wallet guard (client-side)
+    if (selectedPayment === 'wallet' && walletBalance < finalTotal) {
       toast.error('Yetersiz cüzdan bakiyesi');
       return;
     }
@@ -415,11 +299,9 @@ const Checkout = () => {
       setLoading(true);
 
       const orderNumber = `ORD${Date.now()}`;
-      const items = buildOrderItems();
+      const items = buildOrderItemsFromCheckout(checkoutData);
 
-      const paymentMethod: OrderPaymentMethod =
-        (selectedPayment || 'credit_card') as OrderPaymentMethod;
-
+      const paymentMethod = (selectedPayment || 'credit_card') as OrderPaymentMethod;
       const couponCode = (checkoutData as any)?.appliedCoupon?.code ?? null;
 
       const body: CreateOrderBody = {
@@ -427,9 +309,9 @@ const Checkout = () => {
         payment_method: paymentMethod,
         payment_status: selectedPayment === 'wallet' ? 'paid' : 'pending',
         items,
-        subtotal: (checkoutData as any).subtotal,
-        discount: (checkoutData as any).discount,
-        total: (checkoutData as any).total,
+        subtotal: money2(toNum((checkoutData as any).subtotal, 0)),
+        discount: money2(toNum((checkoutData as any).discount, 0)),
+        total: money2(finalTotal),
         ...(couponCode ? { coupon_code: couponCode } : {}),
         ...(typeof (checkoutData as any).notes === 'string'
           ? { notes: (checkoutData as any).notes }
@@ -438,78 +320,70 @@ const Checkout = () => {
             : {}),
       };
 
+      // 1) Create order (backend will handle notifications/emails/telegram)
       const order = await createOrder(body).unwrap();
-      if ((checkoutData as any).appliedCoupon) await incrementCouponUsage();
 
-      const isNewOrderTelegramEnabled =
-        newOrderTelegramSetting?.value === true || newOrderTelegramSetting?.value === 'true';
-
-      if (selectedPayment === 'wallet' || (order as any).payment_status === 'paid') {
-        try {
-          if (isNewOrderTelegramEnabled) {
-            await sendTelegramNotification({ type: 'new_order', orderId: (order as any).id } as any).unwrap();
-          }
-        } catch (telegramError) {
-          console.error('Telegram notification error:', telegramError);
-        }
-      }
-
-      try {
-        const siteTitle = typeof siteTitleSetting?.value === 'string' ? siteTitleSetting.value : '';
-        const safeTitle = siteTitle || 'Dijital Market';
-        const statusText = selectedPayment === 'wallet' ? 'Ödendi' : 'Beklemede';
-
-        await sendEmail({
-          to: customerEmail,
-          subject: `${safeTitle} - Siparişiniz alındı (${orderNumber})`,
-          text: `Merhaba ${customerName},
-
-${safeTitle} üzerinden verdiğiniz ${orderNumber} numaralı siparişiniz alındı.
-
-Toplam tutar: ${toNum((checkoutData as any).total, 0).toFixed(2)} TL.
-Ödeme durumu: ${statusText}.
-
-Teşekkürler.`,
-        }).unwrap();
-      } catch (emailError) {
-        console.error('Order received email error:', emailError);
-      }
-
+      // 2) Wallet = done
       if (selectedPayment === 'wallet') {
         await clearCartAfterOrder();
         navigate('/odeme-basarili');
         return;
       }
 
-      await createPaymentRequest({
+      // 3) For non-wallet methods, create payment request/session (backend-specific)
+      //    If your backend creates it automatically, you can remove this block.
+      const pr = await createPaymentRequest({
         order_id: (order as any).id,
         user_id: user.id ?? null,
-        amount: (checkoutData as any).total,
-        currency: publicMethodsResp?.currency ?? 'TRY',
+        amount: money2(finalTotal),
+        currency: (publicMethodsResp as any)?.currency ?? 'TRY',
         payment_method: paymentMethod,
         proof_image_url: null,
         status: 'pending',
       }).unwrap();
 
-      const isPaymentTelegramEnabled =
-        newPaymentRequestTelegramSetting?.value === true ||
-        newPaymentRequestTelegramSetting?.value === 'true';
+      // 4) Provider-specific flows
+      if (selectedPayment === 'paytr') {
+        // Expect paytrGetToken to return token or redirect url (depends on your BE)
+        const tokRes = await paytrGetToken({
+          order_id: (order as any).id,
+          payment_request_id: (pr as any)?.id ?? null,
+        } as any).unwrap();
 
-      try {
-        if (isPaymentTelegramEnabled) {
-          await sendTelegramNotification({
-            type: 'new_payment_request',
-            paymentRequestId: (order as any).payment_request_id ?? undefined,
-          } as any).unwrap();
-        }
-      } catch (telegramError) {
-        console.error('Telegram notification error:', telegramError);
+        sessionStorage.setItem(
+          'paytr_checkout',
+          JSON.stringify({ order, payment_request: pr, token: tokRes }),
+        );
+        await clearCartAfterOrder();
+
+        // route name can differ in your app
+        navigate('/paytr-odeme');
+        return;
       }
 
+      if (selectedPayment === 'shopier') {
+        // Expect { form_action, form_data } or redirect url
+        const shRes = await shopierCreatePayment({
+          order_id: (order as any).id,
+          payment_request_id: (pr as any)?.id ?? null,
+        } as any).unwrap();
+
+        sessionStorage.setItem(
+          'shopier_checkout',
+          JSON.stringify({ order, payment_request: pr, shopier: shRes }),
+        );
+        await clearCartAfterOrder();
+
+        // route name can differ in your app
+        navigate('/shopier-odeme');
+        return;
+      }
+
+      // 5) Generic methods (credit_card / provider keys): go to payment notification / status page
       await clearCartAfterOrder();
       navigate('/odeme-bildirimi');
-    } catch (error) {
-      console.error('Checkout error:', error);
+    } catch (err) {
+      console.error('Checkout error:', err);
       toast.error('Sipariş oluşturulurken hata oluştu');
     } finally {
       setLoading(false);
@@ -526,8 +400,9 @@ Teşekkürler.`,
     );
   }
 
-  const total = toNum((checkoutData as any).total, 0);
-  const commission = selectedPayment && selectedPayment !== 'wallet' ? (total * commissionRate) / 100 : 0;
+  const total = getCheckoutTotal(checkoutData);
+  const commission =
+    selectedPayment && selectedPayment !== 'wallet' ? (total * commissionRate) / 100 : 0;
   const finalTotal = total + commission;
 
   return (

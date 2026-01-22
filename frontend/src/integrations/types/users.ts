@@ -5,7 +5,7 @@
 // - Prevents Reports.tsx date parsing errors
 // - exactOptionalPropertyTypes friendly
 // =============================================================
-
+import type { QueryParams } from '@/integrations/types';
 import { isUnknownRow, getStringProp, getBoolProp } from '@/integrations/types';
 
 export type UserRoleName = 'admin' | 'moderator' | 'user';
@@ -47,6 +47,7 @@ export type UserRole = {
 
 /* ---- Admin users list/update payload tipleri ---- */
 export type AdminUsersListParams = {
+  ids: string[];
   q?: string;
   role?: UserRoleName;
   is_active?: boolean;
@@ -172,3 +173,28 @@ export function normalizeAdminUser(u: unknown): AdminUserView {
     roles: coerceRoles(row),
   };
 }
+
+
+
+const unique = (arr: string[]) => Array.from(new Set(arr));
+const cleanId = (s: string) => s.trim();
+
+export const toAdminUsersListQuery = (p?: AdminUsersListParams | void): QueryParams | undefined => {
+  if (!p) return undefined;
+
+  const qp: QueryParams = {};
+
+  // ✅ ids -> q (backend şu an q ile çalıştığı için uyumlu)
+  if (Array.isArray(p.ids) && p.ids.length > 0) {
+    const ids = unique(p.ids.map(cleanId).filter(Boolean));
+    if (ids.length > 0) qp.q = ids.join(',');
+  } else if (p.q) {
+    qp.q = p.q;
+  }
+
+  if (typeof p.limit === 'number') qp.limit = p.limit;
+  if (typeof p.offset === 'number') qp.offset = p.offset;
+
+  return Object.keys(qp).length ? qp : undefined;
+};
+

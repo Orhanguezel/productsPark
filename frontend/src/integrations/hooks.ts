@@ -48,7 +48,7 @@ export * from './rtk/public/support_tickets.endpoints';
 export * from './rtk/public/ticket_replies.endpoints';
 
 export * from './rtk/public/notifications.endpoints';
-export * from './rtk/public/fake_notifications.endpoints';
+export * from './rtk/public/fake_public_notifications.endpoints';
 
 export * from './rtk/public/payment_providers.endpoints';
 export * from './rtk/public/payment_sessions.endpoints';
@@ -136,3 +136,4 @@ export * from './rtk/admin/telegram_admin.endpoints';
 export * from './rtk/admin/telegram_webhook.endpoints';
 export * from './rtk/admin/telegram_inbound.endpoints';
 export * from './rtk/admin/wallet.admin.endpoints';
+export * from './rtk/admin/fake_admin_notifications.endpoints';

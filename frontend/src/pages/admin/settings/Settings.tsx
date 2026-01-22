@@ -17,8 +17,6 @@ import GeneralSettingsCard from './components/GeneralSettingsCard';
 import SeoSettingsCard from './components/SeoSettingsCard';
 import SeoGlobalSettingsCard from './components/SeoGlobalSettingsCard';
 import SmtpSettingsCard from './components/SmtpSettingsCard';
-import EmailTemplatesManager from './components/EmailTemplatesManager';
-import PaymentSettingsCard from './components/PaymentSettingsCard';
 import IntegrationsSettingsCard from './components/IntegrationsSettingsCard';
 import PopupManagement from '../PopupManagement';
 import TopbarManagement from './components/TopbarManagement';
@@ -414,8 +412,6 @@ export default function SettingsPage() {
           <TabsTrigger value="seo-global">SEO Global</TabsTrigger>
 
           <TabsTrigger value="smtp">SMTP</TabsTrigger>
-          <TabsTrigger value="email-templates">Mail Şablonları</TabsTrigger>
-          <TabsTrigger value="payment">Ödeme</TabsTrigger>
           <TabsTrigger value="integrations">Entegrasyonlar</TabsTrigger>
           <TabsTrigger value="popups">Popuplar</TabsTrigger>
           <TabsTrigger value="topbar">Topbar</TabsTrigger>
@@ -436,19 +432,6 @@ export default function SettingsPage() {
 
         <TabsContent value="smtp" className="space-y-4">
           <SmtpSettingsCard settings={settings} setSettings={setSettings} />
-        </TabsContent>
-
-        <TabsContent value="email-templates" className="space-y-4">
-          <EmailTemplatesManager />
-        </TabsContent>
-
-        <TabsContent value="payment" className="space-y-4">
-          <PaymentSettingsCard
-            settings={settings}
-            setSettings={setSettings}
-            origin={origin}
-            savingProvider={savingPaytr}
-          />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-4">

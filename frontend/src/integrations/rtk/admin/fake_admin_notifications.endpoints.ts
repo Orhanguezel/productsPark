@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/fake_notifications.endpoints.ts
+// FILE: src/integrations/metahub/rtk/endpoints/admin/fake_admin_notifications.endpoints.ts
 // FINAL — Fake Notifications RTK endpoints (clean; helpers in /types)
 // =============================================================
 
@@ -25,10 +25,10 @@ const extendedApi = baseApi.enhanceEndpoints({
   addTagTypes: ['FakeOrders', 'FakeOrderSettings'] as const,
 });
 
-const BASE = '/fake-order-notifications';
 const ADMIN_BASE = '/admin/fake-order-notifications';
+const SETTINGS_BASE = '/admin/site-settings/fake-notification-config';
 
-export const fakeNotificationsApi = extendedApi.injectEndpoints({
+export const fakeNotificationsAdminApi = extendedApi.injectEndpoints({
   endpoints: (b) => ({
     /* ================= ADMIN: CRUD ================= */
 
@@ -36,8 +36,8 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
       query: (params): FetchArgs => {
         const qp = toFakeOrdersAdminListQuery(params);
         return qp
-          ? { url: '/admin/fake-order-notifications', params: qp }
-          : { url: '/admin/fake-order-notifications' };
+          ? { url: `${ADMIN_BASE}`, params: qp }
+          : { url: `${ADMIN_BASE}` };
       },
       transformResponse: (res: unknown): FakeOrderNotification[] =>
         pluckFakeArray(res, ['data', 'items', 'rows', 'result']).map((x) =>
@@ -54,7 +54,7 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
 
     getFakeOrderNotification: b.query<FakeOrderNotification, string>({
       query: (id): FetchArgs => ({
-        url: `/admin/fake-order-notifications/${encodeURIComponent(id)}`,
+        url: `${ADMIN_BASE}/${encodeURIComponent(id)}`,
       }),
       transformResponse: (r: unknown): FakeOrderNotification => normalizeFakeOrderNotification(r),
       providesTags: (_r, _e, id) => [{ type: 'FakeOrders' as const, id }],
@@ -71,7 +71,7 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
       }
     >({
       query: (body): FetchArgs => ({
-        url: '/admin/fake-order-notifications',
+        url: `${ADMIN_BASE}`,
         method: 'POST',
         body,
       }),
@@ -93,7 +93,7 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
       }
     >({
       query: ({ id, patch }): FetchArgs => ({
-        url: `/admin/fake-order-notifications/${encodeURIComponent(id)}`,
+        url: `${ADMIN_BASE}/${encodeURIComponent(id)}`,
         method: 'PUT',
         body: patch,
       }),
@@ -106,7 +106,7 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
 
     deleteFakeOrderNotification: b.mutation<{ ok: true }, string>({
       query: (id): FetchArgs => ({
-        url: `/admin/fake-order-notifications/${encodeURIComponent(id)}`,
+        url: `${ADMIN_BASE}/${encodeURIComponent(id)}`,
         method: 'DELETE',
       }),
       transformResponse: (): { ok: true } => ({ ok: true as const }),
@@ -116,7 +116,7 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
     /* ================= ADMIN: SETTINGS ================= */
 
     getFakeNotificationSettings: b.query<FakeNotificationSettings, void>({
-      query: (): FetchArgs => ({ url: '/admin/site-settings/fake-notification-config' }),
+      query: (): FetchArgs => ({ url: SETTINGS_BASE }),
       transformResponse: (r: unknown): FakeNotificationSettings =>
         normalizeFakeNotificationSettings(r),
       providesTags: [{ type: 'FakeOrderSettings' as const, id: 'CFG' }],
@@ -127,35 +127,13 @@ export const fakeNotificationsApi = extendedApi.injectEndpoints({
       Partial<FakeNotificationSettings>
     >({
       query: (patch): FetchArgs => ({
-        url: '/admin/site-settings/fake-notification-config',
+        url: SETTINGS_BASE,
         method: 'PUT',
         body: patch,
       }),
       transformResponse: (r: unknown): FakeNotificationSettings =>
         normalizeFakeNotificationSettings(r),
       invalidatesTags: [{ type: 'FakeOrderSettings' as const, id: 'CFG' }],
-    }),
-
-    /* ================= PUBLIC ================= */
-
-    getPublicFakeNotificationSettings: b.query<FakeNotificationSettings, void>({
-      query: (): FetchArgs => ({ url: '/site-settings/fake-notification-config' }),
-      transformResponse: (r: unknown): FakeNotificationSettings =>
-        normalizeFakeNotificationSettings(r),
-      providesTags: [{ type: 'FakeOrderSettings' as const, id: 'CFG_PUBLIC' }],
-    }),
-
-    listPublicFakeOrders: b.query<FakeOrderNotification[], void>({
-      query: (): FetchArgs => ({ url: '/fake-order-notifications' }),
-      transformResponse: (res: unknown): FakeOrderNotification[] =>
-        pluckFakeArray(res, ['data', 'items', 'rows', 'result']).map((x) =>
-          normalizeFakeOrderNotification(x),
-        ),
-    }),
-
-    getPublicRandomFakeOrder: b.query<FakeOrderNotification, void>({
-      query: (): FetchArgs => ({ url: '/fake-order-notifications/random' }),
-      transformResponse: (r: unknown): FakeOrderNotification => normalizeFakeOrderNotification(r),
     }),
   }),
   overrideExisting: true,
@@ -172,9 +150,4 @@ export const {
   // ADMIN settings
   useGetFakeNotificationSettingsQuery,
   useUpdateFakeNotificationSettingsMutation,
-
-  // PUBLIC
-  useGetPublicFakeNotificationSettingsQuery,
-  useListPublicFakeOrdersQuery,
-  useGetPublicRandomFakeOrderQuery,
-} = fakeNotificationsApi;
+} = fakeNotificationsAdminApi;

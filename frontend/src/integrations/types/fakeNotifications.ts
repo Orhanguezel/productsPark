@@ -1,8 +1,6 @@
 // =============================================================
 // FILE: src/integrations/types/fakeNotifications.ts
-// FINAL — Fake Notifications types + helpers + normalizers + query mappers
-// - strict/no-any
-// - central common: isObject/toStr/toNum/toBool + QueryParams
+// FINAL — robust response shapes (deep pluck + site-setting wrapper parse)
 // =============================================================
 
 import type { BoolLike, QueryParams } from '@/integrations/types';
@@ -56,30 +54,6 @@ export const toFakeOrdersAdminListQuery = (
 
 type Obj = Record<string, unknown>;
 
-const DEFAULT_PLUCK_KEYS = [
-  'data',
-  'items',
-  'rows',
-  'result',
-  'fake_orders',
-  'fakeOrders',
-] as const;
-
-export const pluckFakeArray = (
-  res: unknown,
-  keys: readonly string[] = DEFAULT_PLUCK_KEYS,
-): unknown[] => {
-  if (Array.isArray(res)) return res;
-  if (isObject(res)) {
-    const o = res as Obj;
-    for (const k of keys) {
-      const v = o[k];
-      if (Array.isArray(v)) return v;
-    }
-  }
-  return [];
-};
-
 const pickFirst = (src: Obj, keys: readonly string[]): unknown => {
   for (const k of keys) {
     const v = src[k];
@@ -98,10 +72,6 @@ const pickOptTrimStr = (src: Obj, keys: readonly string[]): string | null => {
   return s ? s : null;
 };
 
-/**
- * unknown -> BoolLike daraltma (common.ts BoolLike ile %100 uyumlu)
- * - object/array gibi tipler -> undefined (fallback'e düşsün)
- */
 const asBoolLike = (v: unknown): BoolLike => {
   if (v === null || typeof v === 'undefined') return v;
   if (typeof v === 'boolean') return v;
@@ -113,11 +83,94 @@ const asBoolLike = (v: unknown): BoolLike => {
     return undefined;
   }
 
-  // number ama 0/1 değilse: BoolLike değil
   if (typeof v === 'number') return undefined;
-
-  // object/array/function vs => BoolLike değil
   return undefined;
+};
+
+/**
+ * Deep pluck:
+ * - supports res = array
+ * - supports {data:[...]} etc
+ * - supports {data:{items:[...]}} etc
+ */
+const pluckArrayDeep = (
+  res: unknown,
+  containers: readonly string[],
+  arrays: readonly string[],
+): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (!isObject(res)) return [];
+
+  const o = res as Obj;
+
+  // 1) try direct arrays on root
+  for (const k of arrays) {
+    const v = o[k];
+    if (Array.isArray(v)) return v;
+  }
+
+  // 2) try container objects on root then arrays inside them
+  for (const c of containers) {
+    const cv = o[c];
+    if (Array.isArray(cv)) return cv;
+    if (isObject(cv)) {
+      const co = cv as Obj;
+      for (const k of arrays) {
+        const v = co[k];
+        if (Array.isArray(v)) return v;
+      }
+    }
+  }
+
+  return [];
+};
+
+export const pluckFakeArray = (
+  res: unknown,
+  keys: readonly string[] = ['data', 'result'],
+): unknown[] => {
+  // “keys” burada container’lar gibi düşünülebilir (data/result)
+  // array keys seti:
+  const arrayKeys = ['items', 'rows', 'data', 'result', 'fake_orders', 'fakeOrders'] as const;
+  return pluckArrayDeep(res, keys, arrayKeys);
+};
+
+/**
+ * Site-setting wrapper’ı çöz:
+ * - direct config object olabilir
+ * - { value: {...} } olabilir
+ * - { value: "json-string" } olabilir
+ * - { data: { value: ... } } olabilir
+ */
+const unwrapSiteSettingValue = (input: unknown): unknown => {
+  if (!isObject(input)) return input;
+  const o = input as Obj;
+
+  const directValue = pickFirst(o, ['value']);
+  if (typeof directValue !== 'undefined') return directValue;
+
+  const data = o['data'];
+  if (isObject(data)) {
+    const dv = pickFirst(data as Obj, ['value']);
+    if (typeof dv !== 'undefined') return dv;
+    return data;
+  }
+
+  return input;
+};
+
+const tryParseJson = (v: unknown): unknown => {
+  if (typeof v !== 'string') return v;
+  const s = v.trim();
+  if (!s) return v;
+  // hızlı guard: JSON olma ihtimali
+  if (!(s.startsWith('{') || s.startsWith('['))) return v;
+
+  try {
+    return JSON.parse(s) as unknown;
+  } catch {
+    return v;
+  }
 };
 
 /* ----------------------------- normalizers ----------------------------- */
@@ -139,18 +192,17 @@ export const normalizeFakeOrderNotification = (row: unknown): FakeOrderNotificat
 };
 
 export const normalizeFakeOrderNotifications = (res: unknown): FakeOrderNotification[] =>
-  pluckFakeArray(res, ['data', 'items', 'rows', 'result', 'fake_orders', 'fakeOrders']).map((x) =>
-    normalizeFakeOrderNotification(x),
-  );
+  pluckFakeArray(res, ['data', 'result']).map((x) => normalizeFakeOrderNotification(x));
 
 export const normalizeFakeNotificationSettings = (row: unknown): FakeNotificationSettings => {
-  const r: Obj = isObject(row) ? (row as Obj) : {};
+  // unwrap: {value: ...} / {data:{value}} / direct
+  const raw = tryParseJson(unwrapSiteSettingValue(row));
+  const r: Obj = isObject(raw) ? (raw as Obj) : {};
 
   const display = toNum(pickFirst(r, ['notification_display_duration']), 5);
   const interval = toNum(pickFirst(r, ['notification_interval']), 30);
   const delay = toNum(pickFirst(r, ['notification_delay']), 10);
 
-  // varsayılan enabled: true (BE boş dönerse)
   const enabledRaw = pickFirst(r, ['fake_notifications_enabled', 'fakeNotificationsEnabled']);
   const enabled = typeof enabledRaw === 'undefined' ? true : toBool(asBoolLike(enabledRaw), true);
 

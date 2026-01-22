@@ -84,8 +84,8 @@ import { registerWalletAdmin } from '@/modules/wallet/admin.routes';
 
 
 // -------------------- Fake notification modules (public) --------------------
-import { registerFakeNotificationConfig } from './modules/siteSettings/fakeNotificationConfig.router';
-import { registerFakeOrderNotifications } from './modules/fakeOrderNotifications/router';
+import { registerFakeNotificationConfig } from '@/modules/siteSettings/fakeNotificationConfig.router';
+import { registerFakeOrderNotifications } from '@/modules/fakeOrderNotifications/router';
 
 // Storage config (site_settings + env) — localBaseUrl için kullanacağız
 import { getStorageSettings } from '@/modules/siteSettings/service';

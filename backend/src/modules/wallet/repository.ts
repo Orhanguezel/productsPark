@@ -1,9 +1,10 @@
 // =============================================================
 // FILE: src/modules/wallet/repository.ts
 // FINAL — Wallet repository (admin+public)
-// - NULL-safe users.wallet_balance helpers kept (admin adjust/legacy)
-// - ✅ Public balance: computed from wallet_transactions (authoritative)
-// - Idempotent approval: only first transition to approved credits balance
+// - ✅ Source of truth: wallet_transactions SUM(amount) (signed ledger)
+// - ✅ Idempotent approval: only first transition to approved credits ledger
+// - ✅ Atomicity: user row lock (FOR UPDATE) to serialize balance-changing ops
+// - ✅ Optional cache: users.wallet_balance is SET from ledger (no drift)
 // =============================================================
 
 import { randomUUID } from 'node:crypto';
@@ -48,47 +49,57 @@ function extractFirstRow(res: unknown): any | null {
   return null;
 }
 
-/* ---------------- users.wallet_balance helpers (admin/legacy) ---------------- */
+/* ---------------- atomic primitives ---------------- */
 
 /**
- * users.wallet_balance SQL read (NULL-safe)
- * - lock=true -> FOR UPDATE (tx içinde)
+ * Serialize wallet-changing operations for a user.
+ * This is the simplest reliable approach on MySQL/MariaDB.
  */
-async function getWalletBalanceSql(
-  txOrDb: typeof db,
-  userId: string,
-  lock: boolean,
-): Promise<number> {
-  const q = lock
-    ? sql`SELECT COALESCE(wallet_balance, 0) AS balance FROM users WHERE id = ${userId} FOR UPDATE`
-    : sql`SELECT COALESCE(wallet_balance, 0) AS balance FROM users WHERE id = ${userId} LIMIT 1`;
-
-  const res = await (txOrDb as any).execute(q);
+async function lockUserRow(txOrDb: typeof db, userId: string) {
+  const res = await (txOrDb as any).execute(sql`
+    SELECT id FROM users WHERE id = ${userId} FOR UPDATE
+  `);
   const row = extractFirstRow(res);
   if (!row) throw new Error('user_not_found');
-  return toNum(row.balance);
 }
 
-async function setWalletBalanceSql(txOrDb: typeof db, userId: string, nextBalance: number) {
-  const nextStr = toStrMoney(nextBalance);
+/**
+ * Ledger balance (authoritative) inside a transaction.
+ */
+async function getUserWalletBalanceTx(txOrDb: typeof db, userId: string): Promise<number> {
+  const rows = await (txOrDb as any)
+    .select({
+      balance: sql<string | number>`COALESCE(SUM(${wtx.amount}), 0)`.as('balance'),
+    })
+    .from(wtx)
+    .where(eq(wtx.userId, userId))
+    .execute();
+
+  return toNum(rows?.[0]?.balance);
+}
+
+/**
+ * Optional cache sync (users.wallet_balance) — NO increment/decrement.
+ * Always set from ledger to prevent drift.
+ */
+async function syncUsersWalletBalanceFromLedger(
+  txOrDb: typeof db,
+  userId: string,
+): Promise<number> {
+  const bal = await getUserWalletBalanceTx(txOrDb, userId);
+  const balStr = toStrMoney(bal);
+
   await (txOrDb as any).execute(sql`
     UPDATE users
-    SET wallet_balance = ${nextStr}, updated_at = ${toMysqlDateTime(new Date())}
+    SET wallet_balance = ${balStr}, updated_at = NOW(3)
     WHERE id = ${userId}
   `);
+
+  return bal;
 }
 
 /* ---------------- ✅ authoritative balance (wallet_transactions) ---------------- */
 
-/**
- * ✅ Authoritative wallet balance:
- * SUM(wallet_transactions.amount) (signed model)
- * - deposit: +amount
- * - withdrawal/purchase: -amount (if you implement later)
- */
-/* ================= Me: Wallet Balance (authoritative) ================= */
-
-// ✅ Drizzle builder ile SUM: execute result shape problemi yok
 export async function getUserWalletBalance(userId: string): Promise<number> {
   const rows = await db
     .select({
@@ -100,7 +111,6 @@ export async function getUserWalletBalance(userId: string): Promise<number> {
 
   return toNum(rows?.[0]?.balance);
 }
-
 
 /* ---------------- user label helpers ---------------- */
 
@@ -283,6 +293,14 @@ export async function createDepositRequest(body: {
   const amount = toNum(body.amount);
   if (!amount || amount <= 0) throw new Error('invalid_amount');
 
+  // ✅ ensure user exists early (prevents orphan deposit requests)
+  const [u] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, body.user_id))
+    .limit(1);
+  if (!u) throw new Error('user_not_found');
+
   await db.insert(wdr).values({
     id,
     userId: body.user_id,
@@ -323,7 +341,6 @@ export async function patchDepositRequest(
 
     const prevStatus = row.status as WalletDepositStatus;
     const nextStatus = (patch.status ?? prevStatus) as WalletDepositStatus;
-
     const justApproved = prevStatus !== 'approved' && nextStatus === 'approved';
 
     const setParts: any[] = [];
@@ -361,7 +378,10 @@ export async function patchDepositRequest(
     }
 
     if (justApproved) {
-      // ✅ Insert transaction (authoritative balance source)
+      // ✅ Serialize user wallet updates (prevents double-credit races)
+      await lockUserRow(tx as any, row.userId);
+
+      // ✅ Insert transaction (authoritative ledger)
       await tx.insert(wtx).values({
         id: randomUUID(),
         userId: row.userId,
@@ -371,12 +391,8 @@ export async function patchDepositRequest(
         orderId: null,
       });
 
-      // ✅ Keep users.wallet_balance in sync (legacy/admin screens)
-      await tx.execute(sql`
-        UPDATE users
-        SET wallet_balance = COALESCE(wallet_balance, 0) + ${row.amount}
-        WHERE id = ${row.userId}
-      `);
+      // ✅ Optional cache sync: SET from ledger (no drift)
+      await syncUsersWalletBalanceFromLedger(tx as any, row.userId);
     }
 
     const out = await tx
@@ -447,21 +463,23 @@ export async function listWalletTransactions(p: WtxnListParams) {
   return { rows: rows.map(normalizeTxn), total };
 }
 
-/* ================= Admin: Adjust User Wallet (atomik) ================= */
+/* ================= Admin: Adjust User Wallet (atomic, ledger-based) ================= */
 
 export async function adjustUserWallet(userId: string, amount: number, description?: string) {
   if (!Number.isFinite(amount) || amount === 0) throw new Error('invalid_amount');
 
   return db.transaction(async (tx) => {
-    const current = await getWalletBalanceSql(tx as any, userId, true);
-    const next = Number((current + amount).toFixed(2));
+    // ✅ serialize
+    await lockUserRow(tx as any, userId);
 
-    await setWalletBalanceSql(tx as any, userId, next);
+    // ✅ ledger balance
+    const current = await getUserWalletBalanceTx(tx as any, userId);
+    const next = Number((current + amount).toFixed(2));
 
     const id = randomUUID();
     const type: 'deposit' | 'withdrawal' = amount > 0 ? 'deposit' : 'withdrawal';
 
-    // NOTE: "amount" signed tutuluyor (model B)
+    // NOTE: signed model (amount can be negative)
     await tx.insert(wtx).values({
       id,
       userId,
@@ -470,6 +488,9 @@ export async function adjustUserWallet(userId: string, amount: number, descripti
       description: description ?? null,
       orderId: null,
     });
+
+    // ✅ optional cache sync: SET from ledger
+    await syncUsersWalletBalanceFromLedger(tx as any, userId);
 
     const txnRow = (await tx.select().from(wtx).where(eq(wtx.id, id)).limit(1))[0]!;
 
