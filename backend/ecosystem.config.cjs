@@ -1,34 +1,36 @@
+// =============================================================
+// FILE: ecosystem.config.cjs
+// ProductsPark – Frontend (Next.js) PM2 config (Production-safe)
+// =============================================================
+
 module.exports = {
   apps: [
     {
-      name: 'gzltemizlik-backend',
-      cwd: '/var/www/GZLTemizlik/backend',
+      name: 'productsPark-frontend',
+      cwd: '/var/www/productsPark/frontend',
 
-      interpreter: '/root/.bun/bin/bun',
-      script: 'dist/index.js',
+      interpreter: 'node',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3049 -H 127.0.0.1',
 
       exec_mode: 'fork',
       instances: 1,
       watch: false,
       autorestart: true,
-      max_memory_restart: '300M',
+      max_memory_restart: '400M',
 
-      // Kritik: crash loop kontrolü
       min_uptime: '20s',
       max_restarts: 10,
       restart_delay: 3000,
 
-      // CPU’yu yakan log spam’i azaltır (opsiyonel)
-      // log_date_format: "YYYY-MM-DD HH:mm:ss.SSS Z",
-
       env: {
         NODE_ENV: 'production',
-        HOST: '127.0.0.1',
-        PORT: '8078',
+        PORT: '3049',
+        HOSTNAME: '127.0.0.1',
       },
 
-      out_file: '/var/log/pm2/gzltemizlik-backend.out.log',
-      error_file: '/var/log/pm2/gzltemizlik-backend.err.log',
+      out_file: '/var/log/pm2/productsPark-frontend.out.log',
+      error_file: '/var/log/pm2/productsPark-frontend.err.log',
       combine_logs: true,
       time: true,
     },

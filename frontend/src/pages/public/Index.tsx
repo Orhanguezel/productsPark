@@ -11,19 +11,18 @@ import Blog from '@/components/home/Blog';
 import Newsletter from '@/components/home/Newsletter';
 import Footer from '@/components/layout/Footer';
 
-import SeoJsonLd from '@/components/seo/SeoJsonLd';
+import SeoJsonLd from '@/seo/SeoJsonLd';
 
 import { useSeoSettings } from '@/hooks/useSeoSettings';
 import { nonEmpty, getOrigin } from '@/integrations/types';
 
 export default function Index() {
- const { settings, flat, loading } = useSeoSettings();
+  const { settings, flat, loading } = useSeoSettings();
 
- const origin = useMemo(
-   () => nonEmpty(flat?.canonical_base_url) || getOrigin(),
-   [flat?.canonical_base_url],
- );
-
+  const origin = useMemo(
+    () => nonEmpty(flat?.canonical_base_url) || getOrigin(),
+    [flat?.canonical_base_url],
+  );
 
   const canonicalUrl = useMemo(() => (origin ? `${origin}/` : ''), [origin]);
 
