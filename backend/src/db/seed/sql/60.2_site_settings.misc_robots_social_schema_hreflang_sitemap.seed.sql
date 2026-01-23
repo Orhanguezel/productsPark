@@ -3,6 +3,7 @@
 -- FINAL — Misc + Robots + Social + Schema + Hreflang + Sitemap (+ Analytics IDs)
 -- - Upsert by unique key
 -- - JSON values stored as text (MEDIUMTEXT / TEXT)
+-- - NOINDEX MODE (global): robots_meta=noindex..., robots.txt Disallow:/, sitemap_enabled=false
 -- =============================================================
 
 SET NAMES utf8mb4;
@@ -32,13 +33,11 @@ INSERT INTO `site_settings` (`id`, `key`, `value`, `created_at`, `updated_at`) V
 -- ROBOTS META + ROBOTS.TXT (admin managed)
 -- robots_meta: "index,follow" OR "noindex,nofollow"
 -- ------------------------------------------------------------------
-('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0201', 'robots_meta',        'index,follow', NOW(3), NOW(3)),
+('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0201', 'robots_meta',        'noindex,nofollow,noarchive,nosnippet', NOW(3), NOW(3)),
 ('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0202', 'robots_txt_enabled', 'true',          NOW(3), NOW(3)),
 ('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0203', 'robots_txt_content',
 'User-agent: *
-Disallow:
-
-Sitemap: /sitemap.xml
+Disallow: /
 ', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
@@ -93,8 +92,9 @@ Sitemap: /sitemap.xml
 
 -- ------------------------------------------------------------------
 -- SITEMAP (Admin panelden dinamik yönetim)
+-- NOTE: NOINDEX MODE => sitemap_enabled=false
 -- ------------------------------------------------------------------
-('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0101', 'sitemap_enabled',  'true', NOW(3), NOW(3)),
+('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0101', 'sitemap_enabled',  'false', NOW(3), NOW(3)),
 ('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0102', 'sitemap_base_url', '',     NOW(3), NOW(3)),
 ('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0103', 'sitemap_urls',
 '[

@@ -14,7 +14,7 @@ import { useParams, useSearchParams, useLocation } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
-import SeoHelmet from '@/components/seo/SeoHelmet';
+import SeoHelmet from '@/seo/SeoHelmet';
 
 import { useGetCustomPageBySlugQuery } from '@/integrations/hooks';
 import type { PageState } from '@/integrations/types';

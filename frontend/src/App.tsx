@@ -22,9 +22,9 @@ import { MaintenanceMode } from '@/components/MaintenanceMode';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 import { FakeOrderNotification } from './components/FakeOrderNotification';
-import { GlobalSeo } from '@/components/seo/GlobalSeo';
-import { RouteSeoLinks } from '@/components/seo/RouteSeoLinks';
-import { FooterCodeRenderer } from '@/components/seo/FooterCodeRenderer';
+import { GlobalSeo } from '@/seo/GlobalSeo';
+import { RouteSeoLinks } from '@/seo/RouteSeoLinks';
+import { FooterCodeRenderer } from '@/seo/FooterCodeRenderer';
 
 import { CampaignPopup } from './components/CampaignPopup';
 import { CartDrawer } from './components/CartDrawer';

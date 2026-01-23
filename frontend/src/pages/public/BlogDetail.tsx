@@ -13,7 +13,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import SeoHelmet from '@/components/seo/SeoHelmet';
+import SeoHelmet from '@/seo/SeoHelmet';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

@@ -15,7 +15,7 @@ import { skipToken } from '@reduxjs/toolkit/query';
 
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import SeoHelmet from '@/components/seo/SeoHelmet';
+import SeoHelmet from '@/seo/SeoHelmet';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useSeoSettings } from '@/hooks/useSeoSettings';
@@ -54,7 +54,7 @@ import { ClampScrollHtml } from '@/components/common/ClampScrollHtml';
 
 import { getOrigin, imgSrc, nonEmpty } from '@/integrations/types';
 import { stripHtmlToText, truncateText } from '@/integrations/types';
-import { buildFaqJsonLd, buildProductJsonLd } from '@/components/seo/jsonld';
+import { buildFaqJsonLd, buildProductJsonLd } from '@/seo/jsonld';
 
 /* ----------------------------- local helpers (non-SEO) ----------------------------- */
 
