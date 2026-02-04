@@ -17,11 +17,15 @@ export const storageListQuerySchema = z.object({
 export type StorageListQuery = z.infer<typeof storageListQuerySchema>;
 
 /** PATCH/PUT body: admin update */
-export const storageUpdateSchema = z.object({
+const storageUpdateBaseSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   folder: z.string().max(255).nullable().optional(),
   metadata: z.record(z.string()).nullable().optional(),
-}).partial().refine((v: typeof storageUpdateSchema._type) => Object.keys(v).length > 0, { message: "no_fields_to_update" });
+});
+
+export const storageUpdateSchema = storageUpdateBaseSchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "no_fields_to_update" });
 
 export type StorageUpdateInput = z.infer<typeof storageUpdateSchema>;
 

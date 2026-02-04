@@ -18,7 +18,7 @@ export const WdrListQuerySchema = z.object({
 export const WdrCreateBodySchema = z.object({
   // ✅ FE’den gelse bile BE tarafında JWT’den override edeceğiz
   user_id: z.string().uuid().optional(),
-  amount: z.union([z.number(), z.string()]).refine((v: typeof WdrCreateBodySchema._type['amount']) => Number(v) > 0, 'invalid_amount'),
+  amount: z.union([z.number(), z.string()]).refine((v) => Number(v) > 0, 'invalid_amount'),
   payment_method: z.string().min(1).default('havale'),
   payment_proof: z.string().url().nullable().optional(),
 });

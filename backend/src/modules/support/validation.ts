@@ -38,15 +38,18 @@ export const createTicketBodySchema = z.object({
   category: z.string().trim().max(40).optional().nullable(),
 });
 
-export const updateTicketBodySchema = z
-  .object({
-    subject: z.string().trim().min(1).max(255).optional(),
-    message: z.string().trim().min(1).max(2000).optional(),
-    status: SupportTicketStatus.optional(),
-    priority: SupportTicketPriority.optional(),
-    category: z.string().trim().max(40).optional().nullable(), // yok sayılacak
-  })
-  .refine((v: typeof updateTicketBodySchema._type) => Object.keys(v).length > 0, { message: "Boş patch gönderilemez." });
+const updateTicketBodyBaseSchema = z.object({
+  subject: z.string().trim().min(1).max(255).optional(),
+  message: z.string().trim().min(1).max(2000).optional(),
+  status: SupportTicketStatus.optional(),
+  priority: SupportTicketPriority.optional(),
+  category: z.string().trim().max(40).optional().nullable(), // yok sayılacak
+});
+
+export const updateTicketBodySchema = updateTicketBodyBaseSchema.refine(
+  (v) => Object.keys(v).length > 0,
+  { message: "Boş patch gönderilemez." },
+);
 
 export const createReplyBodySchema = z.object({
   ticket_id: z.string().uuid(),

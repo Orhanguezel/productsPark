@@ -96,7 +96,7 @@ const noteSchema = z
     z.string().min(1),
   ])
   .transform((v: string | { message?: string; note?: string; text?: string }) => ({
-    message: typeof v === 'string' ? v : (v.message ?? v.note ?? v.text),
+    message: typeof v === 'string' ? v : (v.message ?? v.note ?? v.text)!,
   }));
 
 const itemsListSchema = z.object({

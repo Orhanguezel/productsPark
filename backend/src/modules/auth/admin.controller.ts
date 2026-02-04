@@ -150,7 +150,7 @@ export function makeAdminController(_app: FastifyInstance) {
         await tx.delete(userRoles).where(eq(userRoles.user_id, id));
         if (roles.length > 0) {
           await tx.insert(userRoles).values(
-            roles.map((r: string) => ({
+            roles.map((r) => ({
               id: randomUUID(),
               user_id: id,
               role: r,
