@@ -1,9 +1,11 @@
 // =============================================================
 // FILE: src/pages/public/components/CheckoutCustomerInfoCard.tsx
+// FINAL — better inputs + responsive grid
 // =============================================================
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 type Props = {
   customerName: string;
@@ -27,8 +29,9 @@ export const CheckoutCustomerInfoCard: React.FC<Props> = ({
       <CardHeader>
         <CardTitle>Müşteri Bilgileri</CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="name">Ad Soyad *</Label>
             <Input
@@ -36,9 +39,11 @@ export const CheckoutCustomerInfoCard: React.FC<Props> = ({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="Ad Soyad"
+              autoComplete="name"
               required
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="email">E-posta *</Label>
             <Input
@@ -47,17 +52,22 @@ export const CheckoutCustomerInfoCard: React.FC<Props> = ({
               value={customerEmail}
               onChange={(e) => setCustomerEmail(e.target.value)}
               placeholder="E-posta"
+              autoComplete="email"
               required
             />
           </div>
         </div>
+
         <div className="space-y-2">
           <Label htmlFor="phone">Telefon *</Label>
           <Input
             id="phone"
+            type="tel"
+            inputMode="tel"
             value={customerPhone}
             onChange={(e) => setCustomerPhone(e.target.value)}
             placeholder="5XX XXX XX XX"
+            autoComplete="tel"
             required
           />
         </div>

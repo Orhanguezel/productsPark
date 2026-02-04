@@ -1,6 +1,10 @@
 // =============================================================
 // FILE: src/pages/public/payment/DepositPaymentInfo.tsx
-// FINAL — uses public wallet hooks (new routes)
+// FINAL — Wallet deposit via bank_transfer (provider_key)
+// - payment_method: 'bank_transfer' (NOT 'havale')
+// - bank_account_info: JsonLike -> safe display
+// - auth guard: no redirect while authLoading
+// - kind: 'havale'|'eft' is a UI detail (optional), NOT provider_key
 // =============================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -17,18 +21,26 @@ import { Copy, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useGetSiteSettingByKeyQuery,
-  useCreateWalletDepositRequestMutation, // ✅ public wallet hook
+  useCreateWalletDepositRequestMutation,
   useGetMyProfileQuery,
   useSendTelegramNotificationMutation,
 } from '@/integrations/hooks';
 
+import { isPlainObject, toStr } from '@/integrations/types/common';
+
 /* ---------------- helpers (no-any) ---------------- */
 const asNumber = (v: unknown, d = 0): number => {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : d;
+  }
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 };
+
 const asString = (v: unknown, d = ''): string => (v == null ? d : String(v));
+
 const asBoolLoose = (v: unknown, d = false): boolean => {
   if (typeof v === 'boolean') return v;
   const s = String(v ?? '')
@@ -38,6 +50,24 @@ const asBoolLoose = (v: unknown, d = false): boolean => {
   if (['0', 'false', 'no', 'n', 'off', 'disabled'].includes(s)) return false;
   return d;
 };
+
+type BankTransferKind = 'havale' | 'eft';
+const parseKind = (v: unknown): BankTransferKind => {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  return s === 'eft' ? 'eft' : 'havale';
+};
+
+function jsonLikeToText(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  try {
+    if (Array.isArray(v) || isPlainObject(v)) return JSON.stringify(v, null, 2);
+  } catch {
+    // ignore
+  }
+  return toStr(v);
+}
 
 export default function DepositPaymentInfo() {
   const [searchParams] = useSearchParams();
@@ -50,6 +80,14 @@ export default function DepositPaymentInfo() {
     return Number.isFinite(n) ? n : NaN;
   }, [amountParam]);
 
+  const kind = useMemo<BankTransferKind>(() => {
+    // optional: /deposit-payment-info?amount=100&kind=eft
+    const qpKind = searchParams.get('kind');
+    // also allow sessionStorage override if you want unified behavior
+    const ssKind = sessionStorage.getItem('bankTransferKind');
+    return parseKind(qpKind ?? ssKind ?? 'havale');
+  }, [searchParams]);
+
   const [bankInfo, setBankInfo] = useState<string | null>(null);
   const [minLimit, setMinLimit] = useState<number>(10);
   const [tgEnabled, setTgEnabled] = useState<boolean>(false);
@@ -61,8 +99,10 @@ export default function DepositPaymentInfo() {
 
   const { data: minSetting, isLoading: minLoading } =
     useGetSiteSettingByKeyQuery('min_balance_limit');
+
   const { data: bankSetting, isLoading: bankLoading } =
     useGetSiteSettingByKeyQuery('bank_account_info');
+
   const { data: tgSetting, isLoading: tgLoading } = useGetSiteSettingByKeyQuery(
     'new_deposit_request_telegram',
   );
@@ -72,25 +112,34 @@ export default function DepositPaymentInfo() {
   const settingsReady = !minLoading && !bankLoading && !tgLoading;
   const loading = authLoading || !settingsReady;
 
+  // auth guard (do not redirect while authLoading)
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      toast.error('Devam etmek için giriş yapmanız gerekiyor.');
+      navigate('/giris', { replace: true });
+    }
+  }, [authLoading, user, navigate]);
+
   useEffect(() => {
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('Geçersiz tutar');
-      navigate('/hesabim');
+      navigate('/hesabim', { replace: true });
       return;
     }
     if (!settingsReady) return;
 
-    const min = asNumber(minSetting?.value, 10);
-    const bank = asString(bankSetting?.value, '');
-    const tg = asBoolLoose(tgSetting?.value, false);
+    const min = asNumber((minSetting as any)?.value, 10);
+    const bankText = bankSetting ? jsonLikeToText((bankSetting as any).value) : '';
+    const tg = asBoolLoose((tgSetting as any)?.value, false);
 
     setMinLimit(min);
-    setBankInfo(bank || null);
+    setBankInfo(bankText.trim() ? bankText : null);
     setTgEnabled(tg);
 
     if (amount < min) {
       toast.error(`Minimum yükleme tutarı ${min.toLocaleString('tr-TR')} ₺'dir`);
-      navigate('/hesabim');
+      navigate('/hesabim', { replace: true });
     }
   }, [amount, settingsReady, minSetting, bankSetting, tgSetting, navigate]);
 
@@ -99,42 +148,48 @@ export default function DepositPaymentInfo() {
       await navigator.clipboard.writeText(text);
       toast.success('Panoya kopyalandı');
     } catch {
-      const ok = (document.execCommand as any)?.('copy');
+      // legacy fallback (best-effort)
+      const ok = (document.execCommand as unknown as (cmd: string) => boolean)?.('copy');
       if (ok) toast.success('Panoya kopyalandı');
       else toast.error('Kopyalama başarısız');
     }
   };
 
   const handlePaymentConfirm = async () => {
+    if (authLoading) return;
+
     if (!user) {
       toast.error('Oturum bulunamadı');
-      navigate('/giris');
+      navigate('/giris', { replace: true });
       return;
     }
 
     try {
-      // ✅ user_id göndermiyoruz: BE JWT’den alıyor/override ediyor
+      // ✅ provider_key standard: bank_transfer
       const created = await createWalletDepositRequest({
         amount,
-        payment_method: 'havale',
-      }).unwrap();
+        payment_method: 'bank_transfer',
+        // optional: if backend accepts, you can send kind too:
+        // bank_transfer_kind: kind,
+      } as any).unwrap();
 
       if (tgEnabled && created) {
         try {
-          const userName = meProfile?.full_name || 'Kullanıcı';
+          const userName = asString((meProfile as any)?.full_name, 'Kullanıcı') || 'Kullanıcı';
           await sendTelegramNotification({
             type: 'new_deposit_request',
             depositId: created.id,
             amount: created.amount,
             userName,
-          }).unwrap();
+            bankTransferKind: kind, // optional field; backend may ignore
+          } as any).unwrap();
         } catch (e) {
           console.error('Telegram notify error:', e);
         }
       }
 
       toast.success('Ödeme bildirimi gönderildi');
-      navigate('/hesabim');
+      navigate('/hesabim', { replace: true });
     } catch (e) {
       console.error('Deposit create error:', e);
       toast.error('Bir hata oluştu');
@@ -183,7 +238,7 @@ export default function DepositPaymentInfo() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => copyToClipboard(String(amount))}
+                    onClick={() => void copyToClipboard(String(amount))}
                     aria-label="Tutarı kopyala"
                   >
                     <Copy className="h-4 w-4" />
@@ -191,6 +246,9 @@ export default function DepositPaymentInfo() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Minimum tutar: {minLimit.toLocaleString('tr-TR')} ₺
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Seçim: <span className="font-mono">{kind}</span>
                 </p>
               </div>
 
@@ -203,7 +261,7 @@ export default function DepositPaymentInfo() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => copyToClipboard(bankInfo)}
+                    onClick={() => void copyToClipboard(bankInfo)}
                     aria-label="Banka bilgilerini kopyala"
                   >
                     Tamamını Kopyala
@@ -224,7 +282,7 @@ export default function DepositPaymentInfo() {
               <Button
                 className="w-full"
                 size="lg"
-                onClick={handlePaymentConfirm}
+                onClick={() => void handlePaymentConfirm()}
                 disabled={creatingDeposit}
               >
                 {creatingDeposit ? 'Gönderiliyor...' : 'Ödemeyi Yaptım'}

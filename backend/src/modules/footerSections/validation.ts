@@ -17,7 +17,7 @@ export const footerSectionCreateSchema = z.object({
   // links: JSON string veya array -> string'e dönüştürüyoruz
   links: z
     .union([z.string().min(2), z.array(footerLinkSchema)])
-    .transform((v) => (typeof v === "string" ? v : JSON.stringify(v))),
+    .transform((v: string | typeof footerLinkSchema["_type"][]) => (typeof v === "string" ? v : JSON.stringify(v))),
   order_num: z.coerce.number().int().min(0).default(0),
   is_active: z.coerce.boolean().default(true),
 });
@@ -26,7 +26,7 @@ export const footerSectionUpdateSchema = z.object({
   title: z.string().min(1).max(100).optional(),
   links: z
     .union([z.string().min(2), z.array(footerLinkSchema)])
-    .transform((v) => (typeof v === "string" ? v : JSON.stringify(v)))
+    .transform((v: string | typeof footerLinkSchema["_type"][]) => (typeof v === "string" ? v : JSON.stringify(v)))
     .optional(),
   order_num: z.coerce.number().int().min(0).optional(),
   is_active: z.coerce.boolean().optional(),
@@ -36,7 +36,7 @@ export const footerSectionListQuerySchema = z.object({
   q: z.string().optional(),
   is_active: z
     .union([z.literal("1"), z.literal("0"), z.literal("true"), z.literal("false")])
-    .transform((v) => v === "1" || v === "true")
+    .transform((v: "1" | "0" | "true" | "false") => v === "1" || v === "true")
     .optional(),
   order: z.enum(["asc", "desc"]).optional(), // order_num yönü
   limit: z.coerce.number().int().min(1).max(1000).optional(),
@@ -49,7 +49,7 @@ export const adminFooterSectionListQuerySchema = z.object({
   q: z.string().optional(),
   is_active: z
     .union([z.literal("1"), z.literal("0"), z.literal("true"), z.literal("false")])
-    .transform((v) => v === "1" || v === "true")
+    .transform((v: "1" | "0" | "true" | "false") => v === "1" || v === "true")
     .optional(),
   sort: z.enum(["display_order", "created_at", "title"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
@@ -61,7 +61,7 @@ const adminFooterSectionUpsertBase = z.object({
   title: z.string().min(1).max(100),
   links: z
     .union([z.string().min(2), z.array(footerLinkSchema)])
-    .transform((v) => (typeof v === "string" ? v : JSON.stringify(v)))
+    .transform((v: string | typeof footerLinkSchema["_type"][]) => (typeof v === "string" ? v : JSON.stringify(v)))
     .nullable()
     .optional(),
   display_order: z.coerce.number().int().min(0).optional(),
@@ -70,7 +70,7 @@ const adminFooterSectionUpsertBase = z.object({
 
 // Create: links boş string olmasın
 export const adminFooterSectionCreateSchema = adminFooterSectionUpsertBase.refine(
-  (v) => v.links == null || (typeof v.links === "string" ? v.links.trim().length > 0 : true),
+  (v: z.infer<typeof adminFooterSectionUpsertBase>) => v.links == null || (typeof v.links === "string" ? v.links.trim().length > 0 : true),
   { path: ["links"], message: "links_required_or_valid_json" }
 );
 

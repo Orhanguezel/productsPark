@@ -136,7 +136,7 @@ export const adminBulkUpsertSiteSettings: RouteHandler = async (req, reply) => {
     const input = siteSettingBulkUpsertSchema.parse(req.body || {});
     const now = new Date();
 
-    const values = input.items.map(i => ({
+    const values = input.items.map((i: { key: string; value: JsonLike }) => ({
       id: randomUUID(),
       key: i.key,
       value: stringifyValue(i.value),
@@ -151,7 +151,7 @@ export const adminBulkUpsertSiteSettings: RouteHandler = async (req, reply) => {
       },
     });
 
-    const keys = input.items.map(i => i.key);
+    const keys = input.items.map((i: { key: string; value: JsonLike }) => i.key);
     const rows = await db
       .select()
       .from(siteSettings)

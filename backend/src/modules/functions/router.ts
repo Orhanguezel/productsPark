@@ -1,16 +1,18 @@
 // =============================================================
 // FILE: src/modules/functions/routes.ts
-// FINAL — add telegram-send-test
+// FINAL — functions routes
+// - add telegram-send-test
 // =============================================================
 import type { FastifyInstance } from 'fastify';
 
 import { paytrGetToken, paytrHavaleGetToken } from '@/modules/functions/paytr.controller';
 import {
   shopierCreatePayment,
-  shopierCallback,
   sendEmail,
   sendTestMail,
   manualDeliveryEmail,
+  sendTelegramNotification,
+  telegramSendTest,
   smmApiOrder,
   smmApiStatus,
   turkpinCreateOrder,
@@ -28,11 +30,14 @@ export async function registerFunctions(app: FastifyInstance) {
   app.post(`${FN_BASE}/paytr-havale-get-token`, paytrHavaleGetToken);
 
   app.post(`${FN_BASE}/shopier-create-payment`, shopierCreatePayment);
-  app.post(`${FN_BASE}/shopier-callback`, shopierCallback);
 
   app.post(`${FN_BASE}/send-email`, sendEmail);
   app.post(`${FN_BASE}/send-test-mail`, sendTestMail);
   app.post(`${FN_BASE}/manual-delivery-email`, manualDeliveryEmail);
+
+  // Telegram
+  app.post(`${FN_BASE}/send-telegram-notification`, sendTelegramNotification);
+  app.post(`${FN_BASE}/telegram-send-test`, telegramSendTest);
 
   app.post(`${FN_BASE}/smm-api-order`, smmApiOrder);
   app.post(`${FN_BASE}/smm-api-status`, smmApiStatus);

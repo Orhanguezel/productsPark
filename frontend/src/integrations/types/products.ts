@@ -668,8 +668,21 @@ export function toProductsPublicListQuery(
   // ✅ add
   if (typeof p.is_featured === 'boolean') out.is_featured = p.is_featured ? 1 : 0;
 
-  // ... kalanlar aynı
-  // min/max, limit/offset, sort/order, slug, ids
+  if (typeof p.min_price === 'number') out.min_price = p.min_price;
+  if (typeof p.max_price === 'number') out.max_price = p.max_price;
+
+  if (typeof p.limit === 'number') out.limit = clamp(p.limit, 1, 200);
+  if (typeof p.offset === 'number') out.offset = Math.max(0, Math.trunc(p.offset));
+
+  if (p.sort) out.sort = p.sort;
+  if (p.order) out.order = p.order;
+
+  const slug = trimStr(p.slug);
+  if (slug) out.slug = slug;
+
+  const ids = toStrArrayOrNull(p.ids);
+  if (ids && ids.length) out.ids = ids.slice(0, 200);
+
   return Object.keys(out).length ? out : undefined;
 }
 

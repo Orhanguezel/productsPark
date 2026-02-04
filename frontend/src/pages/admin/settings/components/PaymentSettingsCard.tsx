@@ -148,7 +148,7 @@ export default function PaymentSettingsCard<T>({
   // provider shortcuts
   const paytr = findProvider('paytr');
 
-  const paytrCallbackUrl = useMemo(() => `${origin}/functions/paytr-callback`, [origin]);
+  const paytrCallbackUrl = useMemo(() => `${origin}/paytr/notify`, [origin]);
 
   return (
     <Card>

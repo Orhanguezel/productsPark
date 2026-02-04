@@ -4,7 +4,7 @@
 import type { RouteHandler } from "fastify";
 import { randomUUID } from "crypto";
 import { and, desc, eq, like, isNull, or, type SQL } from "drizzle-orm";
-import { ZodError } from "zod";
+import { z } from "zod";
 import { db } from "@/db/client";
 import {
   email_templates,
@@ -157,9 +157,9 @@ export const createEmailTemplateAdmin: RouteHandler = async (req, reply) => {
     if (msg.includes("ux_email_tpl_key_locale")) {
       return reply.code(409).send({ error: { message: "key_exists_for_locale" } });
     }
-    if (e instanceof ZodError) {
+    if (e instanceof z.ZodError) {
       return reply.code(400).send({
-        error: { message: "validation_error", details: e.issues },
+        error: { message: "validation_error" },
       });
     }
     (req as any).log?.error?.(e);
@@ -213,9 +213,9 @@ export const updateEmailTemplateAdmin: RouteHandler = async (req, reply) => {
     if (msg.includes("ux_email_tpl_key_locale")) {
       return reply.code(409).send({ error: { message: "key_exists_for_locale" } });
     }
-    if (e instanceof ZodError) {
+    if (e instanceof z.ZodError) {
       return reply.code(400).send({
-        error: { message: "validation_error", details: e.issues },
+        error: { message: "validation_error" },
       });
     }
     (req as any).log?.error?.(e);

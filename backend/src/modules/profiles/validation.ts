@@ -7,10 +7,10 @@ const optionalUrl = z
   .trim()
   .max(2048)
   .optional()
-  .refine((v) => v === undefined || v.length === 0 || /^https?:\/\//i.test(v), {
+  .refine((v: string | undefined) => v === undefined || v.length === 0 || /^https?:\/\//i.test(v), {
     message: 'url_must_start_with_http',
   })
-  .transform((v) => {
+  .transform((v: string | undefined) => {
     const s = (v ?? '').trim();
     return s.length ? s : undefined;
   });
@@ -18,7 +18,7 @@ const optionalUrl = z
 export const profileUpsertSchema = z.object({
   full_name: z.string().min(1).max(191).optional(),
   phone: z.string().max(64).optional(),
-  avatar_url: z.string().url().max(2048).optional(),
+  avatar_url: optionalUrl,
 
   address_line1: z.string().max(255).optional(),
   address_line2: z.string().max(255).optional(),

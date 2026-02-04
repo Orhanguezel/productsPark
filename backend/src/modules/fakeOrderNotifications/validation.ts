@@ -19,7 +19,7 @@ export const CreateBodySchema = z.object({
 });
 
 export const UpdateBodySchema = CreateBodySchema.partial().refine(
-  (v) => Object.keys(v).length > 0,
+  (v: Partial<z.infer<typeof CreateBodySchema>>) => Object.keys(v).length > 0,
   { message: "empty_body" }
 );
 

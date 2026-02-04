@@ -67,7 +67,7 @@ export const adminRoleBody = z
     email: z.string().trim().email().optional(),
     role: roleEnum,
   })
-  .refine((v) => v.user_id || v.email, { message: 'user_id_or_email_required' });
+  .refine((v: { user_id?: string; email?: string }) => v.user_id || v.email, { message: 'user_id_or_email_required' });
 
 export const adminMakeByEmailBody = z.object({
   email: z.string().trim().email(),

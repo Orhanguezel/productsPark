@@ -18,7 +18,7 @@ const urlOrPath = z
   .string()
   .trim()
   .refine(
-    (s) => s.length === 0 || s.startsWith("/") || /^https?:\/\//i.test(s),
+    (s: string) => s.length === 0 || s.startsWith("/") || /^https?:\/\//i.test(s),
     { message: "invalid url or path" }
   );
 
@@ -177,7 +177,7 @@ export const adminCreatePopup: RouteHandler = async (req, reply) => {
     return reply.code(201).send(mapRow(row as PopupRow));
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return reply.code(400).send({ error: { message: "validation_error", details: e.issues } });
+      return reply.code(400).send({ error: { message: "validation_error" } });
     }
     (req as any)?.log?.error?.(e);
     return reply.code(500).send({ error: { message: "popup_create_failed" } });
@@ -226,7 +226,7 @@ export const adminUpdatePopup: RouteHandler = async (req, reply) => {
     return reply.send(mapRow(row));
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return reply.code(400).send({ error: { message: "validation_error", details: e.issues } });
+      return reply.code(400).send({ error: { message: "validation_error" } });
     }
     (req as any)?.log?.error?.(e);
     return reply.code(500).send({ error: { message: "popup_update_failed" } });

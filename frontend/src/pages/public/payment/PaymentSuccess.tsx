@@ -1,6 +1,8 @@
 // =============================================================
 // FILE: src/pages/account/components/PaymentSuccess.tsx
 // FINAL — Shopier callback (RTK only, idempotent)
+// - tolerant param names
+// - deterministic cache cleanup
 // =============================================================
 
 import { useEffect, useState } from 'react';
@@ -12,42 +14,49 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { CheckCircle, Loader2 } from 'lucide-react';
 
-import { useShopierCallbackMutation } from '@/integrations/hooks';
+import { useShopierNotifyMutation } from '@/integrations/hooks';
+
+const pick = (p: URLSearchParams, keys: string[]): string | null => {
+  for (const k of keys) {
+    const v = p.get(k);
+    if (v && v.trim()) return v.trim();
+  }
+  return null;
+};
 
 export default function PaymentSuccess() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [processing, setProcessing] = useState(true);
 
-  const [shopierCallback] = useShopierCallbackMutation();
+  const [shopierNotify] = useShopierNotifyMutation();
 
   useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
-      const platform_order_id = params.get('platform_order_id');
-      const status = params.get('status');
-      const payment_id = params.get('payment_id');
-      const signature = params.get('signature');
-      const random_nr = params.get('random_nr');
-      const API_key = params.get('API_key');
+      const platform_order_id = pick(params, ['platform_order_id', 'platformOrderId']);
+      const status = pick(params, ['status']);
+      const payment_id = pick(params, ['payment_id', 'paymentId']);
+      const signature = pick(params, ['signature']);
+      const random_nr = pick(params, ['random_nr', 'randomNr']);
+      const API_key = pick(params, ['API_key', 'api_key', 'apiKey']);
 
       const valid = !!platform_order_id && !!status && !!payment_id && !!signature;
-
       const guardKey = valid ? `shopier_cb:${platform_order_id}:${payment_id}` : null;
 
       try {
         if (valid && guardKey && !sessionStorage.getItem(guardKey)) {
           sessionStorage.setItem(guardKey, '1');
 
-          await shopierCallback({
+          await shopierNotify({
             platform_order_id,
             status,
             payment_id,
             signature,
             random_nr,
             API_key,
-          }).unwrap();
+          } as any).unwrap();
         }
       } catch {
         // intentionally silent (UX)
@@ -55,6 +64,8 @@ export default function PaymentSuccess() {
         if (!cancelled) {
           sessionStorage.removeItem('checkoutData');
           sessionStorage.removeItem('havalepaymentData');
+          sessionStorage.removeItem('bankTransferKind');
+          sessionStorage.removeItem('bankTransferConfig');
           localStorage.removeItem('guestCart');
           setProcessing(false);
         }
@@ -65,7 +76,7 @@ export default function PaymentSuccess() {
     return () => {
       cancelled = true;
     };
-  }, [params, shopierCallback]);
+  }, [params, shopierNotify]);
 
   if (processing) {
     return (

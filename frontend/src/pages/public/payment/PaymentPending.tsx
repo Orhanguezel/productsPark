@@ -1,6 +1,7 @@
 // =============================================================
 // FILE: src/pages/account/components/PaymentPending.tsx
-// FINAL — Havale bekleme ekranı (UI only)
+// FINAL — Bank transfer pending (UI only)
+// - Clears checkout/deposit related caches deterministically
 // =============================================================
 
 import { useEffect } from 'react';
@@ -17,6 +18,9 @@ export default function PaymentPending() {
 
   useEffect(() => {
     sessionStorage.removeItem('checkoutData');
+    sessionStorage.removeItem('havalepaymentData');
+    sessionStorage.removeItem('bankTransferKind');
+    sessionStorage.removeItem('bankTransferConfig');
   }, []);
 
   return (
@@ -32,7 +36,7 @@ export default function PaymentPending() {
             </p>
 
             <div className="flex gap-4 justify-center">
-              <Button onClick={() => navigate('/hesabim')}>Siparişlerim</Button>
+              <Button onClick={() => navigate('/hesabim')}>Hesabım</Button>
               <Button variant="outline" onClick={() => navigate('/')}>
                 Ana Sayfa
               </Button>

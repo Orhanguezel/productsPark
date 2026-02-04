@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 
 import { profiles, type ProfileRow, type ProfileInsert } from './schema';
 import { profileUpsertSchema, type ProfileUpsertInput } from './validation';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 
 export type ProfileUpsertRequest = { profile: ProfileUpsertInput };
 export type ProfileIdParams = { id: string };
@@ -53,8 +53,8 @@ export const getProfileByIdPublic: RouteHandler<{ Params: ProfileIdParams }> = a
   } catch (e: unknown) {
     req.log.error(e);
 
-    if (e instanceof ZodError) {
-      return reply.status(400).send({ error: { message: 'validation_error', details: e.issues } });
+    if (e instanceof z.ZodError) {
+      return reply.status(400).send({ error: { message: 'validation_error' } });
     }
 
     return reply.status(500).send({ error: { message: 'profile_fetch_failed' } });
@@ -126,8 +126,8 @@ export const upsertMyProfile: RouteHandler<{ Body: ProfileUpsertRequest }> = asy
     return reply.send(row ?? null);
   } catch (e: unknown) {
     req.log.error(e);
-    if (e instanceof ZodError) {
-      return reply.status(400).send({ error: { message: 'validation_error', details: e.issues } });
+    if (e instanceof z.ZodError) {
+      return reply.status(400).send({ error: { message: 'validation_error' } });
     }
     if (e instanceof Error && e.message === 'unauthorized') {
       return reply.status(401).send({ error: { message: 'unauthorized' } });

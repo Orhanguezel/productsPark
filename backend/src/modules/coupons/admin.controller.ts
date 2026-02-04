@@ -219,11 +219,11 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
       .where(eq(coupons.id, id))
       .limit(1);
     return reply.code(201).send(mapRow(row!));
-  } catch (e) {
+  } catch (e: unknown) {
     if (e instanceof z.ZodError) {
       return reply
         .code(400)
-        .send({ error: { message: "validation_error", details: e.issues } });
+        .send({ error: { message: "validation_error"} });
     }
     (req as any)?.log?.error?.(e);
     return reply
@@ -353,11 +353,11 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
       .limit(1);
     if (!row) return reply.code(404).send({ error: { message: "not_found" } });
     return reply.send(mapRow(row));
-  } catch (e) {
+  } catch (e: unknown) {
     if (e instanceof z.ZodError) {
       return reply
         .code(400)
-        .send({ error: { message: "validation_error", details: e.issues } });
+        .send({ error: { message: "validation_error" } });
     }
     (req as any)?.log?.error?.(e);
     return reply

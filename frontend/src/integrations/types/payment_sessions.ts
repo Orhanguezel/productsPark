@@ -24,6 +24,7 @@ export type PaymentSessionStatus =
   | 'pending'
   | 'authorized'
   | 'captured'
+  | 'paid'
   | 'cancelled'
   | 'failed'
   | 'succeeded';
@@ -91,6 +92,7 @@ const normStatus = (x: unknown): PaymentSessionStatus => {
     s === 'pending' ||
     s === 'authorized' ||
     s === 'captured' ||
+    s === 'paid' ||
     s === 'cancelled' ||
     s === 'failed' ||
     s === 'succeeded'

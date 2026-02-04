@@ -129,14 +129,8 @@ export default function AdminPaymentsPage() {
   });
 
   // callback urls (default)
-  const paytrCallbackUrl = useMemo(
-    () => buildCallbackUrl(origin, '/functions/paytr-callback'),
-    [origin],
-  );
-  const shopierCallbackUrl = useMemo(
-    () => buildCallbackUrl(origin, '/functions/shopier-callback'),
-    [origin],
-  );
+  const paytrCallbackUrl = useMemo(() => buildCallbackUrl(origin, '/paytr/notify'), [origin]);
+  const shopierCallbackUrl = useMemo(() => buildCallbackUrl(origin, '/shopier/notify'), [origin]);
   const paparaCallbackUrl = useMemo(
     () => buildCallbackUrl(origin, '/functions/papara-callback'),
     [origin],
@@ -419,6 +413,9 @@ export default function AdminPaymentsPage() {
                     value={paytrForm.merchant_salt ?? ''}
                     onChange={(e) => setPaytrForm((p) => ({ ...p, merchant_salt: e.target.value }))}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Boş bırakırsanız mevcut gizli değer korunur.
+                  </p>
                 </div>
               </section>
 
@@ -428,7 +425,10 @@ export default function AdminPaymentsPage() {
                   disabled={busyProviders || findProvider(PAYTR_KEY) === null}
                   onClick={async () => {
                     try {
-                      await saveProvider(PAYTR_KEY, buildPaytrBody(paytrForm));
+                      await saveProvider(
+                        PAYTR_KEY,
+                        buildPaytrBody(paytrForm, findProvider(PAYTR_KEY)?.public_config ?? null),
+                      );
                     } catch (e) {
                       console.error(e);
                       toast.error('PayTR kaydedilemedi');
@@ -530,6 +530,9 @@ export default function AdminPaymentsPage() {
                       setShopierForm((p) => ({ ...p, client_secret: e.target.value }))
                     }
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Boş bırakırsanız mevcut gizli değer korunur.
+                  </p>
                 </div>
 
                 <div className="space-y-2">

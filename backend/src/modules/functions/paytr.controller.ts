@@ -1,107 +1,136 @@
-// src/modules/functions/paytr.controller.ts
+// ===================================================================
+// FILE: src/modules/functions/paytr.controller.ts
+// FINAL — PayTR functions controllers (REAL iframe token)
+// - Validates body (minimal required fields)
+// - Forces user_ip from request (x-forwarded-for / req.ip)
+// - DEV fallback: PAYTR_DEV_USER_IP if private/loopback
+// - Returns PayTR error message in response for debugging
+// ===================================================================
 
-import type { FastifyReply, FastifyRequest } from "fastify";
-import crypto from "crypto";
-import { getPaytrConfig, type PaytrProviderConfig } from "@/modules/payments/service";
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 
-type PaytrBody = {
-  email?: string;
-  payment_amount?: number | string; // kuruş
-  merchant_oid?: string;
-  user_ip?: string;
-  installment?: number | string;
-  no_installment?: number | string;
-  max_installment?: number | string;
-  currency?: string; // 'TL'
-  basket?: Array<[string, number, number]>; // [name, unit_price, qty]
-  lang?: string;
+import { createPaytrToken, type PaytrBody } from '@/modules/functions/paytr/service';
+import { getSiteSettingsMap } from '@/modules/siteSettings/service';
+
+// -------------------- helpers --------------------
+
+const isPrivateOrLoopback = (ip: string): boolean => {
+  const s = String(ip ?? '').trim();
+  if (!s) return true;
+  if (s === '127.0.0.1' || s === '::1') return true;
+  if (s.startsWith('10.')) return true;
+  if (s.startsWith('192.168.')) return true;
+  if (s.startsWith('172.')) {
+    const p = s.split('.');
+    const n = Number(p[1]);
+    if (Number.isFinite(n) && n >= 16 && n <= 31) return true;
+  }
+  return false;
 };
 
-const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
+const getClientIp = (req: FastifyRequest): string => {
+  const xfRaw = req.headers['x-forwarded-for'];
+  const xf = typeof xfRaw === 'string' ? xfRaw : Array.isArray(xfRaw) ? xfRaw.join(',') : '';
 
-function buildPaytrToken(body: PaytrBody, cfg: PaytrProviderConfig) {
-  const merchant_id = cfg.merchantId;
-  const merchant_key = cfg.merchantKey;
-  const merchant_salt = cfg.merchantSalt;
+  const first = xf.split(',')[0]?.trim();
+  const ip = (first || req.ip || '').trim();
 
-  const email = String(body.email ?? "");
-  const payment_amount = Number(body.payment_amount ?? 0); // kuruş
-  const merchant_oid = String(
-    body.merchant_oid ?? `OID_${Date.now()}`
-  );
-  const user_ip = String(body.user_ip ?? "127.0.0.1");
-  const installment = Number(body.installment ?? 0);
-  const no_installment = Number(body.no_installment ?? 1);
-  const max_installment = Number(body.max_installment ?? 0);
-  const currency = body.currency ?? "TL";
-  const test_mode = Number(cfg.testMode ?? 1);
+  return ip || '127.0.0.1';
+};
 
-  const basketArr = Array.isArray(body.basket) ? body.basket : [];
-  const user_basket = b64(JSON.stringify(basketArr));
+// Minimal validation (PayTR token için kritik alanlar)
+const BodySchema = z.object({
+  email: z.string().email().optional(),
+  user_ip: z.string().optional(),
 
-  const hash_str =
-    `${merchant_id}${user_ip}${merchant_oid}${email}` +
-    `${payment_amount}${user_basket}${no_installment}${max_installment}` +
-    `${currency}${test_mode}`;
+  merchant_oid: z.string().min(3),
+  payment_amount: z.union([z.number(), z.string()]),
 
-  const paytr_token = crypto
-    .createHmac("sha256", merchant_key)
-    .update(hash_str + merchant_salt, "utf8")
-    .digest("base64");
+  currency: z.string().optional(),
+  basket: z.any().optional(),
+  lang: z.string().optional(),
 
-  return {
-    token: paytr_token,
-    forward_payload: {
-      merchant_id,
-      user_ip,
-      merchant_oid,
-      email,
-      payment_amount,
-      user_basket,
-      no_installment,
-      max_installment,
-      currency,
-      test_mode,
-      paytr_token,
-      installment,
-      lang: body.lang ?? "tr",
-      merchant_ok_url: cfg.okUrl || "",
-      merchant_fail_url: cfg.failUrl || "",
-    },
-    expires_in: 300,
-  };
-}
+  installment: z.union([z.number(), z.string()]).optional(),
+  no_installment: z.union([z.number(), z.string()]).optional(),
+  max_installment: z.union([z.number(), z.string()]).optional(),
 
-/** FE beklentisi: { success: boolean, token?: string, error?: string } */
-export async function paytrGetToken(
-  req: FastifyRequest<{ Body: PaytrBody }>,
-  reply: FastifyReply
-) {
+  user_name: z.string().optional(),
+  user_address: z.string().optional(),
+  user_phone: z.string().optional(),
+});
+
+// -------------------- handlers --------------------
+
+export async function paytrGetToken(req: FastifyRequest<{ Body: PaytrBody }>, reply: FastifyReply) {
+  const parsed = BodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return reply.code(400).send({
+      success: false,
+      error: 'validation_error',
+      details: parsed.error.format(),
+    });
+  }
+
+  const b = parsed.data as PaytrBody;
+
+  // ✅ force user_ip from request (do NOT trust client)
+  let user_ip = getClientIp(req);
+  if (isPrivateOrLoopback(user_ip)) {
+    let devIp = '';
+    try {
+      const map = await getSiteSettingsMap(['paytr_dev_user_ip'] as const);
+      devIp = (map.get('paytr_dev_user_ip') ?? '').trim();
+    } catch {
+      // ignore; fallback to env
+    }
+    if (!devIp) devIp = (process.env.PAYTR_DEV_USER_IP ?? '').trim();
+    if (devIp) user_ip = devIp;
+  }
+
   try {
-    const cfg = await getPaytrConfig("paytr");
-    const data = buildPaytrToken(req.body || {}, cfg);
-    return reply.send({ success: true, token: data.token });
+    const data = await createPaytrToken({
+      ...b,
+      user_ip,
+      currency: b.currency ?? 'TL',
+      // lang opsiyonel; PayTR destekliyor. Kullanmasan da göndermek zarar vermez.
+      // İstersen tamamen kaldırabilirsin, ama parametre hatası bununla ilgili değil.
+      lang: b.lang ?? 'tr',
+    });
+
+    // FE'nin beklediği shape
+    return reply.send({
+      success: true,
+      token: data.token,
+      iframe_url: data.iframe_url,
+    });
   } catch (e: any) {
-    req.log.error(e, "paytr-get-token failed");
-    return reply
-      .code(500)
-      .send({ success: false, error: "token_build_failed" });
+    const msg = String(e?.message || 'paytr_token_failed');
+
+    // ✅ log real reason for backend debugging
+    req.log.error(
+      {
+        err: msg,
+        stack: e?.stack,
+        // do not log secrets; only keys are safe
+        body_keys: Object.keys(req.body || {}),
+        user_ip,
+      },
+      'paytr-get-token failed',
+    );
+
+    // ✅ return message so FE/dev can see exact PayTR reason quickly
+    return reply.code(502).send({
+      success: false,
+      error: msg, // << IMPORTANT: don't hide PayTR "Geçersiz parametre(ler)"
+    });
   }
 }
 
 export async function paytrHavaleGetToken(
   req: FastifyRequest<{ Body: PaytrBody }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
-  try {
-    // İstersen burada ayrı provider key kullanabilirsin: "paytr_havale"
-    const cfg = await getPaytrConfig("paytr");
-    const data = buildPaytrToken(req.body || {}, cfg);
-    return reply.send({ success: true, token: data.token });
-  } catch (e: any) {
-    req.log.error(e, "paytr-havale-get-token failed");
-    return reply
-      .code(500)
-      .send({ success: false, error: "token_build_failed" });
-  }
+  // şimdilik aynı token endpoint'i kullanıyorsun
+  return paytrGetToken(req, reply);
 }

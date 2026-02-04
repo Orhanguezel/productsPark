@@ -27,7 +27,6 @@ import type {
   DeleteUserOrdersResp,
   TurkpinGameListResult,
   TurkpinProductListResult,
-  ShopierCallbackBody,
   SendTestMailBody,
   SendTestMailResp,
 } from '@/integrations/types';
@@ -148,15 +147,6 @@ export const functionsApi = baseApi.injectEndpoints({
     deleteUserOrders: b.mutation<DeleteUserOrdersResp, DeleteUserOrdersBody>({
       query: (body): FetchArgs => ({
         url: `${FN_BASE}/delete-user-orders`,
-        method: 'POST',
-        body,
-      }),
-    }),
-
-    /** POST /functions/shopier-callback */
-    shopierCallback: b.mutation<SimpleSuccessResp, ShopierCallbackBody>({
-      query: (body): FetchArgs => ({
-        url: `${FN_BASE}/shopier-callback`,
         method: 'POST',
         body,
       }),

@@ -1,0 +1,94 @@
+name: productsPark Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # ----------------------------
+      # Backend (Bun / TS)
+      # ----------------------------
+      - name: Build backend (bun)
+        working-directory: backend
+        run: |
+          rm -rf dist .tsbuildinfo || true
+          bun install --frozen-lockfile || bun install
+          bun run build
+
+      - name: Deploy backend to VPS (rsync)
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -avz --delete
+            --exclude=node_modules
+            --exclude=.git
+            --exclude=.env
+            --exclude=.DS_Store
+          path: backend/
+          remote_path: /var/www/productsPark/backend
+          remote_host: ${{ secrets.VPS_HOST }}
+          remote_user: ${{ secrets.VPS_USER }}
+          remote_key: ${{ secrets.VPS_KEY }}
+          strict_hostkeys_checking: false
+
+      # ----------------------------
+      # Frontend (React SPA) — Bun build + deploy build output only
+      # ----------------------------
+      - name: Build frontend (bun)
+        working-directory: frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: |
+          bun install --frozen-lockfile || bun install
+          bun run build
+
+      # Vite => dist/
+      - name: Deploy frontend build to VPS (rsync dist/)
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -avz --delete
+            --exclude=.git
+            --exclude=.env
+            --exclude=.DS_Store
+          path: frontend/dist/
+          remote_path: /var/www/productsPark/frontend
+          remote_host: ${{ secrets.VPS_HOST }}
+          remote_user: ${{ secrets.VPS_USER }}
+          remote_key: ${{ secrets.VPS_KEY }}
+          strict_hostkeys_checking: false
+
+      # ----------------------------
+      # PM2 reload (backend only) + bind check
+      # ----------------------------
+      - name: Reload PM2 (backend) + bind check
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          script: |
+            set -e
+
+            cd /var/www/productsPark/backend
+
+            # Eğer process adı ecosystem içinde farklıysa bunu değiştir:
+            pm2 reload productspark-backend || pm2 start ecosystem.config.cjs --only productspark-backend
+
+            pm2 save
+
+            # backend port kontrol (3055 örnek)
+            ss -ltnp | grep -E "127\.0\.0\.1:3055|:3055" || true

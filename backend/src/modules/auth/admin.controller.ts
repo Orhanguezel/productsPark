@@ -1,18 +1,21 @@
 // =============================================================
 // FILE: src/modules/auth/admin.controller.ts
-// FINAL — Admin Users Controller (schema uyumlu, extra kolon yok)
-// - users tablosunda profile_image / alt vb. yok => update patch'te yok
+// FINAL — Admin Users Controller (argon2 removed, bcryptjs only)
+// - users tablosu schema uyumlu, extra kolon yok
+// - setPassword: bcryptjs hash + refresh revoke + notif + mail
 // =============================================================
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { randomUUID } from 'crypto';
+import bcrypt from 'bcryptjs';
+
 import { db } from '@/db/client';
 import { users, refresh_tokens } from '@/modules/auth/schema';
 import { getPrimaryRole } from '@/modules/userRoles/service';
 import { userRoles } from '@/modules/userRoles/schema';
 import { profiles } from '@/modules/profiles/schema';
 import { and, asc, desc, eq, like, type SQL } from 'drizzle-orm';
-import { hash as argonHash } from 'argon2';
+
 import { notifications, type NotificationInsert } from '@/modules/notifications/schema';
 import { sendPasswordChangedMail } from '@/modules/mail/service';
 
@@ -25,8 +28,16 @@ import {
 } from '@/modules/auth/validation';
 
 import { pickUserDto, toBool01 } from '@/modules/_shared/_shared';
+import { env } from '@/core/env';
 
 type UserRow = typeof users.$inferSelect;
+
+const BCRYPT_ROUNDS = Number((env as unknown as { BCRYPT_ROUNDS?: string }).BCRYPT_ROUNDS ?? '10');
+
+async function hashPasswordBcrypt(plain: string): Promise<string> {
+  const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
+  return bcrypt.hash(plain, salt);
+}
 
 export function makeAdminController(_app: FastifyInstance) {
   return {
@@ -44,8 +55,8 @@ export function makeAdminController(_app: FastifyInstance) {
         q.sort === 'email'
           ? users.email
           : q.sort === 'last_login_at'
-          ? users.last_sign_in_at
-          : users.created_at;
+            ? users.last_sign_in_at
+            : users.created_at;
 
       const orderFn = q.order === 'asc' ? asc : desc;
 
@@ -139,7 +150,7 @@ export function makeAdminController(_app: FastifyInstance) {
         await tx.delete(userRoles).where(eq(userRoles.user_id, id));
         if (roles.length > 0) {
           await tx.insert(userRoles).values(
-            roles.map((r) => ({
+            roles.map((r: string) => ({
               id: randomUUID(),
               user_id: id,
               role: r,
@@ -159,7 +170,8 @@ export function makeAdminController(_app: FastifyInstance) {
       const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
       if (!u) return reply.status(404).send({ error: { message: 'not_found' } });
 
-      const password_hash = await argonHash(password);
+      // ✅ bcryptjs hash (argon2 removed)
+      const password_hash = await hashPasswordBcrypt(password);
 
       // tüm refresh token'ları revoke et (admin reset sonrası güvenlik)
       await db

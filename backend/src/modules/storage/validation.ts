@@ -21,7 +21,7 @@ export const storageUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   folder: z.string().max(255).nullable().optional(),
   metadata: z.record(z.string()).nullable().optional(),
-}).partial().refine(v => Object.keys(v).length > 0, { message: "no_fields_to_update" });
+}).partial().refine((v: typeof storageUpdateSchema._type) => Object.keys(v).length > 0, { message: "no_fields_to_update" });
 
 export type StorageUpdateInput = z.infer<typeof storageUpdateSchema>;
 

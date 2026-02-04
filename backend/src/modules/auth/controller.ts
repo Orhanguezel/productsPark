@@ -1,10 +1,9 @@
 // =============================================================
 // FILE: src/modules/auth/controller.ts
-// FINAL — Auth Controller (roles[] contract + flat /auth/user)
-// - /auth/user -> flat AuthUser (roles: Role[])
-// - /auth/status -> { authenticated, user?: AuthUser }
-// - signup/token/update -> user includes roles[]
-// - refresh -> returns access_token + user (optional ama recommended)
+// FINAL — bcryptjs only (argon2 FULLY removed; cPanel-safe)
+// - Hash: bcryptjs
+// - Verify: bcryptjs + optional temp-login gate
+// - NO legacy argon2 import / dynamic import
 // =============================================================
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -17,7 +16,6 @@ import { users, refresh_tokens } from './schema';
 import { userRoles } from '@/modules/userRoles/schema';
 import { getPrimaryRole } from '@/modules/userRoles/service';
 import { desc, eq, like, and } from 'drizzle-orm';
-import { hash as argonHash, verify as argonVerify } from 'argon2';
 import bcrypt from 'bcryptjs';
 
 import {
@@ -81,9 +79,11 @@ function getHeader(req: FastifyRequest, name: string): string | undefined {
 }
 
 function getProtocol(req: FastifyRequest): string {
-  return (getHeader(req, 'x-forwarded-proto') ||
+  return (
+    getHeader(req, 'x-forwarded-proto') ||
     (req as unknown as { protocol?: string }).protocol ||
-    'http') as string;
+    'http'
+  );
 }
 
 function getHost(req: FastifyRequest): string {
@@ -91,7 +91,7 @@ function getHost(req: FastifyRequest): string {
     (req as unknown as { hostname?: string }).hostname ||
     getHeader(req, 'x-forwarded-host') ||
     getHeader(req, 'host') ||
-    'localhost:8081'
+    'localhost'
   );
 }
 
@@ -182,28 +182,40 @@ function clearAuthCookies(reply: FastifyReply) {
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
-/* -------------------- Password verify (dev geçiş dâhil) -------------------- */
+/* -------------------- Password hashing (bcryptjs) -------------------- */
+
+const BCRYPT_ROUNDS = Number((env as unknown as { BCRYPT_ROUNDS?: string }).BCRYPT_ROUNDS ?? '10');
+
+function isBcryptHash(h: string) {
+  return h.startsWith('$2a$') || h.startsWith('$2b$') || h.startsWith('$2y$');
+}
+
+async function hashPasswordBcrypt(plain: string): Promise<string> {
+  const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
+  return bcrypt.hash(plain, salt);
+}
+
+async function verifyPasswordBcrypt(storedHash: string, plain: string): Promise<boolean> {
+  return bcrypt.compare(plain, storedHash);
+}
+
+/* -------------------- Password verify (dev temp gate + bcrypt only) -------------------- */
 
 async function verifyPasswordSmart(storedHash: string, plain: string): Promise<boolean> {
   const allowTemp =
     String((env as unknown as { ALLOW_TEMP_LOGIN?: string }).ALLOW_TEMP_LOGIN ?? '') === '1';
+
   if (allowTemp && storedHash.includes('temporary.hash.needs.reset')) {
     const expected = (env as unknown as { TEMP_PASSWORD?: string }).TEMP_PASSWORD || 'admin123';
     return plain === expected;
   }
 
-  if (
-    storedHash.startsWith('$2a$') ||
-    storedHash.startsWith('$2b$') ||
-    storedHash.startsWith('$2y$')
-  ) {
-    return bcrypt.compare(plain, storedHash);
-  }
-
-  return argonVerify(storedHash, plain);
+  // Only bcrypt hashes are accepted
+  if (!isBcryptHash(storedHash)) return false;
+  return verifyPasswordBcrypt(storedHash, plain);
 }
 
-/* -------------------- Roles helpers (KEY FIX) -------------------- */
+/* -------------------- Roles helpers -------------------- */
 
 async function getRoles(userId: string): Promise<Role[]> {
   const rows = await db
@@ -306,7 +318,6 @@ export function makeAuthController(app: FastifyInstance) {
   const adminEmails = parseAdminEmailAllowlist();
 
   return {
-    /* ------------------------------ SIGNUP ------------------------------ */
     signup: async (req: FastifyRequest, reply: FastifyReply) => {
       const parsed = signupBody.safeParse(req.body);
       if (!parsed.success) return reply.status(400).send({ error: { message: 'invalid_body' } });
@@ -334,7 +345,7 @@ export function makeAuthController(app: FastifyInstance) {
       if (exists.length > 0) return reply.status(409).send({ error: { message: 'user_exists' } });
 
       const id = randomUUID();
-      const password_hash = await argonHash(password);
+      const password_hash = await hashPasswordBcrypt(password);
 
       await db.insert(users).values({
         id,
@@ -366,21 +377,16 @@ export function makeAuthController(app: FastifyInstance) {
       });
 
       const u = (await db.select().from(users).where(eq(users.id, id)).limit(1))[0]!;
-      const primaryRole = (await getPrimaryRole(id)) as Role; // JWT legacy
+      const primaryRole = (await getPrimaryRole(id)) as Role;
       const { access, refresh } = await issueTokens(app, u, primaryRole);
 
       setAccessCookie(reply, access);
       setRefreshCookie(reply, refresh);
 
       const authUser = await buildAuthUser(id, email);
-      return reply.send({
-        access_token: access,
-        token_type: 'bearer',
-        user: authUser,
-      });
+      return reply.send({ access_token: access, token_type: 'bearer', user: authUser });
     },
 
-    /* ------------------------------ TOKEN ------------------------------ */
     token: async (req: FastifyRequest, reply: FastifyReply) => {
       const parsed = tokenBody.safeParse(req.body);
       if (!parsed.success) return reply.status(400).send({ error: { message: 'invalid_body' } });
@@ -408,15 +414,9 @@ export function makeAuthController(app: FastifyInstance) {
       setRefreshCookie(reply, refresh);
 
       const authUser = await buildAuthUser(u.id, u.email ?? null);
-
-      return reply.send({
-        access_token: access,
-        token_type: 'bearer',
-        user: authUser,
-      });
+      return reply.send({ access_token: access, token_type: 'bearer', user: authUser });
     },
 
-    /* ------------------------------ REFRESH ------------------------------ */
     refresh: async (req: FastifyRequest, reply: FastifyReply) => {
       const raw = (
         (req.cookies as Record<string, string | undefined> | undefined)?.refresh_token ?? ''
@@ -451,13 +451,10 @@ export function makeAuthController(app: FastifyInstance) {
       setAccessCookie(reply, access);
       setRefreshCookie(reply, newRaw);
 
-      // ✅ FE’de cache stabil kalsın diye user da dönüyoruz
       const authUser = await buildAuthUser(u.id, u.email ?? null);
-
       return reply.send({ access_token: access, token_type: 'bearer', user: authUser });
     },
 
-    /* ------------------------------ PASSWORD RESET ------------------------------ */
     passwordResetRequest: async (req: FastifyRequest, reply: FastifyReply) => {
       const parsed = passwordResetRequestBody.safeParse(req.body);
       if (!parsed.success) return reply.status(400).send({ success: false, error: 'invalid_body' });
@@ -501,7 +498,7 @@ export function makeAuthController(app: FastifyInstance) {
         (await db.select().from(users).where(eq(users.id, payload.sub)).limit(1))[0] ?? null;
       if (!u) return reply.status(404).send({ success: false, error: 'user_not_found' });
 
-      const password_hash = await argonHash(password);
+      const password_hash = await hashPasswordBcrypt(password);
 
       await db
         .update(refresh_tokens)
@@ -542,9 +539,6 @@ export function makeAuthController(app: FastifyInstance) {
       return reply.send({ success: true, message: 'Parolanız başarıyla güncellendi.' });
     },
 
-    /* ------------------------------ ME / STATUS / UPDATE / LOGOUT ------------------------------ */
-
-    // ✅ /auth/user  -> flat AuthUser
     me: async (req: FastifyRequest, reply: FastifyReply) => {
       const token = bearerFrom(req);
       if (!token) return reply.status(401).send({ error: { message: 'no_token' } });
@@ -559,7 +553,6 @@ export function makeAuthController(app: FastifyInstance) {
       }
     },
 
-    // ✅ /auth/status -> { authenticated, user? }
     status: async (req: FastifyRequest, reply: FastifyReply) => {
       const token = bearerFrom(req);
       if (!token) return reply.send({ authenticated: false });
@@ -589,7 +582,6 @@ export function makeAuthController(app: FastifyInstance) {
       if (!parsed.success) return reply.status(400).send({ error: { message: 'invalid_body' } });
 
       const { email, password } = parsed.data as { email?: string; password?: string };
-
       let passwordChanged = false;
 
       if (email) {
@@ -598,7 +590,7 @@ export function makeAuthController(app: FastifyInstance) {
       }
 
       if (password) {
-        const password_hash = await argonHash(password);
+        const password_hash = await hashPasswordBcrypt(password);
         await db
           .update(users)
           .set({ password_hash, updated_at: new Date() })
@@ -657,7 +649,6 @@ export function makeAuthController(app: FastifyInstance) {
       return reply.status(204).send();
     },
 
-    /* ------------------------------ ADMIN (auth module içi) ------------------------------ */
     adminList: async (req: FastifyRequest, reply: FastifyReply) => {
       await requireAuth(req, reply);
       if (reply.sent) return;
@@ -754,7 +745,6 @@ export function makeAuthController(app: FastifyInstance) {
       await db
         .delete(userRoles)
         .where(and(eq(userRoles.user_id, target.id), eq(userRoles.role, body.role)));
-
       return reply.send({ ok: true });
     },
 

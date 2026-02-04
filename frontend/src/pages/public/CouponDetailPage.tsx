@@ -16,13 +16,14 @@ import { useGetCouponByCodeQuery } from "@/integrations/hooks";
 export default function CouponDetailPage() {
   const [searchParams] = useSearchParams();
   const code = (searchParams.get("coupon") || "").trim();
+  const normalizedCode = code.toUpperCase();
   const { toast } = useToast();
 
   const {
     data: coupon,
     isLoading,
     isError,
-  } = useGetCouponByCodeQuery(code, { skip: !code });
+  } = useGetCouponByCodeQuery(normalizedCode, { skip: !normalizedCode });
 
   const handleCopy = async () => {
     if (!coupon?.code) return;
@@ -88,7 +89,7 @@ export default function CouponDetailPage() {
                       Kupon Kodu
                     </div>
                     <div className="text-2xl font-mono font-bold tracking-widest">
-                      {coupon?.code || code}
+                      {coupon?.code || normalizedCode || code}
                     </div>
                   </div>
                   {coupon && (

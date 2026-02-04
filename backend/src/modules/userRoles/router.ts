@@ -10,20 +10,17 @@ import {
 export async function registerUserRoles(app: FastifyInstance) {
   // Public list (nav bar check) - limit + rateLimit ekleyelim
   app.get("/user_roles",
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     listUserRoles
   );
 
   // Yönetim uçları: admin zorunlu
   app.post("/user_roles",
-    { preHandler: [requireAuth, requireAdmin],
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    { preHandler: [requireAuth, requireAdmin]},
     createUserRole
   );
 
   app.delete("/user_roles/:id",
-    { preHandler: [requireAuth, requireAdmin],
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    { preHandler: [requireAuth, requireAdmin]},
     deleteUserRole
   );
 }

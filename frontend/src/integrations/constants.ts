@@ -1,10 +1,6 @@
 // =============================================================
 // FILE: src/integrations/constants.ts
 // FINAL — API URL resolver (Vite)
-// - VITE_API_URL can be:
-//   a) full:   http://localhost:8081/api
-//   b) origin: http://localhost:8081
-// - VITE_API_BASE default: /api
 // =============================================================
 
 type ViteEnvLike = Record<string, string | boolean | undefined>;
@@ -47,28 +43,19 @@ export const API_BASE = (() => {
   return trimSlashRight(b || '/api') || '/api';
 })();
 
-/**
- * API_URL:
- * - If VITE_API_URL includes path (/api), use as-is
- * - If VITE_API_URL is only origin, join with API_BASE
- * - Dev fallback: http://<host>:8081 + /api
- * - Prod fallback: /api (same-origin)
- */
 export const API_URL = (() => {
   const apiUrl = getEnvString('VITE_API_URL');
   const apiBase = API_BASE;
 
-  // 1) Full absolute url: http(s)://.../api or any path
+  // 1) Full absolute url
   if (apiUrl && isAbsUrl(apiUrl)) {
-    // If it already contains a path segment beyond origin, keep it.
-    // Detect by parsing pathname.
     try {
       const u = new URL(apiUrl);
-      const hasPath = (u.pathname || '').replace(/\/+$/, '') !== '';
-      if (hasPath && u.pathname !== '/') return trimSlashRight(apiUrl);
-
-      // If it's only origin (pathname "/"), join with base
-      return join(trimSlashRight(apiUrl), apiBase);
+      const path = (u.pathname || '').replace(/\/+$/, '');
+      // if user gave origin-only ("/") treat as origin and join base
+      if (!path || path === '') return join(trimSlashRight(apiUrl), apiBase);
+      if (path === '/') return join(trimSlashRight(apiUrl), apiBase);
+      return trimSlashRight(apiUrl);
     } catch {
       return trimSlashRight(apiUrl);
     }
@@ -77,7 +64,7 @@ export const API_URL = (() => {
   // 2) If API_BASE itself is absolute
   if (isAbsUrl(apiBase)) return trimSlashRight(apiBase);
 
-  // 3) Dev fallback: guess origin + base
+  // 3) Dev fallback
   if (import.meta.env.DEV) {
     return join(guessDevBackendOrigin(), apiBase);
   }

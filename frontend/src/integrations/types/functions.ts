@@ -31,7 +31,7 @@ export type PaytrTokenBody = {
   max_installment?: number | string;
   currency?: string; // 'TL'
   basket?: Array<[string, number, number]>; // [name, unit_price, qty]
-  lang?: string;
+  lang?: string; // 'tr', 'en'
 };
 
 /**

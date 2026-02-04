@@ -237,7 +237,7 @@ const AdjustBodySchema = z.object({
   amount: z
     .number()
     .finite()
-    .refine((v) => v !== 0, 'invalid_amount'),
+    .refine((v: number) => v !== 0, 'invalid_amount'),
   description: z.string().trim().max(500).optional(),
 });
 

@@ -1,8 +1,8 @@
 // =============================================================
 // FILE: src/pages/public/checkout/components/CheckoutPaymentMethodsCard.tsx
-// FINAL — dynamic payment method keys + TS-safe narrowing
+// FINAL — provider_key is the single ID
 // - selectedPayment: string (provider key)
-// - setSelectedPayment: (v: string) => void
+// - Bank sub-kinds (havale/eft) are NOT payment method IDs here
 // =============================================================
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,15 +11,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { formatPrice } from '@/lib/utils';
 import type { CheckoutPaymentMethodOption } from '@/integrations/types';
 
-type UiPaymentId = 'wallet' | 'bank_transfer' | 'havale' | 'eft' | 'paytr' | 'shopier';
+type UiPaymentId = 'wallet' | 'bank_transfer' | 'paytr' | 'shopier';
 
 const toUiPaymentId = (v: unknown): UiPaymentId | '' => {
   const s = typeof v === 'string' ? v.trim() : '';
   switch (s) {
     case 'wallet':
     case 'bank_transfer':
-    case 'havale':
-    case 'eft':
     case 'paytr':
     case 'shopier':
       return s;
@@ -30,7 +28,7 @@ const toUiPaymentId = (v: unknown): UiPaymentId | '' => {
 
 type Props = {
   paymentMethods: CheckoutPaymentMethodOption[];
-  selectedPayment: string;
+  selectedPayment: string; // provider_key
   setSelectedPayment: (v: string) => void;
   walletBalance: number;
   finalTotal: number;
@@ -56,6 +54,7 @@ export const CheckoutPaymentMethodsCard: React.FC<Props> = ({
       <CardContent className="space-y-4">
         <RadioGroup value={selectedPayment} onValueChange={(v) => setSelectedPayment(String(v))}>
           {paymentMethods.map((method) => {
+            // IMPORTANT: method.id MUST be provider_key
             const methodId = String((method as any).id ?? '').trim();
             const methodName = String((method as any).name ?? methodId).trim();
 
@@ -63,7 +62,7 @@ export const CheckoutPaymentMethodsCard: React.FC<Props> = ({
             const mid = toUiPaymentId(methodId);
 
             const isWallet = active && mid === 'wallet';
-            const isBank = active && (mid === 'bank_transfer' || mid === 'havale' || mid === 'eft');
+            const isBank = active && mid === 'bank_transfer';
             const isPaytr = active && mid === 'paytr';
             const isShopier = active && mid === 'shopier';
 
@@ -107,7 +106,6 @@ export const CheckoutPaymentMethodsCard: React.FC<Props> = ({
           })}
         </RadioGroup>
 
-        {/* Optional debugging / hint: */}
         {selected === '' && selectedPayment && (
           <p className="text-xs text-muted-foreground">
             Seçili ödeme anahtarı tanınmıyor: <span className="font-mono">{selectedPayment}</span>

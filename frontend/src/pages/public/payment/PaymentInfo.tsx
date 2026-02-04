@@ -1,9 +1,9 @@
 // =============================================================
 // FILE: src/pages/account/components/PaymentInfo.tsx
-// FINAL — Havale flow (order only; NO payment_requests call)
-// - Fix: bankSetting.value JsonLike -> string render
-// - Fix: prevent early redirect while auth is loading
-// - Fix: remove auth-required /payment_requests (401) usage
+// FINAL — Bank Transfer flow (provider_key = bank_transfer)
+// - Uses sessionStorage bankTransferKind + bankTransferConfig (from Checkout) if available
+// - Fallback to site_settings.bank_account_info
+// - Creates order with payment_method: 'bank_transfer' (single provider key)
 // =============================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -22,10 +22,26 @@ import { useCreateOrderMutation, useGetSiteSettingByKeyQuery } from '@/integrati
 import type { CreateOrderBody } from '@/integrations/types';
 import { toStr, isPlainObject } from '@/integrations/types/common';
 
+type BankTransferKind = 'havale' | 'eft';
+
+type BankAccountInfo = {
+  iban: string | null;
+  account_holder: string | null;
+  bank_name: string | null;
+};
+
+type BankTransferPublicConfig = Partial<{
+  type: unknown;
+  methods: unknown;
+  commission: unknown;
+  havale: unknown;
+  eft: unknown;
+}>;
+
 type PaymentSessionData = {
   cartItems: Array<{
     products: { id: string; name: string; price?: number | string };
-    quantity?: number;
+    quantity?: number | string;
     selected_options?: unknown;
   }>;
   subtotal?: number | string;
@@ -33,6 +49,19 @@ type PaymentSessionData = {
   total?: number | string;
   appliedCoupon?: { code?: string } | null;
   notes?: string | null;
+
+  // from Checkout sessionStorage (optional)
+  paymentMethod?: string;
+};
+
+const toNumLoose = (v: unknown, d = 0): number => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : d;
+  }
+  const n = Number(v ?? NaN);
+  return Number.isFinite(n) ? n : d;
 };
 
 function jsonLikeToDisplayText(v: unknown): string {
@@ -47,6 +76,53 @@ function jsonLikeToDisplayText(v: unknown): string {
   }
 
   return toStr(v);
+}
+
+const parseKind = (v: unknown): BankTransferKind => {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  return s === 'eft' ? 'eft' : 'havale';
+};
+
+function pickOptStr(o: Record<string, unknown>, key: string): string | null {
+  const v = o[key];
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return s ? s : null;
+  }
+  return null;
+}
+
+function pickAccountFromConfig(
+  cfg: BankTransferPublicConfig | null,
+  kind: BankTransferKind,
+): BankAccountInfo {
+  if (!cfg) return { iban: null, account_holder: null, bank_name: null };
+
+  const hv = isPlainObject(cfg.havale) ? (cfg.havale as Record<string, unknown>) : null;
+  const ef = isPlainObject(cfg.eft) ? (cfg.eft as Record<string, unknown>) : null;
+
+  const selected = kind === 'eft' ? (ef ?? hv) : (hv ?? ef);
+  if (!selected) return { iban: null, account_holder: null, bank_name: null };
+
+  return {
+    iban: pickOptStr(selected, 'iban'),
+    account_holder:
+      pickOptStr(selected, 'account_holder') ??
+      pickOptStr(selected, 'accountHolder') ??
+      pickOptStr(selected, 'holder'),
+    bank_name: pickOptStr(selected, 'bank_name') ?? pickOptStr(selected, 'bankName'),
+  };
+}
+
+function formatAccountText(kind: BankTransferKind, acc: BankAccountInfo): string {
+  const lines: string[] = [];
+  lines.push(kind === 'eft' ? 'EFT Hesap Bilgileri' : 'Havale Hesap Bilgileri');
+
+  if (acc.bank_name) lines.push(`Banka: ${acc.bank_name}`);
+  if (acc.account_holder) lines.push(`Alıcı: ${acc.account_holder}`);
+  if (acc.iban) lines.push(`IBAN: ${acc.iban}`);
+
+  return lines.length ? lines.join('\n') : '';
 }
 
 export default function PaymentInfo() {
@@ -66,11 +142,14 @@ export default function PaymentInfo() {
   const [paymentData, setPaymentData] = useState<PaymentSessionData | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [bankTransferKind, setBankTransferKind] = useState<BankTransferKind>('havale');
+  const [bankTransferConfig, setBankTransferConfig] = useState<BankTransferPublicConfig | null>(
+    null,
+  );
+
   // -------- load session storage (new flow) + auth gating --------
   useEffect(() => {
-    // Existing order route: we still require login, but we don't need session payload
     if (isExistingOrder) return;
-
     if (authLoading) return;
 
     if (!user) {
@@ -91,13 +170,28 @@ export default function PaymentInfo() {
     } catch {
       toast.error('Ödeme bilgisi okunamadı');
       navigate('/');
+      return;
+    }
+
+    // kind/config are optional (but Checkout sets them)
+    setBankTransferKind(parseKind(sessionStorage.getItem('bankTransferKind')));
+
+    try {
+      const cfgRaw = sessionStorage.getItem('bankTransferConfig');
+      if (cfgRaw) {
+        const parsed = JSON.parse(cfgRaw) as unknown;
+        setBankTransferConfig(isPlainObject(parsed) ? (parsed as BankTransferPublicConfig) : null);
+      } else {
+        setBankTransferConfig(null);
+      }
+    } catch {
+      setBankTransferConfig(null);
     }
   }, [isExistingOrder, authLoading, user, navigate]);
 
   // Existing order için de auth zorunlu olsun (account sayfası)
   useEffect(() => {
     if (!isExistingOrder) return;
-
     if (authLoading) return;
 
     if (!user) {
@@ -107,8 +201,14 @@ export default function PaymentInfo() {
   }, [isExistingOrder, authLoading, user, navigate]);
 
   const bankInfoText = useMemo(() => {
-    return bankSetting ? jsonLikeToDisplayText(bankSetting.value) : '';
-  }, [bankSetting]);
+    // 1) Prefer Checkout-provided config (bank_transfer public_config)
+    const acc = pickAccountFromConfig(bankTransferConfig, bankTransferKind);
+    const accText = formatAccountText(bankTransferKind, acc);
+    if (accText.trim()) return accText;
+
+    // 2) Fallback to site_settings (legacy / generic)
+    return bankSetting ? jsonLikeToDisplayText((bankSetting as any).value) : '';
+  }, [bankTransferConfig, bankTransferKind, bankSetting]);
 
   const pageLoading = authLoading || bankLoading;
 
@@ -121,8 +221,7 @@ export default function PaymentInfo() {
       return;
     }
 
-    // Existing order: bu sayfada artık payment_request yaratmıyoruz.
-    // Backend akışında zaten oluşturulmuş olmalı; burada sadece UX yönlendiriyoruz.
+    // Existing order: burada payment_request yaratmıyoruz (backend/önceki akış).
     if (isExistingOrder) {
       sessionStorage.removeItem('checkoutData');
       sessionStorage.removeItem('havalepaymentData');
@@ -140,8 +239,8 @@ export default function PaymentInfo() {
       }
 
       const items = (paymentData.cartItems ?? []).map((i) => {
-        const price = Number(i.products.price ?? 0);
-        const qty = Number(i.quantity ?? 1);
+        const price = toNumLoose(i.products.price ?? 0, 0);
+        const qty = toNumLoose(i.quantity ?? 1, 1);
         const lineTotal = price * qty;
 
         return {
@@ -154,10 +253,10 @@ export default function PaymentInfo() {
         };
       });
 
-      const subtotal = Number(paymentData.subtotal ?? 0) || 0;
-      const discount = Number(paymentData.discount ?? 0) || 0;
+      const subtotal = toNumLoose(paymentData.subtotal ?? 0, 0);
+      const discount = toNumLoose(paymentData.discount ?? 0, 0);
       const total =
-        paymentData.total != null ? Number(paymentData.total) || 0 : subtotal - discount;
+        paymentData.total != null ? toNumLoose(paymentData.total, 0) : subtotal - discount;
 
       const couponCode: string | null =
         paymentData.appliedCoupon?.code && String(paymentData.appliedCoupon.code).trim()
@@ -166,13 +265,13 @@ export default function PaymentInfo() {
 
       const orderBody: CreateOrderBody = {
         order_number: `ORD${Date.now()}`,
-        payment_method: 'bank_transfer',
+        payment_method: 'bank_transfer', // ✅ single provider_key
         payment_status: 'pending',
         items,
         subtotal: subtotal.toFixed(2),
         discount: discount.toFixed(2),
         total: total.toFixed(2),
-        coupon_code: couponCode, // ✅ string | null (undefined yok)
+        coupon_code: couponCode,
         notes: paymentData.notes ?? null,
       };
 
@@ -181,6 +280,8 @@ export default function PaymentInfo() {
       // local caches temizliği
       sessionStorage.removeItem('checkoutData');
       sessionStorage.removeItem('havalepaymentData');
+      sessionStorage.removeItem('bankTransferKind');
+      sessionStorage.removeItem('bankTransferConfig');
       localStorage.removeItem('guestCart');
 
       toast.success('Ödeme bildiriminiz alındı');
@@ -230,7 +331,7 @@ export default function PaymentInfo() {
               size="lg"
               className="w-full"
               disabled={submitting || (!isExistingOrder && !paymentData)}
-              onClick={handleConfirm}
+              onClick={() => void handleConfirm()}
             >
               {submitting ? 'Gönderiliyor…' : 'Ödemeyi Yaptım'}
             </Button>

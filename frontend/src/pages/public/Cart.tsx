@@ -251,11 +251,19 @@ const Cart = () => {
       applicableTotal = subtotal;
     }
 
-    if (appliedCoupon.discount_type === "percentage") {
-      return (applicableTotal * appliedCoupon.discount_value) / 100;
-    } else {
-      return Math.min(appliedCoupon.discount_value, applicableTotal);
+    let discount =
+      appliedCoupon.discount_type === "percentage"
+        ? (applicableTotal * appliedCoupon.discount_value) / 100
+        : appliedCoupon.discount_value;
+
+    if (appliedCoupon.max_discount != null) {
+      discount = Math.min(discount, appliedCoupon.max_discount);
     }
+
+    if (discount < 0) discount = 0;
+    if (discount > applicableTotal) discount = applicableTotal;
+
+    return discount;
   };
 
   const discount = getDiscountAmount();
@@ -359,6 +367,11 @@ const Cart = () => {
     const validFrom = data.valid_from ? new Date(data.valid_from) : null;
     const validUntil = data.valid_until ? new Date(data.valid_until) : null;
 
+    if (!data.is_active) {
+      toast.error("Kupon aktif değil");
+      return;
+    }
+
     if (
       (validFrom && now < validFrom) ||
       (validUntil && now > validUntil)
@@ -367,7 +380,10 @@ const Cart = () => {
       return;
     }
 
-    if (data.max_uses && data.used_count && data.used_count >= data.max_uses) {
+    const usedCount = Number.isFinite(data.used_count as number)
+      ? (data.used_count as number)
+      : 0;
+    if (data.max_uses != null && usedCount >= data.max_uses) {
       toast.error("Kupon kullanım limiti dolmuş");
       return;
     }
@@ -405,7 +421,14 @@ const Cart = () => {
     }
 
     setAppliedCoupon(data);
+    setCouponCode(data.code || normalizedCouponCode);
     toast.success("Kupon kodu uygulandı!");
+  };
+
+  const clearCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    toast.success("Kupon kaldırıldı");
   };
 
   const handleCheckout = () => {
@@ -656,11 +679,26 @@ const Cart = () => {
                         placeholder="Kupon kodunuzu girin"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
+                        disabled={!!appliedCoupon}
                       />
-                      <Button variant="outline" onClick={applyCoupon}>
+                      <Button
+                        variant="outline"
+                        onClick={applyCoupon}
+                        disabled={!!appliedCoupon}
+                      >
                         Uygula
                       </Button>
+                      {appliedCoupon && (
+                        <Button variant="ghost" onClick={clearCoupon}>
+                          Kaldır
+                        </Button>
+                      )}
                     </div>
+                    {appliedCoupon && (
+                      <div className="text-xs text-muted-foreground">
+                        Uygulanan kupon: {appliedCoupon.code}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-3">

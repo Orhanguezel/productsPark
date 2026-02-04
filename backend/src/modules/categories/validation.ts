@@ -2,7 +2,7 @@
 import { z } from "zod";
 
 const emptyToNull = <T extends z.ZodTypeAny>(schema: T) =>
-  z.preprocess((v) => (v === "" ? null : v), schema);
+  z.preprocess((v: unknown) => (v === "" ? null : v), schema);
 
 export const boolLike = z.union([
   z.boolean(),
@@ -51,7 +51,7 @@ export const categoryCreateSchema = z
 
 export const categoryUpdateSchema = categoryCreateSchema
   .partial()
-  .refine((v) => Object.keys(v).length > 0, {
+  .refine((v: Record<string, unknown>) => Object.keys(v).length > 0, {
     message: "no_fields_to_update",
   });
 

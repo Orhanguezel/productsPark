@@ -570,14 +570,14 @@ export const createOrder: RouteHandler = async (req, reply) => {
 
     const id = randomUUID();
 
-    const normalizedItems = body.items.map((it) => {
+    const normalizedItems = body.items.map((it: typeof body.items[number]) => {
       const priceStr = String(it.price);
       const totalStr = it.total ?? (Number(priceStr) * Number(it.quantity)).toFixed(2);
       return { ...it, price: priceStr, total: totalStr };
     });
 
     const subtotalStr =
-      body.subtotal ?? normalizedItems.reduce((acc, it) => acc + Number(it.total), 0).toFixed(2);
+      body.subtotal ?? normalizedItems.reduce((acc: number, it: typeof normalizedItems[number]) => acc + Number(it.total), 0).toFixed(2);
 
     let discountStr = body.discount ?? '0.00';
     let couponDiscountStr = '0.00';
@@ -625,7 +625,7 @@ export const createOrder: RouteHandler = async (req, reply) => {
 
       await (tx as any).insert(orders).values(orderToInsert);
 
-      const orderItemsToInsert: OrderItemInsert[] = normalizedItems.map((it) => ({
+      const orderItemsToInsert: OrderItemInsert[] = normalizedItems.map((it: typeof normalizedItems[number]) => ({
         id: randomUUID(),
         order_id: id,
         product_id: it.product_id,

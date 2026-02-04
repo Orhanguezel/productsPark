@@ -42,7 +42,7 @@ const orderStatuses = ['pending', 'processing', 'completed', 'cancelled', 'refun
 
 const paymentStatuses = ['pending', 'paid', 'failed', 'refunded'] as const;
 
-const dec2 = z.union([z.string(), z.number()]).transform((v) => {
+const dec2 = z.union([z.string(), z.number()]).transform((v: string | number) => {
   const n = typeof v === 'number' ? v : Number(String(v).replace(/\./g, '').replace(',', '.'));
   return Number.isFinite(n) ? Number(n.toFixed(2)) : 0;
 });
@@ -95,8 +95,8 @@ const noteSchema = z
     z.object({ text: z.string().min(1) }),
     z.string().min(1),
   ])
-  .transform((v) => ({
-    message: typeof v === 'string' ? v : ((v as any).message ?? (v as any).note ?? (v as any).text),
+  .transform((v: string | { message?: string; note?: string; text?: string }) => ({
+    message: typeof v === 'string' ? v : (v.message ?? v.note ?? v.text),
   }));
 
 const itemsListSchema = z.object({

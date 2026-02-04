@@ -54,6 +54,7 @@ export * from './rtk/public/payment_providers.endpoints';
 export * from './rtk/public/payment_sessions.endpoints';
 export * from './rtk/public/payment_requests.endpoints';
 export * from './rtk/public/payment_methods_public.endpoints';
+export * from './rtk/public/payments.notify.endpoints';
 
 export * from './rtk/public/products.endpoints';
 export * from './rtk/public/product_faqs.endpoints';

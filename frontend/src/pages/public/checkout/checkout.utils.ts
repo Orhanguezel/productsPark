@@ -1,7 +1,8 @@
 // =============================================================
 // FILE: src/pages/public/checkout/checkout.utils.ts
 // FINAL — Checkout helpers (no-any, strict-friendly)
-// - Uses integrations/types barrel helpers
+// - Provider key is single ID everywhere
+// - bank_transfer enriched by kind (havale/eft) but ID stays 'bank_transfer'
 // =============================================================
 
 import type { CheckoutData } from '@/integrations/types';
@@ -10,21 +11,12 @@ import type { CheckoutPaymentMethodOption } from '@/integrations/types';
 
 import { isPlainObject, toNum, toTrimStr, pickOptStr, pickStr } from '@/integrations/types';
 
-
 type AuthUserLike = { email?: unknown } | null | undefined;
 
 /* -------------------- money helpers -------------------- */
-
 export const money2 = (n: number): string => (Number.isFinite(n) ? n : 0).toFixed(2);
 
 /* -------------------- wallet balance extractor -------------------- */
-/**
- * API response can be:
- * - number
- * - string
- * - { balance }
- * - { data: { balance } }
- */
 export function extractWalletBalance(raw: unknown, fallback = 0): number {
   if (typeof raw === 'number' || typeof raw === 'string') return toNum(raw, fallback);
 
@@ -95,7 +87,7 @@ function pickBankAccountFromConfig(
 /**
  * Build Checkout UI options from backend-driven public methods.
  * - Keeps all enabled methods
- * - Enriches bank_transfer with account info (based on kind)
+ * - Bank transfer enriched with account info (based on kind), but ID remains 'bank_transfer'
  * - Ensures wallet appears (optional) even if backend doesn't list it
  */
 export function buildCheckoutPaymentOptions(args: {
@@ -110,29 +102,32 @@ export function buildCheckoutPaymentOptions(args: {
   for (const m of methods) {
     if (!m || !(m as any).enabled) continue;
 
-    const id = toTrimStr((m as any).key);
-    if (!id) continue;
+    const key = toTrimStr((m as any).key);
+    if (!key) continue;
 
-    const name = toTrimStr((m as any).display_name) || id;
+    const name = toTrimStr((m as any).display_name) || key;
+    const type = toTrimStr((m as any).type);
 
-    if ((m as any).type === 'bank_transfer') {
+    if (type === 'bank_transfer' || key === 'bank_transfer') {
       const cfg = isPlainObject((m as any).config)
         ? ((m as any).config as Record<string, unknown>)
         : null;
+
       const acc = pickBankAccountFromConfig(cfg, bankTransferKind);
 
       out.push({
-        id,
+        id: 'bank_transfer', // ✅ force provider key
         name,
         enabled: true,
         ...(acc.iban ? { iban: acc.iban } : {}),
         ...(acc.account_holder ? { account_holder: acc.account_holder } : {}),
         ...(acc.bank_name ? { bank_name: acc.bank_name } : {}),
       });
+
       continue;
     }
 
-    out.push({ id, name, enabled: true });
+    out.push({ id: key, name, enabled: true });
   }
 
   if (ensureWallet && !out.some((x) => x.id === 'wallet')) {
@@ -144,21 +139,55 @@ export function buildCheckoutPaymentOptions(args: {
 
 /* -------------------- order item builder -------------------- */
 
+type CheckoutCartItemLike = {
+  quantity?: unknown;
+  products?: {
+    id?: unknown;
+    name?: unknown;
+    price?: unknown;
+    quantity_options?: Array<{ quantity?: unknown; price?: unknown }> | null;
+  } | null;
+  selected_options?: unknown;
+};
+
+export function resolveCartItemPricing(item: CheckoutCartItemLike): {
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+} {
+  const quantityNum = toNum(item?.quantity, 1);
+  const safeQty = Number.isFinite(quantityNum) && quantityNum > 0 ? quantityNum : 1;
+
+  const basePrice = toNum(item?.products?.price, 0);
+  const opts = item?.products?.quantity_options;
+
+  if (Array.isArray(opts) && opts.length) {
+    const match = opts.find((opt) => toNum(opt?.quantity, NaN) === safeQty);
+    const optPrice = match ? toNum(match?.price, NaN) : NaN;
+    if (Number.isFinite(optPrice)) {
+      const total = optPrice;
+      const unit = total / safeQty;
+      return { quantity: safeQty, unitPrice: unit, totalPrice: total };
+    }
+  }
+
+  const total = basePrice * safeQty;
+  return { quantity: safeQty, unitPrice: basePrice, totalPrice: total };
+}
+
 export function buildOrderItemsFromCheckout(checkoutData: CheckoutData): CreateOrderItemBody[] {
   const items = (checkoutData as any).cartItems as any[];
   if (!Array.isArray(items)) return [];
 
   return items.map((item) => {
-    const priceNum = toNum(item?.products?.price, 0);
-    const quantityNum = toNum(item?.quantity, 1);
-    const totalNum = priceNum * quantityNum;
+    const pricing = resolveCartItemPricing(item as CheckoutCartItemLike);
 
     return {
       product_id: String(item?.products?.id ?? ''),
       product_name: String(item?.products?.name ?? ''),
-      quantity: Number.isFinite(quantityNum) ? quantityNum : 1,
-      price: money2(priceNum),
-      total: money2(totalNum),
+      quantity: pricing.quantity,
+      price: money2(pricing.unitPrice),
+      total: money2(pricing.totalPrice),
       options: item?.selected_options ?? null,
     };
   });
@@ -170,9 +199,7 @@ export function getCheckoutTotal(checkoutData: CheckoutData): number {
   return toNum((checkoutData as any)?.total, 0);
 }
 
-
-
-
+/* -------------------- customer info -------------------- */
 
 export type CustomerInfo = {
   name: string;
@@ -182,7 +209,6 @@ export type CustomerInfo = {
 
 function unwrapProfile(p: unknown): Record<string, unknown> | null {
   if (!isPlainObject(p)) return null;
-  // some APIs return { data: {...} }
   const d = (p as Record<string, unknown>).data;
   if (isPlainObject(d)) return d as Record<string, unknown>;
   return p as Record<string, unknown>;
@@ -196,14 +222,16 @@ export function extractCustomerInfo(profileData: unknown, authUser: AuthUserLike
     (p ? pickStr(p, ['first_name', 'firstName'], '') : '');
 
   const emailFromAuth =
-    authUser && typeof (authUser as any).email === 'string' ? toTrimStr((authUser as any).email) : '';
+    authUser && typeof (authUser as any).email === 'string'
+      ? toTrimStr((authUser as any).email)
+      : '';
 
   const email =
-    emailFromAuth ||
-    (p ? pickStr(p, ['email', 'mail', 'user_email', 'userEmail'], '') : '');
+    emailFromAuth || (p ? pickStr(p, ['email', 'mail', 'user_email', 'userEmail'], '') : '');
 
   const phone =
-    (p ? pickStr(p, ['phone', 'phone_number', 'phoneNumber', 'mobile', 'mobile_phone'], '') : '') || '';
+    (p ? pickStr(p, ['phone', 'phone_number', 'phoneNumber', 'mobile', 'mobile_phone'], '') : '') ||
+    '';
 
   return {
     name: toTrimStr(name),
@@ -211,4 +239,3 @@ export function extractCustomerInfo(profileData: unknown, authUser: AuthUserLike
     phone: toTrimStr(phone),
   };
 }
-

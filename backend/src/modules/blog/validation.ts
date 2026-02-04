@@ -11,10 +11,10 @@ const urlOrEmptyToNull = z
 const categorySchema = z
   .string()
   .max(120)
-  .transform((s) => s.trim())
+  .transform((s: string) => s.trim())
   .optional()
   .nullable()
-  .transform((v) => (v == null ? null : v.trim() ? v.trim() : null));
+  .transform((v: string | null | undefined) => (v == null ? null : v.trim() ? v.trim() : null));
 
 export const blogCreateSchema = z.object({
   title: z.string().min(1).max(255),

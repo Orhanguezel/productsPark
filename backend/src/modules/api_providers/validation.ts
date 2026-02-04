@@ -23,7 +23,7 @@ export const CreateBodySchema = z.object({
   provider_type: z.string().default("smm"),
   api_url: z.string().min(1)
     .transform(toAbsoluteUrl)
-    .refine((v) => { try { new URL(v); return true; } catch { return false; } }, "Invalid url"),
+    .refine((v: string) => { try { new URL(v); return true; } catch { return false; } }, "Invalid url"),
   api_key: z.string().min(1),
   is_active: z.boolean().optional().default(true),
   credentials: z.record(z.unknown()).optional(),

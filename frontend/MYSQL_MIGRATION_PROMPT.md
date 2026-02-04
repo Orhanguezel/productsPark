@@ -83,10 +83,10 @@ I have a complete e-commerce platform built with:
 
 ### Edge Functions (25 total):
 1. **paytr-get-token** - PayTR payment gateway
-2. **paytr-callback** - PayTR webhook handler
+2. **paytr-notify** - PayTR webhook handler
 3. **paytr-havale-get-token** - PayTR bank transfer
 4. **shopier-create-payment** - Shopier payment
-5. **shopier-callback** - Shopier webhook
+5. **shopier-notify** - Shopier webhook
 6. **turkpin-create-order** - TurkPin epin orders
 7. **turkpin-check-status** - TurkPin order status
 8. **turkpin-product-list** - TurkPin product catalog

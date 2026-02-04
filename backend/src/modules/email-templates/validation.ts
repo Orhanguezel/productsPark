@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const jsonArrayStr = z
   .string()
-  .refine((s) => {
+  .refine((s: string) => {
     try {
       const v = JSON.parse(s);
       return Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -16,7 +16,7 @@ const jsonArrayStr = z
 
 const variablesUnion = z
   .union([z.array(z.string()), jsonArrayStr, z.null(), z.undefined()])
-  .transform((v) => {
+  .transform((v: string[] | string | null | undefined) => {
     if (v == null) return null;
     if (Array.isArray(v)) return JSON.stringify(v);
     return v; // string(JSON)
@@ -58,7 +58,7 @@ export const renderByKeySchema = z.object({
 export const listQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
   // querystring "null" gelebilir: locale=null → DB'de NULL filtrelemek istiyoruz
-  locale: z.string().transform((s) => (s === "null" ? null : s)).optional(),
+  locale: z.string().transform((s: string) => (s === "null" ? null : s)).optional(),
   is_active: z.union([z.string(), z.number(), z.boolean()]).optional(),
 });
 

@@ -1,6 +1,11 @@
 // =============================================================
 // FILE: src/integrations/baseApi.ts
 // FINAL — RTK baseApi (Vite, strict, token+refresh, cookie-safe)
+// Fixes:
+// - Refresh may be cookie-only (no access_token in body) => still retry once
+// - Always credentials: 'include'
+// - Retry uses updated token if provided
+// - Safer header normalization (no breaking FormData boundary)
 // =============================================================
 
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
@@ -37,7 +42,6 @@ function getDefaultLocale(): string {
 
 const DEBUG_API = getEnvString('VITE_DEBUG_API') === '1';
 if (DEBUG_API) {
-  // eslint-disable-next-line no-console
   console.info('[productspark] API_URL =', API_URL);
 }
 
@@ -85,7 +89,6 @@ function normalizeApiPath(u: string): string {
   }
   p = p.replace(/\/+$/, '') || '/';
 
-  // remove API_BASE prefix if present (default: /api)
   const base = (API_BASE || '/api').replace(/\/+$/, '');
   if (base && p === base) return '/';
   if (base && p.startsWith(base + '/')) return p.slice(base.length) || '/';
@@ -136,12 +139,20 @@ function safeRemoveLocalStorageItem(key: string) {
 
 function ensureProperHeaders(fa: FetchArgs): FetchArgs {
   const next: FetchArgs = { ...fa };
-  const hdr = (next.headers as Record<string, string> | undefined) ?? {};
+
+  // Normalize headers to plain record (RTK accepts Headers | Record)
+  const hdrAny = next.headers as unknown;
+  const hdr: Record<string, string> =
+    hdrAny && typeof Headers !== 'undefined' && hdrAny instanceof Headers
+      ? Object.fromEntries(hdrAny.entries())
+      : ((hdrAny as Record<string, string> | undefined) ?? {});
 
   // Only force JSON when body is a plain object
   if (isJsonLikeBody(next.body)) {
     if (!hdr['Content-Type'] && !hdr['content-type']) {
       next.headers = { ...hdr, 'Content-Type': 'application/json' };
+    } else {
+      next.headers = hdr;
     }
     return next;
   }
@@ -150,6 +161,8 @@ function ensureProperHeaders(fa: FetchArgs): FetchArgs {
   if (hdr['Content-Type'] || hdr['content-type']) {
     const { ['Content-Type']: _omit1, ['content-type']: _omit2, ...rest } = hdr;
     next.headers = rest;
+  } else {
+    next.headers = hdr;
   }
 
   return next;
@@ -178,7 +191,7 @@ type RBQ = BaseQueryFn<
 
 const rawBaseQuery: RBQ = fetchBaseQuery({
   baseUrl: API_URL, // includes /api
-  credentials: 'include',
+  credentials: 'include', // ✅ cookie auth safe
   prepareHeaders: (headers) => {
     // x-skip-auth → Authorization ekleme
     if (headers.get('x-skip-auth') === '1') {
@@ -263,6 +276,12 @@ async function coerceSerializableError(
 
 /* -------------------- 401 → refresh → retry -------------------- */
 
+function extractAccessTokenFromRefresh(data: unknown): string {
+  if (!data || typeof data !== 'object') return '';
+  const t = (data as { access_token?: unknown }).access_token;
+  return typeof t === 'string' ? t.trim() : '';
+}
+
 const baseQueryWithReauth: RBQ = async (args, api, extra) => {
   let req: AnyArgs = normalizeUrlArg(args);
 
@@ -294,24 +313,32 @@ const baseQueryWithReauth: RBQ = async (args, api, extra) => {
       extra,
     );
 
-    if (!refreshRes.error) {
-      const access_token = (refreshRes.data as { access_token?: string } | undefined)?.access_token;
+    // If refresh failed => clear tokens and return original 401
+    if (refreshRes.error) {
+      tokenStore.set(null);
+      safeRemoveLocalStorageItem('mh_access_token');
+      safeRemoveLocalStorageItem('mh_refresh_token');
+      return result;
+    }
 
-      if (access_token) {
-        tokenStore.set(access_token);
-        safeSetLocalStorageItem('mh_access_token', access_token);
+    // Refresh ok:
+    // - If body includes access_token => store it
+    // - If cookie-only refresh => no token in body, still retry once
+    const nextToken = extractAccessTokenFromRefresh(refreshRes.data);
+    if (nextToken) {
+      tokenStore.set(nextToken);
+      safeSetLocalStorageItem('mh_access_token', nextToken);
+    }
 
-        let retry: AnyArgs = normalizeUrlArg(args);
-        if (typeof retry !== 'string') retry = ensureProperHeaders(retry);
+    // Retry once regardless (cookie may have been set)
+    let retry: AnyArgs = normalizeUrlArg(args);
+    if (typeof retry !== 'string') retry = ensureProperHeaders(retry);
 
-        result = await rawBaseQuery(retry, api, extra);
-        result = await coerceSerializableError(result);
-      } else {
-        tokenStore.set(null);
-        safeRemoveLocalStorageItem('mh_access_token');
-        safeRemoveLocalStorageItem('mh_refresh_token');
-      }
-    } else {
+    result = await rawBaseQuery(retry, api, extra);
+    result = await coerceSerializableError(result);
+
+    // If still 401 after refresh+retry => hard clear local tokens
+    if (result.error?.status === 401) {
       tokenStore.set(null);
       safeRemoveLocalStorageItem('mh_access_token');
       safeRemoveLocalStorageItem('mh_refresh_token');

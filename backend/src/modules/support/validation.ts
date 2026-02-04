@@ -46,7 +46,7 @@ export const updateTicketBodySchema = z
     priority: SupportTicketPriority.optional(),
     category: z.string().trim().max(40).optional().nullable(), // yok sayılacak
   })
-  .refine((v) => Object.keys(v).length > 0, { message: "Boş patch gönderilemez." });
+  .refine((v: typeof updateTicketBodySchema._type) => Object.keys(v).length > 0, { message: "Boş patch gönderilemez." });
 
 export const createReplyBodySchema = z.object({
   ticket_id: z.string().uuid(),

@@ -38,7 +38,7 @@ const moneyNormalizer = (v: unknown) => {
 
 const dec2 = z.preprocess(
   moneyNormalizer,
-  z.union([z.string().regex(/^-?\d+(\.\d{1,2})?$/), z.number().finite()]).transform((vv) =>
+  z.union([z.string().regex(/^-?\d+(\.\d{1,2})?$/), z.number().finite()]).transform((vv: string | number) =>
     typeof vv === 'number' ? vv.toFixed(2) : vv
   )
 );

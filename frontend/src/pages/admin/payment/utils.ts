@@ -191,7 +191,7 @@ export function providerToForm(p: PaymentProviderAdmin | null): ProviderForm {
 
   // PayTR
   const test_mode = pub.test_mode === undefined ? true : toBool(asBoolLike(pub.test_mode), true);
-  const card_commission = toNum(pub.card_commission, 0);
+  const card_commission = toNum(pub.card_commission ?? pub.commission, 0);
   const havale_enabled = toBool(asBoolLike(pub.havale_enabled), false);
   const havale_commission = toNum(pub.havale_commission, 0);
 
@@ -226,46 +226,89 @@ export function providerToForm(p: PaymentProviderAdmin | null): ProviderForm {
   };
 }
 
-export function buildPaytrBody(f: ProviderForm): UpsertPaymentProviderAdminBody {
+export function buildPaytrBody(
+  f: ProviderForm,
+  existingPublic?: Record<string, unknown> | null,
+): UpsertPaymentProviderAdminBody {
+  const existing = isPlainObject(existingPublic) ? existingPublic : {};
+
+  const pickExisting = (keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = (existing as Record<string, unknown>)[k];
+      const s = toTrimStr(v);
+      if (s) return s;
+    }
+    return undefined;
+  };
+
+  const ok_url = pickExisting(['ok_url', 'okUrl', 'merchant_ok_url', 'MERCHANT_OK_URL']);
+  const fail_url = pickExisting(['fail_url', 'failUrl', 'merchant_fail_url', 'MERCHANT_FAIL_URL']);
+  const notification_url = pickExisting([
+    'notification_url',
+    'notificationUrl',
+    'notify_url',
+    'NOTIFICATION_URL',
+  ]);
+  const type = pickExisting(['type']);
+  const mode = pickExisting(['mode']);
+
+  const cardCommission = toNum(f.card_commission, 0);
+
+  const secret = {
+    merchant_id: toTrimStr(f.merchant_id),
+    merchant_key: toTrimStr(f.merchant_key),
+    merchant_salt: toTrimStr(f.merchant_salt),
+  };
+
+  const hasSecret = Object.values(secret).some((v) => typeof v === 'string' && v.length > 0);
+
   return {
     is_active: f.enabled ? 1 : 0,
     public_config: {
       enabled: f.enabled,
       test_mode: f.test_mode !== false,
-      card_commission: toNum(f.card_commission, 0),
+      commission: cardCommission,
+      card_commission: cardCommission,
       havale_enabled: f.havale_enabled ? true : false,
       havale_commission: toNum(f.havale_commission, 0),
+      ...(ok_url ? { ok_url } : {}),
+      ...(fail_url ? { fail_url } : {}),
+      ...(notification_url ? { notification_url } : {}),
+      ...(type ? { type } : {}),
+      ...(mode ? { mode } : {}),
     },
-    secret_config: {
-      merchant_id: toTrimStr(f.merchant_id),
-      merchant_key: toTrimStr(f.merchant_key),
-      merchant_salt: toTrimStr(f.merchant_salt),
-    },
+    ...(hasSecret ? { secret_config: secret } : {}),
   };
 }
 
 export function buildShopierBody(f: ProviderForm): UpsertPaymentProviderAdminBody {
+  const secret = {
+    client_id: toTrimStr(f.client_id),
+    client_secret: toTrimStr(f.client_secret),
+  };
+  const hasSecret = Object.values(secret).some((v) => typeof v === 'string' && v.length > 0);
+
   return {
     is_active: f.enabled ? 1 : 0,
     public_config: {
       enabled: f.enabled,
       commission: toNum(f.commission, 0),
     },
-    secret_config: {
-      client_id: toTrimStr(f.client_id),
-      client_secret: toTrimStr(f.client_secret),
-    },
+    ...(hasSecret ? { secret_config: secret } : {}),
   };
 }
 
 export function buildPaparaBody(f: ProviderForm): UpsertPaymentProviderAdminBody {
+  const secret = {
+    api_key: toTrimStr(f.api_key),
+  };
+  const hasSecret = Object.values(secret).some((v) => typeof v === 'string' && v.length > 0);
+
   return {
     is_active: f.enabled ? 1 : 0,
     public_config: {
       enabled: f.enabled,
     },
-    secret_config: {
-      api_key: toTrimStr(f.api_key),
-    },
+    ...(hasSecret ? { secret_config: secret } : {}),
   };
 }

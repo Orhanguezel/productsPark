@@ -115,6 +115,7 @@ NOW(3), NOW(3)),
 ('87041eeb-ebce-47fe-ab50-b2b6aab1780a', 'paytr_commission',        '25', NOW(3), NOW(3)),
 ('d32b6c9a-0677-4103-8f05-2eec6d8dd4e1', 'paytr_havale_commission', '0', NOW(3), NOW(3)),
 ('da4bd864-c314-4bd7-be98-aea579fc8ed4', 'paytr_havale_enabled',    'true', NOW(3), NOW(3)),
+('c8f6a5b2-2c57-4b3e-9a3b-9a8ad2b6d8f1', 'paytr_dev_user_ip',        '{{PAYTR_DEV_USER_IP}}', NOW(3), NOW(3)),
 
 ('7e7ba2d9-d2ed-4da0-8209-fda5747b365c', 'shopier_enabled',         'true', NOW(3), NOW(3)),
 ('d2023d10-e221-4e1f-97e7-1b40acfa21d1', 'shopier_client_id',       '{{SHOPIER_CLIENT_ID}}', NOW(3), NOW(3)),

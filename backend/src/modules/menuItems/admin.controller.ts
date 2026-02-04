@@ -196,7 +196,7 @@ export const adminDeleteMenuItem: RouteHandler = async (req, reply) => {
 export const adminReorderMenuItems: RouteHandler = async (req, reply) => {
   const { items } = adminMenuItemReorderSchema.parse(req.body ?? {});
 
-  const ids = items.map((i) => i.id);
+  const ids = items.map((i: typeof items[number]) => i.id);
   const rows = await db
     .select({
       id: menuItems.id,

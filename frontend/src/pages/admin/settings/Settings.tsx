@@ -299,7 +299,7 @@ export default function SettingsPage() {
       ...prev,
       paytr_enabled: toBoolish(pub.enabled),
       paytr_test_mode: pub.test_mode === undefined ? true : toBoolish(pub.test_mode),
-      paytr_commission: Number(pub.card_commission ?? 0) || 0,
+      paytr_commission: Number(pub.card_commission ?? pub.commission ?? 0) || 0,
       paytr_havale_enabled: toBoolish(pub.havale_enabled),
       paytr_havale_commission: Number(pub.havale_commission ?? 0) || 0,
       paytr_merchant_id: String(sec.merchant_id ?? ''),
@@ -339,20 +339,56 @@ export default function SettingsPage() {
     return 'json';
   };
 
-  const buildPaytrUpdateBody = (s: SettingsFormModel) => ({
-    public_config: {
-      enabled: !!s.paytr_enabled,
-      test_mode: s.paytr_test_mode !== false,
-      card_commission: Number(s.paytr_commission || 0),
-      havale_enabled: !!s.paytr_havale_enabled,
-      havale_commission: Number(s.paytr_havale_commission || 0),
-    },
-    secret_config: {
+  const buildPaytrUpdateBody = (s: SettingsFormModel) => {
+    const existing =
+      paytrAdmin && typeof paytrAdmin.public_config === 'object' ? paytrAdmin.public_config : {};
+
+    const pickExisting = (keys: string[]): string | undefined => {
+      for (const k of keys) {
+        const v = (existing as Record<string, unknown>)[k];
+        const s2 = typeof v === 'string' ? v.trim() : '';
+        if (s2) return s2;
+      }
+      return undefined;
+    };
+
+    const ok_url = pickExisting(['ok_url', 'okUrl', 'merchant_ok_url', 'MERCHANT_OK_URL']);
+    const fail_url = pickExisting(['fail_url', 'failUrl', 'merchant_fail_url', 'MERCHANT_FAIL_URL']);
+    const notification_url = pickExisting([
+      'notification_url',
+      'notificationUrl',
+      'notify_url',
+      'NOTIFICATION_URL',
+    ]);
+    const type = pickExisting(['type']);
+    const mode = pickExisting(['mode']);
+
+    const cardCommission = Number(s.paytr_commission || 0);
+
+    const secret = {
       merchant_id: s.paytr_merchant_id?.trim() || '',
       merchant_key: s.paytr_merchant_key?.trim() || '',
       merchant_salt: s.paytr_merchant_salt?.trim() || '',
-    },
-  });
+    };
+    const hasSecret = Object.values(secret).some((v) => typeof v === 'string' && v.length > 0);
+
+    return {
+      public_config: {
+        enabled: !!s.paytr_enabled,
+        test_mode: s.paytr_test_mode !== false,
+        commission: cardCommission,
+        card_commission: cardCommission,
+        havale_enabled: !!s.paytr_havale_enabled,
+        havale_commission: Number(s.paytr_havale_commission || 0),
+        ...(ok_url ? { ok_url } : {}),
+        ...(fail_url ? { fail_url } : {}),
+        ...(notification_url ? { notification_url } : {}),
+        ...(type ? { type } : {}),
+        ...(mode ? { mode } : {}),
+      },
+      ...(hasSecret ? { secret_config: secret } : {}),
+    };
+  };
 
   async function handleSaveAll() {
     try {

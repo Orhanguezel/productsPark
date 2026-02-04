@@ -22,6 +22,10 @@
     "typeRoots": ["./node_modules/@types"],
     "ignoreDeprecations": "5.0"
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/types/**/*.d.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

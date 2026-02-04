@@ -56,6 +56,7 @@ import './fake_public_notifications.endpoints';
 import './payment_providers.endpoints';
 import './payment_requests.endpoints';
 import './payment_sessions.endpoints';
+import './payments.notify.endpoints';
 
 import './products.endpoints';
 import './product_faqs.endpoints';

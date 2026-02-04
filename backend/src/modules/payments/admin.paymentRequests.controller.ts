@@ -4,6 +4,7 @@
 // - approve => orders.payment_status = 'paid' (+ optional orders.status)
 // - uses db.transaction for atomicity
 // - sets processedAt on terminal transitions
+// - ROBUST: supports orders fields paymentStatus/payment_status, updatedAt/updated_at
 // ===================================================================
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -42,8 +43,15 @@ const setPaymentRequestStatusAdminBody = z.object({
 
 // ---------- domain: allowed statuses ----------
 const allowedStatuses = new Set(['pending', 'approved', 'rejected', 'cancelled']);
-
 const isTerminal = (s: string) => s === 'approved' || s === 'rejected' || s === 'cancelled';
+
+// ---------- orders column resolver (robust) ----------
+type OrdersAny = typeof orders & Record<string, any>;
+const O = orders as unknown as OrdersAny;
+
+const colPaymentStatus = (O.paymentStatus ?? O.payment_status) as any;
+const colUpdatedAt = (O.updatedAt ?? O.updated_at) as any;
+const colStatus = (O.status ?? O.orderStatus ?? O.order_status) as any;
 
 // ---------- mapper ----------
 const mapPaymentRequestAdmin = (r: typeof paymentRequests.$inferSelect) => ({
@@ -88,10 +96,7 @@ export async function listPaymentRequestsAdminHandler(
   if (user_id) conds.push(eq(paymentRequests.userId, user_id));
   if (order_id) conds.push(eq(paymentRequests.orderId, order_id));
   if (status) conds.push(eq(paymentRequests.status, status));
-  if (q) {
-    const pat = `%${q}%`;
-    conds.push(like(paymentRequests.id, pat));
-  }
+  if (q) conds.push(like(paymentRequests.id, `%${q}%`));
 
   const total =
     (
@@ -123,7 +128,6 @@ export async function listPaymentRequestsAdminHandler(
   reply.header('x-total-count', String(total));
   reply.header('access-control-expose-headers', 'x-total-count, content-range');
   setContentRange(reply, offset, limit, total);
-
   return reply.send(data);
 }
 
@@ -195,7 +199,6 @@ export async function setPaymentRequestStatusAdminHandler(
   }
 
   const out = await db.transaction(async (tx) => {
-    // 1) request exists?
     const [pr] = await tx
       .select()
       .from(paymentRequests)
@@ -204,15 +207,10 @@ export async function setPaymentRequestStatusAdminHandler(
 
     if (!pr) return null;
 
-    // 2) linked order exists?
     const [ord] = await tx.select().from(orders).where(eq(orders.id, pr.orderId)).limit(1);
+    if (!ord) throw new Error('order_not_found_for_payment_request');
 
-    if (!ord) {
-      // request var ama order yok -> data inconsistency
-      throw new Error('order_not_found_for_payment_request');
-    }
-
-    // 3) update payment request
+    // update payment request
     await tx
       .update(paymentRequests)
       .set({
@@ -223,35 +221,32 @@ export async function setPaymentRequestStatusAdminHandler(
       } as any)
       .where(eq(paymentRequests.id, req.params.id));
 
-    // 4) drive order payment_status based on request status
-    //    APPROVED => paid
-    //    REJECTED/CANCELLED => failed (istersen) veya pending bırak
+    // drive order payment_status
     if (status === 'approved') {
-      // Havale onayı geldiyse siparişin payment_status'u paid olmalı
-      // İstersen status'u da pending->processing yapabilirsin:
+      const patch: Record<string, unknown> = {};
+
+      if (colPaymentStatus) patch[colPaymentStatus.name ?? 'payment_status'] = 'paid';
+      if (colStatus && typeof (ord as any).status === 'string') {
+        patch[colStatus.name ?? 'status'] =
+          (ord as any).status === 'pending' ? 'processing' : (ord as any).status;
+      }
+      if (colUpdatedAt) patch[colUpdatedAt.name ?? 'updated_at'] = sql`CURRENT_TIMESTAMP(3)`;
+
       await tx
         .update(orders)
-        .set({
-          payment_status: 'paid',
-          // opsiyonel: sadece pending ise ilerlet
-          status: ord.status === 'pending' ? 'processing' : ord.status,
-          updated_at: sql`CURRENT_TIMESTAMP(3)` as any,
-        } as any)
-        .where(eq(orders.id, ord.id));
+        .set(patch as any)
+        .where(eq(orders.id, (ord as any).id));
     }
 
     if (status === 'rejected' || status === 'cancelled') {
-      // Burada iki seçenek var:
-      // A) orders.payment_status = 'failed' yap
-      // B) pending bırak (müşteri yeniden havale yükleyebilir)
-      // Ben güvenli tercih olarak failed yapıyorum, istersen pending bırak.
+      const patch: Record<string, unknown> = {};
+      if (colPaymentStatus) patch[colPaymentStatus.name ?? 'payment_status'] = 'failed';
+      if (colUpdatedAt) patch[colUpdatedAt.name ?? 'updated_at'] = sql`CURRENT_TIMESTAMP(3)`;
+
       await tx
         .update(orders)
-        .set({
-          payment_status: 'failed',
-          updated_at: sql`CURRENT_TIMESTAMP(3)` as any,
-        } as any)
-        .where(eq(orders.id, ord.id));
+        .set(patch as any)
+        .where(eq(orders.id, (ord as any).id));
     }
 
     const [row] = await tx

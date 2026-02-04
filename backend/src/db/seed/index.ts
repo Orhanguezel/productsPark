@@ -1,17 +1,18 @@
 // =============================================================
 // FILE: src/db/seed/index.ts
-// FINAL — SQL Seed Runner (argon2 hash inject)
+// FINAL — SQL Seed Runner (DETERMINISTIC bcrypt hash inject; cPanel-safe)
 // - DROP/CREATE (opsiyonel --no-drop)
 // - --only=10,20,30 filtre desteği
 // - SQL placeholder inject: {{ADMIN_EMAIL}}, {{ADMIN_ID}}, {{ADMIN_PASSWORD_HASH}}
 // - Session vars set: @ADMIN_EMAIL, @ADMIN_ID, @ADMIN_PASSWORD_HASH
+// - argon2 REMOVED
+// - ✅ DEFAULT admin hash is FIXED (admin123) so every seed is stable
 // =============================================================
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
-import { hash as argonHash } from 'argon2';
 
 import { env } from '@/core/env';
 import { cleanSql, splitStatements, logStep } from './utils';
@@ -92,16 +93,63 @@ function sqlStr(v: string) {
   return v.replaceAll("'", "''");
 }
 
-/** admin değişkenlerini ENV'den oku + argon2 hash üret */
+function isBcryptHash(v: string) {
+  return v.startsWith('$2a$') || v.startsWith('$2b$') || v.startsWith('$2y$');
+}
+
+/**
+ * ✅ Deterministic default bcrypt hash for "admin123"
+ * - This is a PRECOMPUTED bcrypt hash (rounds=10).
+ * - Stable across seeds (same string every time).
+ *
+ * Password: admin123
+ */
+const DEFAULT_ADMIN_PASSWORD = 'admin123';
+const DEFAULT_ADMIN_BCRYPT_HASH = '$2b$10$5SlniINQxYqlRnQhug9eFeG35jeLh/SzCmqGZ7WHxf7M8N6orJV2.';
+
+/**
+ * admin değişkenlerini ENV'den oku + hash seç
+ *
+ * Öncelik:
+ * 1) ADMIN_PASSWORD_HASH -> direkt kullan (deterministic)
+ * 2) (opsiyonel) ADMIN_PASSWORD + ALLOW_DYNAMIC_ADMIN_HASH=1 -> runtime hash üret (saltlı, değişir)
+ * 3) default: sabit hash (admin123) -> her seed aynı
+ */
 async function getAdminVars(): Promise<{ email: string; id: string; passwordHash: string }> {
   const email = (process.env.ADMIN_EMAIL || 'orhanguzell@gmail.com').trim();
   const id = (process.env.ADMIN_ID || '4f618a8d-6fdb-498c-898a-395d368b2193').trim();
-  const plainPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-  // argon2id default (v=19) — auth verify ile uyumlu
-  const passwordHash = await argonHash(plainPassword);
+  const providedHash = (process.env.ADMIN_PASSWORD_HASH || '').trim();
+  if (providedHash) {
+    if (!isBcryptHash(providedHash)) {
+      throw new Error('ADMIN_PASSWORD_HASH must be a bcrypt hash ($2a/$2b/$2y).');
+    }
+    return { email, id, passwordHash: providedHash };
+  }
 
-  return { email, id, passwordHash };
+  // Dynamic hash creation is OFF by default (to keep seeds stable)
+  const allowDynamic =
+    String(process.env.ALLOW_DYNAMIC_ADMIN_HASH || '')
+      .trim()
+      .toLowerCase() === '1' ||
+    String(process.env.ALLOW_DYNAMIC_ADMIN_HASH || '')
+      .trim()
+      .toLowerCase() === 'true';
+
+  const plainPassword = (process.env.ADMIN_PASSWORD || '').trim();
+  if (allowDynamic && plainPassword) {
+    // If you REALLY want to generate on the fly, enable this and add bcryptjs dependency.
+    // We avoid importing bcryptjs unless this path is used.
+    const bcrypt = await import('bcryptjs');
+    const rounds = Number(process.env.BCRYPT_ROUNDS || '10');
+    const passwordHash = bcrypt.hashSync(plainPassword, rounds);
+    return { email, id, passwordHash };
+  }
+
+  // Default deterministic
+  // If ADMIN_PASSWORD provided but dynamic disabled, we still keep deterministic
+  // to avoid surprise password changes between seeds.
+  return { email, id, passwordHash: DEFAULT_ADMIN_BCRYPT_HASH };
 }
 
 /** Dosyayı oku, temizle, admin değişkenleri enjekte et ve opsiyonel yer tutucu değiştir */
@@ -109,27 +157,21 @@ function prepareSqlForRun(
   rawSql: string,
   admin: { email: string; id: string; passwordHash: string },
 ) {
-  // Dosyadaki comment/boşluk temizliği
   let sql = cleanSql(rawSql);
 
-  // Header ile session değişkenlerini set et
   const header = [
     `SET @ADMIN_EMAIL := '${sqlStr(admin.email)}';`,
     `SET @ADMIN_ID := '${sqlStr(admin.id)}';`,
     `SET @ADMIN_PASSWORD_HASH := '${sqlStr(admin.passwordHash)}';`,
   ].join('\n');
 
-  // Placeholder destekleri
   sql = sql
-    .replaceAll('{{ADMIN_BCRYPT}}', admin.passwordHash) // legacy adı kalsın; artık argon hash basıyoruz
+    .replaceAll('{{ADMIN_BCRYPT}}', admin.passwordHash) // legacy placeholder name
     .replaceAll('{{ADMIN_PASSWORD_HASH}}', admin.passwordHash)
     .replaceAll('{{ADMIN_EMAIL}}', admin.email)
     .replaceAll('{{ADMIN_ID}}', admin.id);
 
-  // En üstte header
-  sql = `${header}\n${sql}`;
-
-  return sql;
+  return `${header}\n${sql}`;
 }
 
 async function runSqlFile(
@@ -144,7 +186,6 @@ async function runSqlFile(
   const sql = prepareSqlForRun(raw, adminVars);
   const statements = splitStatements(sql);
 
-  // bağlantı karakter seti & timezone
   await conn.query('SET NAMES utf8mb4;');
   await conn.query("SET time_zone = '+00:00';");
 
@@ -159,7 +200,6 @@ async function runSqlFile(
 async function main() {
   const flags = parseFlags(process.argv);
 
-  // 1) Root ile drop + create (opsiyonel)
   const root = await createRoot();
   try {
     if (!flags.noDrop) {
@@ -173,14 +213,22 @@ async function main() {
     await root.end();
   }
 
-  // 2) DB bağlantısı
   const conn = await createConnToDb();
 
   try {
-    // 3) Admin değişkenlerini hazırla (tek sefer)
     const ADMIN = await getAdminVars();
 
-    // 4) SQL klasörünü bul (öncelik env, sonra dist/sql, yoksa src/sql)
+    // küçük sanity log (hash’i yazma!)
+    logStep(
+      `👤 Admin seed: email=${ADMIN.email} id=${ADMIN.id} password=${
+        process.env.ADMIN_PASSWORD_HASH
+          ? 'ADMIN_PASSWORD_HASH'
+          : process.env.ADMIN_PASSWORD
+            ? 'DEFAULT(admin123) (deterministic)'
+            : 'DEFAULT(admin123) (deterministic)'
+      }`,
+    );
+
     const envDir = process.env.SEED_SQL_DIR && process.env.SEED_SQL_DIR.trim();
     const distSql = path.resolve(__dirname, 'sql');
     const srcSql = path.resolve(__dirname, '../../../src/db/seed/sql');

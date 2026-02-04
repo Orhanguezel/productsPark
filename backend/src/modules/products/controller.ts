@@ -12,7 +12,7 @@
 import type { RouteHandler } from 'fastify';
 import { randomUUID } from 'crypto';
 import { db } from '@/db/client';
-import { and, desc, eq, like, sql, asc } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, sql, asc } from 'drizzle-orm';
 
 import { products, productFaqs, productOptions, productReviews, productStock } from './schema';
 import { categories } from '@/modules/categories/schema';
@@ -30,7 +30,7 @@ import {
   productStockUpdateSchema,
 } from './validation';
 
-import { ZodError } from 'zod';
+import { z } from 'zod';
 import { now, toNumber, parseJson, toBool } from '@/modules/_shared/common';
 
 /* ---------------- helpers ---------------- */
@@ -62,6 +62,39 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
     if (v !== undefined) out[k] = v;
   }
   return out;
+}
+
+function parseIdList(v: unknown, max = 200): string[] {
+  if (v == null) return [];
+
+  let raw: unknown[] = [];
+  if (Array.isArray(v)) {
+    raw = v;
+  } else if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return [];
+
+    if (s.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) raw = parsed;
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!raw.length) {
+      raw = s.split(',').map((x) => x.trim());
+    }
+  } else {
+    raw = [v];
+  }
+
+  const out = raw
+    .map((x) => String(x ?? '').trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(out)).slice(0, Math.max(1, max));
 }
 
 function normalizeProduct(row: ProductRow) {
@@ -111,11 +144,12 @@ function normalizeProduct(row: ProductRow) {
 
 /* ---------------- list/get ---------------- */
 
-/** GET /products?category_id=&is_active=&q=&limit=&offset=&sort=(price|rating|created_at)&order=(asc|desc|created_at.desc)&slug= */
+/** GET /products?category_id=&is_active=&is_featured=&q=&limit=&offset=&sort=(price|rating|created_at)&order=(asc|desc|created_at.desc)&slug=&ids= */
 export const listProducts: RouteHandler = async (req, reply) => {
   const q = (req.query || {}) as {
     category_id?: string;
     is_active?: string;
+    is_featured?: string;
     q?: string;
     limit?: string;
     offset?: string;
@@ -124,6 +158,7 @@ export const listProducts: RouteHandler = async (req, reply) => {
     slug?: string;
     min_price?: string;
     max_price?: string;
+    ids?: string | string[];
   };
 
   // Single by slug (shortcut)
@@ -154,6 +189,11 @@ export const listProducts: RouteHandler = async (req, reply) => {
     conds.push(eq(products.is_active, v as any));
   }
 
+  if (q.is_featured !== undefined) {
+    const v = q.is_featured === '1' || q.is_featured === 'true' ? 1 : 0;
+    conds.push(eq(products.is_featured, v as any));
+  }
+
   if (q.q) conds.push(like(products.name, `%${q.q}%`));
 
   if (q.min_price) {
@@ -163,6 +203,11 @@ export const listProducts: RouteHandler = async (req, reply) => {
   if (q.max_price) {
     const v = Number(q.max_price);
     if (Number.isFinite(v)) conds.push(sql`${products.price} <= ${v}`);
+  }
+
+  const ids = parseIdList(q.ids);
+  if (ids.length) {
+    conds.push(inArray(products.id, ids));
   }
 
   const whereExpr = conds.length ? and(...conds) : undefined;
@@ -311,7 +356,7 @@ export const createProduct: RouteHandler = async (req, reply) => {
     const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
     return reply.code(201).send(normalizeProduct(row as any));
   } catch (e: any) {
-    if (e instanceof ZodError) {
+    if (e instanceof z.ZodError) {
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     }
     if (e?.code === 'ER_NO_REFERENCED_ROW_2') {
@@ -345,7 +390,7 @@ export const updateProduct: RouteHandler = async (req, reply) => {
 
     return reply.send(normalizeProduct(rows[0] as any));
   } catch (e: any) {
-    if (e instanceof ZodError) {
+    if (e instanceof z.ZodError) {
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     }
     if (e?.code === 'ER_DUP_ENTRY') {
@@ -397,7 +442,7 @@ export const createProductFaq: RouteHandler = async (req, reply) => {
     const [row] = await db.select().from(productFaqs).where(eq(productFaqs.id, id)).limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -416,7 +461,7 @@ export const updateProductFaq: RouteHandler = async (req, reply) => {
     if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
     return reply.send(rows[0]);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -451,7 +496,7 @@ export const createProductOption: RouteHandler = async (req, reply) => {
     const [row] = await db.select().from(productOptions).where(eq(productOptions.id, id)).limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -470,7 +515,7 @@ export const updateProductOption: RouteHandler = async (req, reply) => {
     if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
     return reply.send(rows[0]);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -512,7 +557,7 @@ export const createProductReview: RouteHandler = async (req, reply) => {
     const [row] = await db.select().from(productReviews).where(eq(productReviews.id, id)).limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -531,7 +576,7 @@ export const updateProductReview: RouteHandler = async (req, reply) => {
     if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
     return reply.send(rows[0]);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -572,7 +617,7 @@ export const createProductStock: RouteHandler = async (req, reply) => {
     const [row] = await db.select().from(productStock).where(eq(productStock.id, id)).limit(1);
     return reply.code(201).send(row);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });
@@ -591,7 +636,7 @@ export const updateProductStock: RouteHandler = async (req, reply) => {
     if (!rows.length) return reply.code(404).send({ error: { message: 'not_found' } });
     return reply.send(rows[0]);
   } catch (e: any) {
-    if (e instanceof ZodError)
+    if (e instanceof z.ZodError)
       return reply.code(422).send({ error: { message: 'validation_error', details: e.issues } });
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'internal_error' } });

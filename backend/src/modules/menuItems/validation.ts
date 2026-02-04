@@ -73,7 +73,7 @@ export const adminMenuItemUpsertBase = z.object({
 
 // custom ise url zorunlu
 export const adminMenuItemCreateSchema = adminMenuItemUpsertBase.refine(
-  (v) => (v.type === "custom" ? !!(v.url && v.url.trim().length > 0) : true),
+  (v: typeof adminMenuItemUpsertBase._type) => (v.type === "custom" ? !!(v.url && v.url.trim().length > 0) : true),
   { message: "url_required_for_custom", path: ["url"] }
 );
 export const adminMenuItemUpdateSchema = adminMenuItemUpsertBase.partial();

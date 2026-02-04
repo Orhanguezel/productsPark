@@ -1,36 +1,41 @@
-// =============================================================
-// FILE: ecosystem.config.cjs
-// ProductsPark – Frontend (Next.js) PM2 config (Production-safe)
-// =============================================================
-
+// /var/www/productsPark/backend/ecosystem.config.cjs
 module.exports = {
   apps: [
     {
-      name: 'productsPark-frontend',
-      cwd: '/var/www/productsPark/frontend',
+      name: 'productsPark-backend',
+      cwd: '/var/www/productsPark/backend',
 
-      interpreter: 'node',
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3049 -H 127.0.0.1',
+      // Bun runtime
+      interpreter: '/home/orhan/.bun/bin/bun',
+      script: 'dist/index.js',
 
       exec_mode: 'fork',
       instances: 1,
+
       watch: false,
       autorestart: true,
-      max_memory_restart: '400M',
 
-      min_uptime: '20s',
+      max_memory_restart: '350M',
+
+      min_uptime: '30s',
       max_restarts: 10,
-      restart_delay: 3000,
+      restart_delay: 5000,
+
+      kill_timeout: 8000,
+      listen_timeout: 10000,
 
       env: {
         NODE_ENV: 'production',
-        PORT: '3049',
-        HOSTNAME: '127.0.0.1',
+        HOST: '127.0.0.1',
+        PORT: 8077,
+
+        // Puppeteer/Chromium
+        PUPPETEER_EXECUTABLE_PATH: '/snap/bin/chromium',
+        PUPPETEER_NO_SANDBOX: '1',
       },
 
-      out_file: '/var/log/pm2/productsPark-frontend.out.log',
-      error_file: '/var/log/pm2/productsPark-frontend.err.log',
+      out_file: '/home/orhan/.pm2/logs/productsPark-backend.out.log',
+      error_file: '/home/orhan/.pm2/logs/productsPark-backend.err.log',
       combine_logs: true,
       time: true,
     },
