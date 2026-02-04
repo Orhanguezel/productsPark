@@ -1,13 +1,13 @@
-// /var/www/productsPark/backend/ecosystem.config.cjs
+// /var/www/productsPark/frontend/ecosystem.config.cjs
 module.exports = {
   apps: [
     {
-      name: 'productsPark-backend',
-      cwd: '/var/www/productsPark/backend',
+      name: 'productsPark-frontend',
+      cwd: '/var/www/productsPark/frontend',
 
-      // Bun runtime
-      interpreter: '/home/orhan/.bun/bin/bun',
-      script: 'dist/index.js',
+      interpreter: '/root/.bun/bin/bun',
+      script: 'run',
+      args: 'start -- -p 3055 -H 127.0.0.1',
 
       exec_mode: 'fork',
       instances: 1,
@@ -15,7 +15,7 @@ module.exports = {
       watch: false,
       autorestart: true,
 
-      max_memory_restart: '350M',
+      max_memory_restart: '450M',
 
       min_uptime: '30s',
       max_restarts: 10,
@@ -26,16 +26,11 @@ module.exports = {
 
       env: {
         NODE_ENV: 'production',
-        HOST: '127.0.0.1',
-        PORT: 8077,
-
-        // Puppeteer/Chromium
-        PUPPETEER_EXECUTABLE_PATH: '/snap/bin/chromium',
-        PUPPETEER_NO_SANDBOX: '1',
+        NEXT_TELEMETRY_DISABLED: '1',
       },
 
-      out_file: '/home/orhan/.pm2/logs/productsPark-backend.out.log',
-      error_file: '/home/orhan/.pm2/logs/productsPark-backend.err.log',
+      out_file: '/root/.pm2/logs/productsPark-frontend.out.log',
+      error_file: '/root/.pm2/logs/productsPark-frontend.err.log',
       combine_logs: true,
       time: true,
     },
