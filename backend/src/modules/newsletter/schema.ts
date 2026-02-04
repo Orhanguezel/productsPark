@@ -27,7 +27,7 @@ export const newsletterSubscribers = mysqlTable(
     is_verified: boolean('is_verified').notNull().default(false),
 
     // JSON string olarak saklıyoruz (FE tarafında parse edilir)
-    meta: text('meta').notNull().default('{}'),
+    meta: text('meta').notNull(),
 
     // Unsubscribe olunca dolan alan
     unsubscribed_at: datetime('unsubscribed_at', { fsp: 3 }),

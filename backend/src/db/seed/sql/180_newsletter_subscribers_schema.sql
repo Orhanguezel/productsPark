@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS `newsletter_subscribers` (
   `is_verified`     TINYINT(1)    NOT NULL DEFAULT 0,          -- Drizzle: boolean
 
   `meta`            LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL
-                    DEFAULT '{}'
                     CHECK (JSON_VALID(`meta`)),                -- JSON object string
 
   `unsubscribed_at` DATETIME(3)   DEFAULT NULL,                -- NULL -> active subscriber
