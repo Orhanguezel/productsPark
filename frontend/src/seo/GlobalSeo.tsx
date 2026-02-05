@@ -25,7 +25,9 @@ export function GlobalSeo() {
   const robotsMeta = nonEmpty(data?.robots_meta);
 
   const faviconUrl = nonEmpty(data?.favicon_url);
-  const appleTouchIcon = nonEmpty(data?.logo_url);
+  const appleTouchIcon = nonEmpty(data?.apple_touch_icon);
+  const pwaIcon192 = nonEmpty(data?.pwa_icon_192);
+  const pwaIcon512 = nonEmpty(data?.pwa_icon_512);
 
   const ogSiteName = nonEmpty(data?.og_site_name);
 
@@ -68,6 +70,8 @@ gtag('config', '${gaId}');`;
     !!robotsMeta ||
     !!faviconUrl ||
     !!appleTouchIcon ||
+    !!pwaIcon192 ||
+    !!pwaIcon512 ||
     !!gsv ||
     !!bsv ||
     !!ogSiteName ||
@@ -88,6 +92,11 @@ gtag('config', '${gaId}');`;
       {/* Icons */}
       {faviconUrl ? <link rel="icon" href={faviconUrl} /> : null}
       {appleTouchIcon ? <link rel="apple-touch-icon" href={appleTouchIcon} /> : null}
+      {pwaIcon192 ? <link rel="icon" type="image/png" sizes="192x192" href={pwaIcon192} /> : null}
+      {pwaIcon512 ? <link rel="icon" type="image/png" sizes="512x512" href={pwaIcon512} /> : null}
+
+      {/* PWA Manifest */}
+      <link rel="manifest" href="/manifest.json" />
 
       {/* Verification */}
       {gsv ? <meta name="google-site-verification" content={gsv} /> : null}

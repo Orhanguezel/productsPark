@@ -168,6 +168,9 @@ type SeoMetaResponse = {
 
   favicon_url: string;
   logo_url: string;
+  apple_touch_icon: string;
+  pwa_icon_192: string;
+  pwa_icon_512: string;
 
   og_site_name: string;
   og_default_image: string;
@@ -197,6 +200,9 @@ const SEO_META_KEYS = [
 
   'favicon_url',
   'logo_url',
+  'apple_touch_icon',
+  'pwa_icon_192',
+  'pwa_icon_512',
 
   'og_site_name',
   'og_default_image',
@@ -257,12 +263,15 @@ export const seoMetaController: RouteHandler = async (_req, reply) => {
     if (!lastUpdated && u) lastUpdated = u;
   }
 
-  // response type’e ekle
+  // response type'e ekle
   type SeoMetaResponse = {
     robots_meta: string;
 
     favicon_url: string;
     logo_url: string;
+    apple_touch_icon: string;
+    pwa_icon_192: string;
+    pwa_icon_512: string;
 
     og_site_name: string;
     og_default_image: string;
@@ -296,6 +305,9 @@ export const seoMetaController: RouteHandler = async (_req, reply) => {
 
     favicon_url: toStr(bag.favicon_url).trim(),
     logo_url: toStr(bag.logo_url).trim(),
+    apple_touch_icon: toStr(bag.apple_touch_icon).trim(),
+    pwa_icon_192: toStr(bag.pwa_icon_192).trim(),
+    pwa_icon_512: toStr(bag.pwa_icon_512).trim(),
 
     og_site_name: toStr(bag.og_site_name).trim(),
     og_default_image: toStr(bag.og_default_image).trim(),
@@ -326,5 +338,83 @@ export const seoMetaController: RouteHandler = async (_req, reply) => {
 
   reply.header('cache-control', 'public, max-age=60');
   return reply.send(res);
+};
+
+/* ------------------------------------------------------------------ */
+/* PWA Manifest Controller */
+/* ------------------------------------------------------------------ */
+
+const PWA_MANIFEST_KEYS = [
+  'site_title',
+  'site_description',
+  'pwa_icon_192',
+  'pwa_icon_512',
+  'pwa_theme_color',
+  'pwa_background_color',
+] as const;
+
+type ManifestIcon = {
+  src: string;
+  sizes: string;
+  type: string;
+  purpose?: string;
+};
+
+export const manifestJsonController: RouteHandler = async (_req, reply) => {
+  const rows = await db
+    .select({
+      key: siteSettings.key,
+      value: siteSettings.value,
+    })
+    .from(siteSettings)
+    .where(inArray(siteSettings.key, PWA_MANIFEST_KEYS as unknown as string[]));
+
+  const bag: Record<string, unknown> = {};
+  for (const r of rows as Array<{ key: string; value: unknown }>) {
+    bag[String(r.key ?? '')] = r.value;
+  }
+
+  const name = toStr(bag.site_title).trim() || 'Dijimins';
+  const description = toStr(bag.site_description).trim() || '';
+  const icon192 = toStr(bag.pwa_icon_192).trim();
+  const icon512 = toStr(bag.pwa_icon_512).trim();
+  const themeColor = toStr(bag.pwa_theme_color).trim() || '#000000';
+  const backgroundColor = toStr(bag.pwa_background_color).trim() || '#ffffff';
+
+  const icons: ManifestIcon[] = [];
+
+  if (icon192) {
+    icons.push({
+      src: icon192,
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any maskable',
+    });
+  }
+
+  if (icon512) {
+    icons.push({
+      src: icon512,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any maskable',
+    });
+  }
+
+  const manifest = {
+    name,
+    short_name: name.length > 12 ? name.substring(0, 12) : name,
+    description,
+    start_url: '/',
+    display: 'standalone',
+    orientation: 'portrait-primary',
+    theme_color: themeColor,
+    background_color: backgroundColor,
+    icons,
+  };
+
+  reply.header('content-type', 'application/manifest+json; charset=utf-8');
+  reply.header('cache-control', 'public, max-age=3600');
+  return reply.send(manifest);
 };
 

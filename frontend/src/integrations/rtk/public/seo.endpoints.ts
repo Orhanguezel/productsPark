@@ -10,6 +10,9 @@ export type SeoMeta = {
 
   favicon_url: string;
   logo_url: string;
+  apple_touch_icon: string;
+  pwa_icon_192: string;
+  pwa_icon_512: string;
 
   og_site_name: string;
   og_default_image: string;

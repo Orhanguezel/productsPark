@@ -1,9 +1,8 @@
 // =============================================================
 // FILE: src/pages/admin/settings/index.tsx
-// FINAL — Settings Page (SEO split: Pages vs Global)
-// - Telegram bool keys persisted as 'true' | 'false' strings
-// - Adds SEO Global/Misc keys (robots, analytics, social, schema, hreflang, sitemap, assets)
-// - İletişim + Sosyal Medya tab'ı eklendi
+// FINAL — Settings Page
+// - Tabs: Genel, İletişim, Marka/Medya, SEO Sayfalar, SEO Global,
+//         SMTP, Entegrasyonlar, Popuplar, Topbar, Footer
 // =============================================================
 'use client';
 
@@ -20,6 +19,7 @@ import SeoGlobalSettingsCard from './components/SeoGlobalSettingsCard';
 import SmtpSettingsCard from './components/SmtpSettingsCard';
 import IntegrationsSettingsCard from './components/IntegrationsSettingsCard';
 import ContactSettingsCard from './components/Contactsettingscard';
+import BrandMediaSettingsCard from './components/Brandmediasettingscard';
 import PopupManagement from '../PopupManagement';
 import TopbarManagement from './components/TopbarManagement';
 import FooterSettingsCard from './components/FooterSettingsCard';
@@ -74,6 +74,11 @@ const defaultSettings = {
   // ---------------- SEO global / misc ----------------
   favicon_url: '',
   logo_url: '',
+  apple_touch_icon: '',
+  pwa_icon_192: '',
+  pwa_icon_512: '',
+  pwa_theme_color: '#000000',
+  pwa_background_color: '#ffffff',
 
   robots_meta: 'index,follow',
   robots_txt_enabled: false,
@@ -315,7 +320,6 @@ export default function SettingsPage() {
   const toPersistable = (key: string, v: unknown): string | number | boolean | null => {
     if (v == null) return null;
 
-    // ✅ Telegram bool + SEO bool => DB'ye her zaman 'true'|'false' yaz
     if (TELEGRAM_BOOL_KEYS.has(key) || SEO_BOOL_KEYS.has(key)) {
       return boolToDb(toBoolish(v));
     }
@@ -333,7 +337,6 @@ export default function SettingsPage() {
   const guessType = (key: string, v: unknown): ValueType | null => {
     if (v == null) return null;
 
-    // ✅ bool key'ler string persist edildiği için type='string'
     if (TELEGRAM_BOOL_KEYS.has(key) || SEO_BOOL_KEYS.has(key)) return 'string';
 
     const t = typeof v;
@@ -453,6 +456,7 @@ export default function SettingsPage() {
         <TabsList className="flex-wrap">
           <TabsTrigger value="general">Genel</TabsTrigger>
           <TabsTrigger value="contact">İletişim</TabsTrigger>
+          <TabsTrigger value="brand">Marka / Medya</TabsTrigger>
 
           <TabsTrigger value="seo-pages">SEO Sayfalar</TabsTrigger>
           <TabsTrigger value="seo-global">SEO Global</TabsTrigger>
@@ -470,6 +474,10 @@ export default function SettingsPage() {
 
         <TabsContent value="contact" className="space-y-4">
           <ContactSettingsCard settings={settings} setSettings={setSettings} />
+        </TabsContent>
+
+        <TabsContent value="brand" className="space-y-4">
+          <BrandMediaSettingsCard settings={settings} setSettings={setSettings} />
         </TabsContent>
 
         <TabsContent value="seo-pages" className="space-y-4">
