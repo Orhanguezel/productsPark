@@ -8,6 +8,8 @@ import {
   Phone,
   MapPin,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useTheme } from 'next-themes';
 
 import {
   useListMenuItemsQuery,
@@ -48,6 +50,8 @@ const DEFAULT_FOOTER_SETTINGS = {
 /* ---------- component ---------- */
 
 const Footer = () => {
+  const { theme } = useTheme();
+
   // RTK: footer menü item'ları (location: footer)
   const { data: menuItemsData = [] } = useListMenuItemsQuery({
     location: 'footer',
@@ -88,6 +92,14 @@ const Footer = () => {
   const { data: phoneSetting } = useGetSiteSettingByKeyQuery('footer_phone');
   const { data: addressSetting } = useGetSiteSettingByKeyQuery('footer_address');
 
+  // RTK: site_settings – logo
+  const { data: lightLogoSetting } = useGetSiteSettingByKeyQuery('light_logo');
+  const { data: darkLogoSetting } = useGetSiteSettingByKeyQuery('dark_logo');
+
+  const logoUrl = theme === 'dark'
+    ? (darkLogoSetting?.value as string) || (lightLogoSetting?.value as string) || ''
+    : (lightLogoSetting?.value as string) || (darkLogoSetting?.value as string) || '';
+
   // RTK: site_settings – contact_email (öncelikli iletişim e-postası)
   const { data: contactEmailSetting } = useGetSiteSettingByKeyQuery('contact_email');
 
@@ -115,16 +127,24 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Company Info */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">
-                  {footerSettings.company_name.charAt(0)}
-                </span>
-              </div>
+            <Link to="/" className="flex items-center gap-2 mb-4">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={footerSettings.company_name}
+                  className="h-8 w-auto object-contain"
+                />
+              ) : (
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <span className="text-primary-foreground font-bold text-sm">
+                    {footerSettings.company_name.charAt(0)}
+                  </span>
+                </div>
+              )}
               <span className="font-bold text-xl text-foreground">
                 {footerSettings.company_name}
               </span>
-            </div>
+            </Link>
             <p className="text-sm text-muted-foreground mb-4">{footerSettings.description}</p>
             <div className="flex gap-3">
               <a

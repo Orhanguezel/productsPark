@@ -26,8 +26,9 @@ INSERT INTO `site_settings` (`id`, `key`, `value`, `created_at`, `updated_at`) V
 -- ------------------------------------------------------------------
 -- GENEL / SITE BİLGİLERİ (SEO/META HARIC)
 -- ------------------------------------------------------------------
-('b2f83dca-5b8e-47ac-94b6-cdc88c9df2a0', 'default_currency', 'TRY',         NOW(3), NOW(3)),
-('654dd48f-ceaa-4d52-bcb8-af771404bacf', 'theme_mode',       'user_choice', NOW(3), NOW(3)),
+('b2f83dca-5b8e-47ac-94b6-cdc88c9df2a0', 'default_currency', 'TRY',            NOW(3), NOW(3)),
+('654dd48f-ceaa-4d52-bcb8-af771404bacf', 'theme_mode',       'user_choice',    NOW(3), NOW(3)),
+('654dd48f-ceaa-4d52-bcb8-af771404bace', 'site_name',        'Dijital Market', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- HOME / ANASAYFA METİN & GÖRSEL

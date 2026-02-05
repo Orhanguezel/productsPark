@@ -60,7 +60,7 @@ export function buildSiteJsonLd(settings?: SiteSettings | null): {
     if (name) setIfMissing(website, 'name', name);
     setIfMissing(website, 'url', origin);
 
-    const pa = (website as any).potentialAction;
+    const pa = (website as JsonLd).potentialAction;
     if (pa && typeof pa === 'object' && !Array.isArray(pa)) {
       const target = (pa as Record<string, unknown>).target;
       if (typeof target === 'string') {
@@ -91,22 +91,22 @@ export function buildProductJsonLd(args: {
 }): JsonLd | null {
   const { product, canonicalUrl } = args;
 
-  const name = nonEmpty((product as any)?.name);
+  const name = nonEmpty((product as Product)?.name);
   if (!name || !nonEmpty(canonicalUrl)) return null;
 
   const siteName = nonEmpty(args.siteName);
 
   // description: meta yoksa short_description; yoksa description html -> text
-  const shortDesc = nonEmpty((product as any)?.short_description);
-  const descHtml = nonEmpty((product as any)?.description);
+  const shortDesc = nonEmpty((product as Product)?.short_description);
+  const descHtml = nonEmpty((product as Product)?.description);
   const descText = descHtml ? nonEmpty(stripHtmlToText(descHtml)) : '';
   const description = shortDesc || (descText ? truncateText(descText, 160) : '');
 
   const imagesRaw = Array.isArray(args.images) ? args.images : [];
   const images = imagesRaw.map((u) => imgSrc(u)).filter(Boolean) as string[];
 
-  const price = (product as any)?.price;
-  const stockQty = (product as any)?.stock_quantity;
+  const price = (product as Product)?.price;
+  const stockQty = (product as Product)?.stock_quantity;
 
   // availability: stok bilgisi varsa kullan; yoksa “InStock” iddiası atmayalım → availability omit etmek daha temiz
   const availability =
@@ -135,10 +135,10 @@ export function buildProductJsonLd(args: {
 
   const reviews = Array.isArray(args.reviews) ? args.reviews : [];
   const valid = reviews.filter(
-    (r) => typeof (r as any)?.rating === 'number' && Number.isFinite((r as any).rating),
+    (r) => typeof (r as ProductReview)?.rating === 'number' && Number.isFinite((r as ProductReview).rating),
   );
   if (valid.length) {
-    const total = valid.reduce((sum, r) => sum + (r as any).rating, 0);
+    const total = valid.reduce((sum, r) => sum + (r as ProductReview).rating, 0);
     out.aggregateRating = {
       '@type': 'AggregateRating',
       ratingValue: Number((total / valid.length).toFixed(1)),
@@ -146,10 +146,10 @@ export function buildProductJsonLd(args: {
     };
 
     out.review = valid.map((r) => {
-      const rating = (r as any).rating as number;
-      const authorName = nonEmpty((r as any)?.customer_name) || 'Müşteri';
-      const reviewDate = nonEmpty((r as any)?.review_date);
-      const comment = nonEmpty((r as any)?.comment);
+      const rating = (r as ProductReview).rating;
+      const authorName = nonEmpty((r as ProductReview)?.customer_name) || 'Müşteri';
+      const reviewDate = nonEmpty((r as ProductReview)?.review_date);
+      const comment = nonEmpty((r as ProductReview)?.comment);
 
       return {
         '@type': 'Review',
@@ -169,8 +169,8 @@ export function buildFaqJsonLd(faqs: ProductFaq[] | null | undefined): JsonLd | 
 
   const mainEntity = faqs
     .map((f) => {
-      const q = nonEmpty((f as any)?.question);
-      const a = nonEmpty((f as any)?.answer);
+      const q = nonEmpty((f as ProductFaq)?.question);
+      const a = nonEmpty((f as ProductFaq)?.answer);
       if (!q || !a) return null;
       return {
         '@type': 'Question',

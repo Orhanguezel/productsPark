@@ -218,7 +218,6 @@ const Admin = () => {
               {activeTab === 'categories' && 'Kategori Yönetimi'}
               {activeTab === 'blog' && 'Blog Yönetimi'}
               {activeTab === 'coupons' && 'Kupon Yönetimi'}
-              {activeTab === 'codes' && 'Aktivasyon Kod Yönetimi'}
               {activeTab === 'tickets' && 'Destek Yönetimi'}
             </h1>
           </header>

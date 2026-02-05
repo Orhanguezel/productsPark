@@ -62,7 +62,6 @@ export type MenuValue =
   | 'deposit-requests'
   | 'payment-requests'
   | 'wallet-transactions'
-  // ✅ NEW
   | 'payments'
   | 'tickets'
   | 'users'
@@ -83,6 +82,7 @@ const menuGroups: {
       { title: 'Dashboard', icon: BarChart3, value: 'dashboard' },
       { title: 'Raporlar', icon: TrendingUp, value: 'reports' },
       { title: 'Ana Sayfa Ayarları', icon: Home, value: 'home-settings' },
+      { title: 'Genel Ayarlar', icon: Settings, value: 'settings' },
     ],
   },
   {
@@ -128,10 +128,7 @@ const menuGroups: {
   },
   {
     label: 'Ayarlar',
-    items: [
-      { title: 'Genel Ayarlar', icon: Settings, value: 'settings' },
-      { title: 'Yedekleme', icon: Database, value: 'backup' },
-    ],
+    items: [{ title: 'Yedekleme', icon: Database, value: 'backup' }],
   },
 ];
 

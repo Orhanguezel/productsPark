@@ -18,6 +18,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 import { useMaintenanceMode } from '@/hooks/useMaintenanceMode';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import { MaintenanceMode } from '@/components/MaintenanceMode';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
@@ -78,6 +79,9 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
 
 const AppContent = () => {
   const { shouldShowMaintenance, loading } = useMaintenanceMode();
+
+  // Dinamik tema renklerini uygula
+  useThemeColors();
 
   if (loading) return <LoadingSpinner />;
   if (shouldShowMaintenance) return <MaintenanceMode />;

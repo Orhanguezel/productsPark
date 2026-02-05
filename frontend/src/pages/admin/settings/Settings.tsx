@@ -1,8 +1,8 @@
 // =============================================================
 // FILE: src/pages/admin/settings/index.tsx
 // FINAL — Settings Page
-// - Tabs: Genel, İletişim, Marka/Medya, SEO Sayfalar, SEO Global,
-//         SMTP, Entegrasyonlar, Popuplar, Topbar, Footer
+// - Tabs: Genel, İletişim, Marka/Medya, Tema Renkleri, SEO Sayfalar,
+//         SEO Global, SMTP, Entegrasyonlar, Popuplar, Topbar, Footer
 // =============================================================
 'use client';
 
@@ -20,6 +20,7 @@ import SmtpSettingsCard from './components/SmtpSettingsCard';
 import IntegrationsSettingsCard from './components/IntegrationsSettingsCard';
 import ContactSettingsCard from './components/Contactsettingscard';
 import BrandMediaSettingsCard from './components/Brandmediasettingscard';
+import ThemeColorsSettingsCard from './components/ThemeColorsSettingsCard';
 import PopupManagement from '../PopupManagement';
 import TopbarManagement from './components/TopbarManagement';
 import FooterSettingsCard from './components/FooterSettingsCard';
@@ -196,6 +197,34 @@ const defaultSettings = {
   footer_email: '',
   footer_phone: '',
   footer_address: '',
+
+  // Theme Colors & Styling
+  theme_colors_enabled: 'true',
+  theme_color_preset: 'green',
+  theme_primary_hsl: '142 76% 36%',
+  theme_primary_glow_hsl: '142 71% 45%',
+  theme_accent_hsl: '142 76% 36%',
+  theme_success_hsl: '142 76% 36%',
+  theme_destructive_hsl: '0 84% 60%',
+  theme_secondary_hsl: '220 14% 96%',
+  theme_muted_hsl: '210 20% 96%',
+  theme_muted_foreground_hsl: '215 16% 47%',
+  theme_font_preset: 'inter',
+  theme_font_weight_preset: 'normal',
+  theme_letter_spacing_preset: 'normal',
+  theme_radius_preset: 'lg',
+  theme_shadow_preset: 'normal',
+  theme_background_tone_preset: 'neutral',
+  theme_card_style_preset: 'default',
+  theme_border_style_preset: 'normal',
+  theme_animation_speed_preset: 'normal',
+  theme_navy_hsl: '222 47% 11%',
+  theme_navy_light_hsl: '220 26% 14%',
+  theme_chart_palette_preset: 'default',
+  theme_dark_background_hsl: '222 47% 11%',
+  theme_dark_card_hsl: '220 26% 14%',
+  theme_dark_muted_hsl: '217 33% 17%',
+  theme_dark_border_hsl: '217 33% 17%',
 };
 
 const SEO_BOOL_KEYS = new Set<string>([
@@ -457,6 +486,7 @@ export default function SettingsPage() {
           <TabsTrigger value="general">Genel</TabsTrigger>
           <TabsTrigger value="contact">İletişim</TabsTrigger>
           <TabsTrigger value="brand">Marka / Medya</TabsTrigger>
+          <TabsTrigger value="theme-colors">Tema Renkleri</TabsTrigger>
 
           <TabsTrigger value="seo-pages">SEO Sayfalar</TabsTrigger>
           <TabsTrigger value="seo-global">SEO Global</TabsTrigger>
@@ -478,6 +508,10 @@ export default function SettingsPage() {
 
         <TabsContent value="brand" className="space-y-4">
           <BrandMediaSettingsCard settings={settings} setSettings={setSettings} />
+        </TabsContent>
+
+        <TabsContent value="theme-colors" className="space-y-4">
+          <ThemeColorsSettingsCard settings={settings} setSettings={setSettings} />
         </TabsContent>
 
         <TabsContent value="seo-pages" className="space-y-4">

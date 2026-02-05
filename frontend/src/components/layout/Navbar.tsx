@@ -44,6 +44,7 @@ import {
   useListMenuItemsQuery,
   useGetSiteSettingByKeyQuery,
 } from '@/integrations/hooks';
+import { Link } from 'react-router-dom';
 
 /** ---- Icon map'i typesafe ---- */
 const ICONS = { Home, ShoppingBag, Grid3x3, Info, Mail, BookOpen, LifeBuoy } as const;
@@ -82,6 +83,16 @@ const Navbar = () => {
   const menuItems = menuItemsData ?? [];
 
   const { data: themeSetting } = useGetSiteSettingByKeyQuery('theme_mode');
+
+  // Logo ve site adı ayarları
+  const { data: lightLogoSetting } = useGetSiteSettingByKeyQuery('light_logo');
+  const { data: darkLogoSetting } = useGetSiteSettingByKeyQuery('dark_logo');
+  const { data: siteNameSetting } = useGetSiteSettingByKeyQuery('site_name');
+
+  const logoUrl = theme === 'dark'
+    ? (darkLogoSetting?.value as string) || (lightLogoSetting?.value as string) || ''
+    : (lightLogoSetting?.value as string) || (darkLogoSetting?.value as string) || '';
+  const siteName = (siteNameSetting?.value as string) || 'Dijital Market';
 
   useEffect(() => {
     if (!themeSetting?.value) return;
@@ -140,12 +151,22 @@ const Navbar = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">D</span>
-              </div>
-              <span className="font-bold text-xl">Dijital Market</span>
-            </div>
+            <Link to="/" className="flex items-center gap-2">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={siteName}
+                  className="h-8 w-auto object-contain"
+                />
+              ) : (
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <span className="text-primary-foreground font-bold text-sm">
+                    {siteName.charAt(0)}
+                  </span>
+                </div>
+              )}
+              <span className="font-bold text-xl">{siteName}</span>
+            </Link>
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-6">
