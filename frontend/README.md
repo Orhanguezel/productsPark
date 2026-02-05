@@ -53,6 +53,9 @@ src/
 └── routes/           # Route tanımları
 ```
 
+
+
+
 ## Scripts
 
 | Script | Açıklama |
@@ -70,6 +73,8 @@ src/
 ```env
 VITE_API_URL=http://localhost:3000
 ```
+
+
 
 ## Backend
 
