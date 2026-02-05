@@ -3,6 +3,7 @@
 // FINAL — Settings Page (SEO split: Pages vs Global)
 // - Telegram bool keys persisted as 'true' | 'false' strings
 // - Adds SEO Global/Misc keys (robots, analytics, social, schema, hreflang, sitemap, assets)
+// - İletişim + Sosyal Medya tab'ı eklendi
 // =============================================================
 'use client';
 
@@ -18,6 +19,7 @@ import SeoSettingsCard from './components/SeoSettingsCard';
 import SeoGlobalSettingsCard from './components/SeoGlobalSettingsCard';
 import SmtpSettingsCard from './components/SmtpSettingsCard';
 import IntegrationsSettingsCard from './components/IntegrationsSettingsCard';
+import ContactSettingsCard from './components/Contactsettingscard';
 import PopupManagement from '../PopupManagement';
 import TopbarManagement from './components/TopbarManagement';
 import FooterSettingsCard from './components/FooterSettingsCard';
@@ -153,6 +155,8 @@ const defaultSettings = {
   twitter_url: '',
   instagram_url: '',
   linkedin_url: '',
+  youtube_url: '',
+  telegram_channel_url: '',
   discord_webhook_url: '',
 
   // Google OAuth
@@ -311,7 +315,7 @@ export default function SettingsPage() {
   const toPersistable = (key: string, v: unknown): string | number | boolean | null => {
     if (v == null) return null;
 
-    // ✅ Telegram bool + SEO bool => DB’ye her zaman 'true'|'false' yaz
+    // ✅ Telegram bool + SEO bool => DB'ye her zaman 'true'|'false' yaz
     if (TELEGRAM_BOOL_KEYS.has(key) || SEO_BOOL_KEYS.has(key)) {
       return boolToDb(toBoolish(v));
     }
@@ -329,7 +333,7 @@ export default function SettingsPage() {
   const guessType = (key: string, v: unknown): ValueType | null => {
     if (v == null) return null;
 
-    // ✅ bool key’ler string persist edildiği için type='string'
+    // ✅ bool key'ler string persist edildiği için type='string'
     if (TELEGRAM_BOOL_KEYS.has(key) || SEO_BOOL_KEYS.has(key)) return 'string';
 
     const t = typeof v;
@@ -353,7 +357,12 @@ export default function SettingsPage() {
     };
 
     const ok_url = pickExisting(['ok_url', 'okUrl', 'merchant_ok_url', 'MERCHANT_OK_URL']);
-    const fail_url = pickExisting(['fail_url', 'failUrl', 'merchant_fail_url', 'MERCHANT_FAIL_URL']);
+    const fail_url = pickExisting([
+      'fail_url',
+      'failUrl',
+      'merchant_fail_url',
+      'MERCHANT_FAIL_URL',
+    ]);
     const notification_url = pickExisting([
       'notification_url',
       'notificationUrl',
@@ -441,8 +450,9 @@ export default function SettingsPage() {
   return (
     <AdminLayout title="Ayarlar">
       <Tabs defaultValue="general" className="w-full">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="general">Genel</TabsTrigger>
+          <TabsTrigger value="contact">İletişim</TabsTrigger>
 
           <TabsTrigger value="seo-pages">SEO Sayfalar</TabsTrigger>
           <TabsTrigger value="seo-global">SEO Global</TabsTrigger>
@@ -456,6 +466,10 @@ export default function SettingsPage() {
 
         <TabsContent value="general" className="space-y-4">
           <GeneralSettingsCard settings={settings} setSettings={setSettings} />
+        </TabsContent>
+
+        <TabsContent value="contact" className="space-y-4">
+          <ContactSettingsCard settings={settings} setSettings={setSettings} />
         </TabsContent>
 
         <TabsContent value="seo-pages" className="space-y-4">

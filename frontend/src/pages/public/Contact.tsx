@@ -4,6 +4,7 @@
 // - uses: useCreateContactMutation (public contacts)
 // - uses: useSendEmailMutation (functions -> /functions/send-email)
 // - uses: SendEmailBody type
+// - İletişim bilgileri artık site_settings (DB) üzerinden çekiliyor
 // =============================================================
 
 import * as React from 'react';
@@ -51,6 +52,14 @@ const toTelHref = (raw: string): string => {
   return `tel:${s.replace(/\s+/g, '')}`;
 };
 
+// Yardımcı: site_settings value'sini string olarak al
+const getSettingStr = (data: { value?: unknown } | null | undefined): string | null => {
+  if (!data) return null;
+  if (typeof data.value === 'string' && data.value.trim() !== '') return data.value.trim();
+  if (typeof data.value === 'number') return String(data.value);
+  return null;
+};
+
 const Contact: React.FC = () => {
   const { settings } = useSeoSettings();
 
@@ -69,30 +78,34 @@ const Contact: React.FC = () => {
   const [sendEmail, { isLoading: sendingMail }] = useSendEmailMutation();
   const loading = creating || sendingMail;
 
-  // WhatsApp numarasını site_settings'den çek
+  // -------------------- Site Settings (DB) --------------------
+  // WhatsApp numarası
   const { data: whatsappSetting } = useGetSiteSettingByKeyQuery('whatsapp_number');
+  const whatsappNumber = getSettingStr(whatsappSetting) ?? '905555555555';
 
-  const whatsappNumber =
-    typeof whatsappSetting?.value === 'string' || typeof whatsappSetting?.value === 'number'
-      ? String(whatsappSetting.value)
-      : '905555555555';
-
-  // Admin iletişim mail adresini site_settings'den çek
+  // Admin iletişim mail adresi (form gönderiminde TO adresi)
   const { data: contactEmailSetting } = useGetSiteSettingByKeyQuery('contact_email');
+  // Footer email (fallback)
+  const { data: footerEmailSetting } = useGetSiteSettingByKeyQuery('footer_email');
 
   const defaultContactEmail = 'destek@dijitalmarket.com';
-
   const adminEmailTo =
-    typeof contactEmailSetting?.value === 'string' || typeof contactEmailSetting?.value === 'number'
-      ? String(contactEmailSetting.value)
-      : defaultContactEmail;
+    getSettingStr(contactEmailSetting) ?? getSettingStr(footerEmailSetting) ?? defaultContactEmail;
 
-  // Görünen iletişim bilgileri (istersen bunları da site_settings'den alırız)
+  // Sayfada gösterilen e-posta
   const contactEmail = adminEmailTo;
-  const contactPhoneDisplay = '+90 (555) 555 55 55';
-  const contactPhoneTel = '+90 555 555 55 55';
-  const contactAddress = 'İstanbul, Türkiye';
-  const telHref = toTelHref(contactPhoneTel);
+
+  // Telefon (footer_phone'dan)
+  const { data: footerPhoneSetting } = useGetSiteSettingByKeyQuery('footer_phone');
+  const contactPhoneDisplay = getSettingStr(footerPhoneSetting) ?? '+90 555 555 55 55';
+  const telHref = toTelHref(contactPhoneDisplay);
+
+  // Adres (footer_address'den) — \n varsa virgülle değiştir
+  const { data: footerAddressSetting } = useGetSiteSettingByKeyQuery('footer_address');
+  const contactAddress = (getSettingStr(footerAddressSetting) ?? 'İstanbul, Türkiye').replace(
+    /\\n|\n/g,
+    ', ',
+  );
 
   // -------------------- Handlers --------------------
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -121,7 +134,7 @@ const Contact: React.FC = () => {
         message: validated.message.trim(),
       };
 
-      // honeypot: boşsa null gönder (BE’ye göre opsiyonel)
+      // honeypot: boşsa null gönder (BE'ye göre opsiyonel)
       const websiteTrim = formData.website.trim();
       const payload: ContactCreateInput = websiteTrim
         ? { ...basePayload, website: websiteTrim }
@@ -131,7 +144,6 @@ const Contact: React.FC = () => {
       await createContact(payload).unwrap();
 
       // 2) Admin'e mail gönder (send-email)
-      // Not: mail başarısız olursa, kayıt başarılı olduğu için kullanıcıya yine success göstereceğiz.
       try {
         if (adminEmailTo) {
           const siteName = (settings.site_title || 'Dijital Market').toString();
@@ -154,7 +166,6 @@ const Contact: React.FC = () => {
 
           const text = textLines.join('\n');
 
-          // Basit HTML; inline style kullanmak burada sorun değil (email template)
           const html = `
             <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#111827;line-height:1.5;">
               <h2 style="font-size:18px;margin-bottom:8px;">Yeni İletişim Mesajı</h2>
@@ -199,7 +210,7 @@ const Contact: React.FC = () => {
         return;
       }
 
-      // RTK unwrap error (tip toleransı)
+      // RTK unwrap error
       if (typeof error === 'object' && error !== null && 'data' in error) {
         const anyErr = error as { data?: any };
         const msg =
