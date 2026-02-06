@@ -42,7 +42,6 @@ jobs:
           remote_host: ${{ secrets.VPS_HOST }}
           remote_user: ${{ secrets.VPS_USER }}
           remote_key: ${{ secrets.VPS_KEY }}
-          strict_hostkeys_checking: false
 
       # ----------------------------
       # Frontend (React SPA) — Bun build + deploy build output only
@@ -69,7 +68,6 @@ jobs:
           remote_host: ${{ secrets.VPS_HOST }}
           remote_user: ${{ secrets.VPS_USER }}
           remote_key: ${{ secrets.VPS_KEY }}
-          strict_hostkeys_checking: false
 
       # ----------------------------
       # PM2 reload (backend only) + bind check

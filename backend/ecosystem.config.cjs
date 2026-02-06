@@ -31,7 +31,6 @@ module.exports = {
 
         // Puppeteer/Chromium
         PUPPETEER_EXECUTABLE_PATH: '/snap/bin/chromium',
-        PUPPETEER_NO_SANDBOX: '1',
       },
 
       out_file: '/root/.pm2/logs/productsPark-backend.out.log',
