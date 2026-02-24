@@ -111,9 +111,8 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return;
-            if (id.includes('react-dom') || id.includes('react-router') || id.includes('/react/')) return 'vendor-react';
+            if (id.includes('react-dom') || id.includes('react-router') || id.includes('/react/') || id.includes('@radix-ui')) return 'vendor-react';
             if (id.includes('@reduxjs') || id.includes('react-redux') || id.includes('@tanstack')) return 'vendor-state';
-            if (id.includes('@radix-ui')) return 'vendor-radix';
             if (id.includes('lucide-react')) return 'vendor-icons';
             return 'vendor';
           },
