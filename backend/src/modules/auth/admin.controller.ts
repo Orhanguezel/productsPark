@@ -153,7 +153,7 @@ export function makeAdminController(_app: FastifyInstance) {
             roles.map((r: string) => ({
               id: randomUUID(),
               user_id: id,
-              role: r as 'user' | 'admin' | 'moderator' | 'reseller' | 'provider',
+              role: r as 'user' | 'admin' | 'moderator',
             })),
           );
         }
