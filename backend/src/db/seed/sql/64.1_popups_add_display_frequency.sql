@@ -4,11 +4,20 @@
 -- =============================================================
 SET NAMES utf8mb4;
 
--- Kolon yoksa ekle (idempotent)
-ALTER TABLE `popups`
-  ADD COLUMN IF NOT EXISTS `display_frequency` VARCHAR(16) NOT NULL DEFAULT 'always'
-    COMMENT 'always|once|daily|weekly'
-    AFTER `show_once`;
+-- Kolon yoksa ekle (idempotent — MySQL 8.x uyumlu)
+SET @col_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME   = 'popups'
+    AND COLUMN_NAME  = 'display_frequency'
+);
+SET @sql = IF(@col_exists = 0,
+  "ALTER TABLE `popups` ADD COLUMN `display_frequency` VARCHAR(16) NOT NULL DEFAULT 'always' COMMENT 'always|once|daily|weekly' AFTER `show_once`",
+  'SELECT 1'
+);
+PREPARE _stmt FROM @sql;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
 
 -- Mevcut kayıtları show_once'a göre güncelle
 UPDATE `popups`
