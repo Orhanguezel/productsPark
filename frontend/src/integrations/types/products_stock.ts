@@ -14,7 +14,7 @@ import { isObject, toStr, toBool } from '@/integrations/types';
 const trimStr = (v: unknown): string => toStr(v).trim();
 
 const asBoolLike = (v: unknown): BoolLike => {
-  if (v === null || typeof v === 'undefined') return v;
+  if (v === null || typeof v === 'undefined') return v as BoolLike;
   if (typeof v === 'boolean') return v;
   if (v === 0 || v === 1) return v;
 

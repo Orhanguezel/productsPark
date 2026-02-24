@@ -24,18 +24,17 @@ const BASE = '/admin/users';
 export const authAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     /** GET /admin/users */
-    adminList: b.query<AdminUserView[], AdminUsersListParams | void>({
+    adminList: b.query<AdminUserView[], AdminUsersListParams | undefined>({
       query: (params) => {
-        const p = params ?? {};
         const sp = new URLSearchParams();
 
-        if (p.q) sp.set('q', p.q);
-        if (p.role) sp.set('role', p.role);
-        if (typeof p.is_active === 'boolean') sp.set('is_active', p.is_active ? '1' : '0');
-        if (p.limit != null) sp.set('limit', String(p.limit));
-        if (p.offset != null) sp.set('offset', String(p.offset));
-        if (p.sort) sp.set('sort', p.sort);
-        if (p.order) sp.set('order', p.order);
+        if (params?.q) sp.set('q', params.q);
+        if (params?.role) sp.set('role', params.role);
+        if (typeof params?.is_active === 'boolean') sp.set('is_active', params.is_active ? '1' : '0');
+        if (params?.limit != null) sp.set('limit', String(params.limit));
+        if (params?.offset != null) sp.set('offset', String(params.offset));
+        if (params?.sort) sp.set('sort', params.sort);
+        if (params?.order) sp.set('order', params.order);
 
         const qs = sp.toString();
         return { url: qs ? `${BASE}?${qs}` : BASE, method: 'GET' };

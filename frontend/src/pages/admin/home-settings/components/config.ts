@@ -29,7 +29,6 @@ export interface HomeSettings {
 
   home_faq_title: string;
   home_faq_subtitle: string;
-  home_faq_items: Array<{ question: string; answer: string }>;
   home_faq_cta_title: string;
   home_faq_cta_subtitle: string;
   home_faq_cta_button: string;
@@ -78,38 +77,6 @@ export const defaultHomeSettings: HomeSettings = {
   home_faq_title: "Sıkça Sorulan Sorular",
   home_faq_subtitle:
     "Merak ettiklerinizin cevaplarını burada bulabilirsiniz",
-  home_faq_items: [
-    {
-      question: "Ürünler ne kadar sürede teslim edilir?",
-      answer:
-        "Ödemeniz onaylandıktan sonra ürününüz otomatik olarak anında e-posta adresinize ve üye panelinize teslim edilir. Ortalama teslimat süresi 1-2 dakikadır.",
-    },
-    {
-      question: "Hangi ödeme yöntemlerini kabul ediyorsunuz?",
-      answer:
-        "Kredi kartı, banka havalesi, Papara, PayTR, Shopier ve kripto para (Coinbase Commerce) ile ödeme yapabilirsiniz. Tüm ödemeler SSL sertifikası ile güvence altındadır.",
-    },
-    {
-      question: "Ürün çalışmazsa ne olur?",
-      answer:
-        "Satın aldığınız ürün çalışmaz veya hatalı ise 7 gün içinde destek ekibimizle iletişime geçerek değişim veya iade talebinde bulunabilirsiniz. Tüm ürünlerimiz garanti kapsamındadır.",
-    },
-    {
-      question: "Toplu alımlarda indirim var mı?",
-      answer:
-        "Evet! 5+ ürün alımlarında %5, 10+ ürün alımlarında %10 indirim otomatik olarak uygulanır. Daha fazla bilgi için müşteri hizmetlerimizle iletişime geçebilirsiniz.",
-    },
-    {
-      question: "Lisanslar kaç cihazda kullanılabilir?",
-      answer:
-        "Her ürünün kullanım koşulları farklıdır. Ürün detay sayfasında lisans türü ve kaç cihazda kullanılabileceği belirtilmiştir. Tek kullanımlık, çoklu kullanım ve süreli lisanslar mevcuttur.",
-    },
-    {
-      question: "Müşteri desteği nasıl alırım?",
-      answer:
-        "7/24 canlı destek, e-posta, WhatsApp ve Telegram üzerinden bizimle iletişime geçebilirsiniz. Üye panelinizden destek talebi oluşturabilir veya SSS bölümünü inceleyebilirsiniz.",
-    },
-  ],
   home_faq_cta_title: "Başka sorunuz mu var?",
   home_faq_cta_subtitle: "Destek ekibimiz size yardımcı olmak için hazır",
   home_faq_cta_button: "Bize Ulaşın →",

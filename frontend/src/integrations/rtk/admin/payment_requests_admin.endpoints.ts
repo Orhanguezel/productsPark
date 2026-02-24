@@ -41,9 +41,10 @@ export const paymentRequestsAdminApi = extendedApi.injectEndpoints({
           { type: 'PaymentRequests', id: 'ADMIN_LIST' },
         ];
 
-        if (args?.user_id) tags.push({ type: 'PaymentRequests', id: `ADMIN_USER_${args.user_id}` });
-        if (args?.order_id)
-          tags.push({ type: 'PaymentRequests', id: `ADMIN_ORDER_${args.order_id}` });
+        const tArgs = args as ListAdminParams | undefined;
+        if (tArgs?.user_id) tags.push({ type: 'PaymentRequests', id: `ADMIN_USER_${tArgs.user_id}` });
+        if (tArgs?.order_id)
+          tags.push({ type: 'PaymentRequests', id: `ADMIN_ORDER_${tArgs.order_id}` });
 
         if (result?.length) {
           for (const r of result) tags.push({ type: 'PaymentRequest', id: r.id });

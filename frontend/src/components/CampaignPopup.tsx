@@ -64,18 +64,14 @@ export const CampaignPopup = () => {
 
         if (popup.display_frequency === "always") {
           canShow = true;
-        } else if (popup.display_frequency === "once" && !lastSeen) {
-          canShow = true;
-        } else if (popup.display_frequency === "daily" && lastSeen) {
-          const daysSince =
-            (Date.now() - parseInt(lastSeen, 10)) /
-            (1000 * 60 * 60 * 24);
-          canShow = daysSince >= 1;
-        } else if (popup.display_frequency === "weekly" && lastSeen) {
-          const daysSince =
-            (Date.now() - parseInt(lastSeen, 10)) /
-            (1000 * 60 * 60 * 24);
-          canShow = daysSince >= 7;
+        } else if (popup.display_frequency === "once") {
+          canShow = !lastSeen;
+        } else if (popup.display_frequency === "daily") {
+          canShow = !lastSeen ||
+            (Date.now() - parseInt(lastSeen, 10)) / (1000 * 60 * 60 * 24) >= 1;
+        } else if (popup.display_frequency === "weekly") {
+          canShow = !lastSeen ||
+            (Date.now() - parseInt(lastSeen, 10)) / (1000 * 60 * 60 * 24) >= 7;
         }
 
         if (canShow) {

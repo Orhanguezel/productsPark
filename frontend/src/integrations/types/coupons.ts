@@ -27,6 +27,7 @@ export type Coupon = {
 
   is_active: boolean;
   max_uses: number | null;
+  per_user_limit: number | null;
   used_count: number | null;
 
   valid_from: string | null; // ISO
@@ -52,6 +53,7 @@ export type CouponInputBase = {
   min_purchase?: number | null;
   max_discount?: number | null;
   usage_limit?: number | null;
+  per_user_limit?: number | null;
 
   valid_from?: string | null; // ISO
   valid_until?: string | null; // ISO
@@ -199,6 +201,10 @@ export function normalizeCoupon(row: unknown): Coupon {
 
     is_active: toBool01((r as Record<string, unknown>).is_active),
     max_uses: maxUsesRaw == null ? null : toNum(maxUsesRaw, 0),
+    per_user_limit:
+      (r as Record<string, unknown>).per_user_limit == null
+        ? null
+        : toNum((r as Record<string, unknown>).per_user_limit, 0),
     used_count:
       (r as Record<string, unknown>).used_count == null
         ? null
@@ -282,6 +288,9 @@ export function toCouponApiBody(
 
   if (typeof body.usage_limit !== 'undefined')
     out.usage_limit = body.usage_limit == null ? null : toNum(body.usage_limit, 0);
+
+  if (typeof body.per_user_limit !== 'undefined')
+    out.per_user_limit = body.per_user_limit == null ? null : toNum(body.per_user_limit, 0);
 
   if (typeof body.valid_from !== 'undefined') out.valid_from = body.valid_from ?? null;
   if (typeof body.valid_until !== 'undefined') out.valid_until = body.valid_until ?? null;

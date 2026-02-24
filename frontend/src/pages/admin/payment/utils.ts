@@ -198,14 +198,26 @@ export function providerToForm(p: PaymentProviderAdmin | null): ProviderForm {
   const merchant_id = toTrimStr(sec.merchant_id);
   const merchant_key = toTrimStr(sec.merchant_key);
   const merchant_salt = toTrimStr(sec.merchant_salt);
+  // ok_url / fail_url: PayTR uses ok_url, Papara uses redirect_url — check both
+  const ok_url = toTrimStr(pub.redirect_url ?? pub.ok_url ?? pub.okUrl);
+  const fail_url = toTrimStr(pub.fail_url ?? pub.failUrl);
 
-  // Shopier
-  const client_id = toTrimStr(sec.client_id);
-  const client_secret = toTrimStr(sec.client_secret);
+  // Shopier (gerçek alanlar: api_key, secret, website_index)
+  const shopier_api_key = toTrimStr(sec.api_key);
+  const shopier_secret = toTrimStr(sec.secret);
+  const website_index = toNum(sec.website_index, 1);
   const commission = toNum(pub.commission, 0);
+
+  // Stripe
+  const secret_key = toTrimStr(sec.secret_key);
+  const webhook_secret = toTrimStr(sec.webhook_secret);
+  const mode = toTrimStr(pub.mode) || 'test';
 
   // Papara
   const api_key = toTrimStr(sec.api_key);
+
+  // Shared
+  const logo_url = toTrimStr(p.logo_url) || undefined;
 
   return {
     enabled,
@@ -217,12 +229,21 @@ export function providerToForm(p: PaymentProviderAdmin | null): ProviderForm {
     merchant_id,
     merchant_key,
     merchant_salt,
+    ok_url,
+    fail_url,
 
-    client_id,
-    client_secret,
+    shopier_api_key,
+    shopier_secret,
+    website_index,
     commission,
 
+    secret_key,
+    webhook_secret,
+    mode,
+
     api_key,
+
+    logo_url,
   };
 }
 
@@ -241,8 +262,9 @@ export function buildPaytrBody(
     return undefined;
   };
 
-  const ok_url = pickExisting(['ok_url', 'okUrl', 'merchant_ok_url', 'MERCHANT_OK_URL']);
-  const fail_url = pickExisting(['fail_url', 'failUrl', 'merchant_fail_url', 'MERCHANT_FAIL_URL']);
+  // Form değeri varsa onu kullan, yoksa mevcut config'den al
+  const ok_url = toTrimStr(f.ok_url) || pickExisting(['ok_url', 'okUrl', 'merchant_ok_url', 'MERCHANT_OK_URL']);
+  const fail_url = toTrimStr(f.fail_url) || pickExisting(['fail_url', 'failUrl', 'merchant_fail_url', 'MERCHANT_FAIL_URL']);
   const notification_url = pickExisting([
     'notification_url',
     'notificationUrl',
@@ -264,6 +286,7 @@ export function buildPaytrBody(
 
   return {
     is_active: f.enabled ? 1 : 0,
+    logo_url: toTrimStr(f.logo_url) || null,
     public_config: {
       enabled: f.enabled,
       test_mode: f.test_mode !== false,
@@ -283,13 +306,15 @@ export function buildPaytrBody(
 
 export function buildShopierBody(f: ProviderForm): UpsertPaymentProviderAdminBody {
   const secret = {
-    client_id: toTrimStr(f.client_id),
-    client_secret: toTrimStr(f.client_secret),
+    api_key: toTrimStr(f.shopier_api_key),
+    secret: toTrimStr(f.shopier_secret),
+    website_index: toNum(f.website_index, 1),
   };
-  const hasSecret = Object.values(secret).some((v) => typeof v === 'string' && v.length > 0);
+  const hasSecret = toTrimStr(f.shopier_api_key).length > 0 || toTrimStr(f.shopier_secret).length > 0;
 
   return {
     is_active: f.enabled ? 1 : 0,
+    logo_url: toTrimStr(f.logo_url) || null,
     public_config: {
       enabled: f.enabled,
       commission: toNum(f.commission, 0),
@@ -298,7 +323,67 @@ export function buildShopierBody(f: ProviderForm): UpsertPaymentProviderAdminBod
   };
 }
 
-export function buildPaparaBody(f: ProviderForm): UpsertPaymentProviderAdminBody {
+export function buildStripeBody(
+  f: ProviderForm,
+  existingPublic?: Record<string, unknown> | null,
+): UpsertPaymentProviderAdminBody {
+  const existing = isPlainObject(existingPublic) ? existingPublic : {};
+
+  const pickExisting = (keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = (existing as Record<string, unknown>)[k];
+      const s = toTrimStr(v);
+      if (s) return s;
+    }
+    return undefined;
+  };
+
+  const ok_url = pickExisting(['ok_url', 'okUrl']);
+  const fail_url = pickExisting(['fail_url', 'failUrl']);
+  const notification_url = pickExisting(['notification_url', 'notificationUrl']);
+
+  const secret = {
+    secret_key: toTrimStr(f.secret_key),
+    webhook_secret: toTrimStr(f.webhook_secret),
+  };
+  const hasSecret = toTrimStr(f.secret_key).length > 0 || toTrimStr(f.webhook_secret).length > 0;
+
+  return {
+    is_active: f.enabled ? 1 : 0,
+    logo_url: toTrimStr(f.logo_url) || null,
+    public_config: {
+      enabled: f.enabled,
+      mode: (f.mode === 'live' ? 'live' : 'test'),
+      commission: toNum(f.commission, 0),
+      type: 'card',
+      ...(ok_url ? { ok_url } : {}),
+      ...(fail_url ? { fail_url } : {}),
+      ...(notification_url ? { notification_url } : {}),
+    },
+    ...(hasSecret ? { secret_config: secret } : {}),
+  };
+}
+
+export function buildPaparaBody(
+  f: ProviderForm,
+  existingPublic?: Record<string, unknown> | null,
+): UpsertPaymentProviderAdminBody {
+  const existing = isPlainObject(existingPublic) ? existingPublic : {};
+
+  const pickExisting = (keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = (existing as Record<string, unknown>)[k];
+      const s = toTrimStr(v);
+      if (s) return s;
+    }
+    return undefined;
+  };
+
+  const notification_url = pickExisting(['notification_url', 'notificationUrl']);
+  const redirect_url = toTrimStr(f.ok_url) || pickExisting(['redirect_url', 'redirectUrl', 'ok_url']);
+  const fail_url = toTrimStr(f.fail_url) || pickExisting(['fail_url', 'failUrl']);
+  const test_mode = f.test_mode !== undefined ? Boolean(f.test_mode) : false;
+
   const secret = {
     api_key: toTrimStr(f.api_key),
   };
@@ -306,8 +391,15 @@ export function buildPaparaBody(f: ProviderForm): UpsertPaymentProviderAdminBody
 
   return {
     is_active: f.enabled ? 1 : 0,
+    logo_url: toTrimStr(f.logo_url) || null,
     public_config: {
       enabled: f.enabled,
+      type: 'wallet',
+      commission: toNum(f.commission, 0),
+      test_mode,
+      ...(notification_url ? { notification_url } : {}),
+      ...(redirect_url ? { redirect_url } : {}),
+      ...(fail_url ? { fail_url } : {}),
     },
     ...(hasSecret ? { secret_config: secret } : {}),
   };

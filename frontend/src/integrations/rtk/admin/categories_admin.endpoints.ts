@@ -18,7 +18,7 @@ export const categoriesAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCategoriesAdmin: b.query<Category[], CategoryListParams | void>({
       query: (params) => {
-        const qs = toCategoriesQuery(params ?? undefined);
+        const qs = toCategoriesQuery(params as CategoryListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       transformResponse: (res: unknown): Category[] => normalizeCategoryList(res),

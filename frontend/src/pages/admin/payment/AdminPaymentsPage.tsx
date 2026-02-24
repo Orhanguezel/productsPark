@@ -28,7 +28,10 @@ import {
   useUpdatePaymentProviderAdminMutation,
   useGetPaymentProviderByKeyQuery,
   useGetPaymentProviderAdminByIdQuery,
+  useCreateAssetAdminMutation,
 } from '@/integrations/hooks';
+
+import { CoverImageSection } from '@/components/common/CoverImageSection';
 
 import type {
   PaymentProviderAdmin,
@@ -38,7 +41,7 @@ import type {
   PaymentMethods,
 } from '@/integrations/types';
 
-import { PAYTR_KEY, SHOPIER_KEY, PAPARA_KEY, PROVIDER_DISPLAY_NAMES } from '@/integrations/types';
+import { PAYTR_KEY, SHOPIER_KEY, PAPARA_KEY, STRIPE_KEY, PROVIDER_DISPLAY_NAMES } from '@/integrations/types';
 
 import { asBoolLike, toBool, toNum } from '@/integrations/types/common';
 
@@ -47,6 +50,7 @@ import {
   buildPaytrBody,
   buildPaparaBody,
   buildShopierBody,
+  buildStripeBody,
   buildSitePaymentSettingsUpserts,
   findProvider as findProviderUtil,
   providerToForm,
@@ -71,6 +75,7 @@ export default function AdminPaymentsPage() {
 
   const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
   const [bankAccountInfo, setBankAccountInfo] = useState('');
+  const [bankTransferCommission, setBankTransferCommission] = useState(0);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethods>({ wallet_enabled: true });
 
   useEffect(() => {
@@ -98,6 +103,22 @@ export default function AdminPaymentsPage() {
       });
 
       await bulkUpsert({ items }).unwrap();
+
+      // Also update bank_transfer provider commission
+      const btProvider = findProviderUtil(providers as PaymentProviderAdmin[], 'bank_transfer');
+      if (btProvider?.id) {
+        const existingPub = (btProvider.public_config ?? {}) as Record<string, unknown>;
+        await updateProvider({
+          id: btProvider.id,
+          body: {
+            public_config: {
+              ...existingPub,
+              commission: bankTransferCommission,
+            },
+          },
+        }).unwrap();
+      }
+
       toast.success('Ödeme ayarları kaydedildi');
     } catch (e: unknown) {
       console.error(e);
@@ -114,6 +135,7 @@ export default function AdminPaymentsPage() {
 
   const [createProvider, { isLoading: creatingProvider }] = useCreatePaymentProviderAdminMutation();
   const [updateProvider, { isLoading: updatingProvider }] = useUpdatePaymentProviderAdminMutation();
+  const [createAsset, { isLoading: uploadingLogo }] = useCreateAssetAdminMutation();
 
   const busyProviders =
     loadingProviders || fetchingProviders || creatingProvider || updatingProvider;
@@ -131,15 +153,26 @@ export default function AdminPaymentsPage() {
   // callback urls (default)
   const paytrCallbackUrl = useMemo(() => buildCallbackUrl(origin, '/paytr/notify'), [origin]);
   const shopierCallbackUrl = useMemo(() => buildCallbackUrl(origin, '/shopier/notify'), [origin]);
+  const stripeWebhookUrl = useMemo(() => buildCallbackUrl(origin, '/stripe/webhook'), [origin]);
   const paparaCallbackUrl = useMemo(
-    () => buildCallbackUrl(origin, '/functions/papara-callback'),
+    () => buildCallbackUrl(origin, '/api/papara/notify'),
     [origin],
   );
 
   // Provider forms
   const [paytrForm, setPaytrForm] = useState<ProviderForm>({ enabled: false });
   const [shopierForm, setShopierForm] = useState<ProviderForm>({ enabled: false });
+  const [stripeForm, setStripeForm] = useState<ProviderForm>({ enabled: false });
   const [paparaForm, setPaparaForm] = useState<ProviderForm>({ enabled: false });
+  const [bankTransferLogoUrl, setBankTransferLogoUrl] = useState('');
+  const [walletLogoUrl, setWalletLogoUrl] = useState('');
+
+  useEffect(() => {
+    const btProvider = findProviderUtil(providers as PaymentProviderAdmin[], 'bank_transfer');
+    const btCommission = toNum((btProvider?.public_config as Record<string, unknown> | null)?.commission, 0);
+    setBankTransferCommission(btCommission);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers]);
 
   useEffect(() => {
     setPaytrForm(providerToForm(findProvider(PAYTR_KEY)));
@@ -152,7 +185,22 @@ export default function AdminPaymentsPage() {
   }, [providers]);
 
   useEffect(() => {
+    setStripeForm(providerToForm(findProvider(STRIPE_KEY)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers]);
+
+  useEffect(() => {
     setPaparaForm(providerToForm(findProvider(PAPARA_KEY)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers]);
+
+  useEffect(() => {
+    setBankTransferLogoUrl(findProviderUtil(providers as PaymentProviderAdmin[], 'bank_transfer')?.logo_url ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers]);
+
+  useEffect(() => {
+    setWalletLogoUrl(findProviderUtil(providers as PaymentProviderAdmin[], 'wallet')?.logo_url ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providers]);
 
@@ -202,6 +250,7 @@ export default function AdminPaymentsPage() {
           <TabsTrigger value="general">Genel</TabsTrigger>
           <TabsTrigger value="paytr">PayTR</TabsTrigger>
           <TabsTrigger value="shopier">Shopier</TabsTrigger>
+          <TabsTrigger value="stripe">Stripe</TabsTrigger>
           <TabsTrigger value="papara">Papara</TabsTrigger>
           <TabsTrigger value="providers">Sağlayıcılar</TabsTrigger>
         </TabsList>
@@ -231,6 +280,31 @@ export default function AdminPaymentsPage() {
                 <p className="text-xs text-muted-foreground">
                   Aktifse kullanıcılar checkout aşamasında cüzdan bakiyesini kullanabilir.
                 </p>
+                <CoverImageSection
+                  title="Cüzdan Logo"
+                  imageUrl={walletLogoUrl}
+                  alt="Cüzdan"
+                  showStoragePreview={false}
+                  saving={uploadingLogo}
+                  onUrlChange={(url) => setWalletLogoUrl(url)}
+                  onAltChange={() => {}}
+                  onRemove={() => setWalletLogoUrl('')}
+                  onPickFile={async (file) => {
+                    try {
+                      const asset = await createAsset({ file, bucket: 'payments', folder: 'payments/logos' }).unwrap();
+                      const url = asset.url ?? '';
+                      setWalletLogoUrl(url);
+                      const walletProvider = findProviderUtil(providers as PaymentProviderAdmin[], 'wallet');
+                      if (walletProvider?.id && url) {
+                        await updateProvider({ id: walletProvider.id, body: { logo_url: url } }).unwrap();
+                      }
+                      toast.success('Logo kaydedildi');
+                    } catch {
+                      toast.error('Logo yüklenemedi');
+                    }
+                  }}
+                  inputId="wallet-logo-upload"
+                />
               </section>
 
               {/* Bank Transfer */}
@@ -244,6 +318,16 @@ export default function AdminPaymentsPage() {
                   <Label htmlFor="bank_transfer_enabled" className="font-medium">
                     Havale / EFT ile Ödeme
                   </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bank_transfer_commission">Havale/EFT Komisyon (%)</Label>
+                  <Input
+                    id="bank_transfer_commission"
+                    type="number"
+                    value={String(bankTransferCommission)}
+                    onChange={(e) => setBankTransferCommission(toNum(e.target.value, 0))}
+                  />
                 </div>
 
                 {bankTransferEnabled ? (
@@ -261,6 +345,31 @@ export default function AdminPaymentsPage() {
                     </p>
                   </div>
                 ) : null}
+                <CoverImageSection
+                  title="Havale / EFT Logo"
+                  imageUrl={bankTransferLogoUrl}
+                  alt="Havale/EFT"
+                  showStoragePreview={false}
+                  saving={uploadingLogo}
+                  onUrlChange={(url) => setBankTransferLogoUrl(url)}
+                  onAltChange={() => {}}
+                  onRemove={() => setBankTransferLogoUrl('')}
+                  onPickFile={async (file) => {
+                    try {
+                      const asset = await createAsset({ file, bucket: 'payments', folder: 'payments/logos' }).unwrap();
+                      const url = asset.url ?? '';
+                      setBankTransferLogoUrl(url);
+                      const btProvider = findProviderUtil(providers as PaymentProviderAdmin[], 'bank_transfer');
+                      if (btProvider?.id && url) {
+                        await updateProvider({ id: btProvider.id, body: { logo_url: url } }).unwrap();
+                      }
+                      toast.success('Logo kaydedildi');
+                    } catch {
+                      toast.error('Logo yüklenemedi');
+                    }
+                  }}
+                  inputId="bank-transfer-logo-upload"
+                />
               </section>
 
               <div className="flex justify-end">
@@ -417,7 +526,56 @@ export default function AdminPaymentsPage() {
                     Boş bırakırsanız mevcut gizli değer korunur.
                   </p>
                 </div>
+
+                <div className="space-y-2 md:col-span-2 border-t pt-4">
+                  <p className="text-sm font-medium text-muted-foreground">iFrame Yönlendirme URL'leri</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Başarılı Ödeme URL (OK URL)</Label>
+                  <Input
+                    value={paytrForm.ok_url ?? ''}
+                    onChange={(e) => setPaytrForm((p) => ({ ...p, ok_url: e.target.value }))}
+                    placeholder="https://example.com/odeme-basarili"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Başarısız Ödeme URL (Fail URL)</Label>
+                  <Input
+                    value={paytrForm.fail_url ?? ''}
+                    onChange={(e) => setPaytrForm((p) => ({ ...p, fail_url: e.target.value }))}
+                    placeholder="https://example.com/odeme-basarisiz"
+                  />
+                </div>
+
               </section>
+
+              <CoverImageSection
+                title="PayTR Logo"
+                imageUrl={paytrForm.logo_url ?? ''}
+                alt="PayTR"
+                showStoragePreview={false}
+                saving={uploadingLogo}
+                onUrlChange={(url) => setPaytrForm((p) => ({ ...p, logo_url: url }))}
+                onAltChange={() => {}}
+                onRemove={() => setPaytrForm((p) => ({ ...p, logo_url: '' }))}
+                onPickFile={async (file) => {
+                  try {
+                    const asset = await createAsset({ file, bucket: 'payments', folder: 'payments/logos' }).unwrap();
+                    const url = asset.url ?? '';
+                    setPaytrForm((p) => ({ ...p, logo_url: url }));
+                    const existing = findProvider(PAYTR_KEY);
+                    if (existing?.id && url) {
+                      await updateProvider({ id: existing.id, body: { logo_url: url } }).unwrap();
+                    }
+                    toast.success('Logo kaydedildi');
+                  } catch {
+                    toast.error('Logo yüklenemedi');
+                  }
+                }}
+                inputId="paytr-logo-upload"
+              />
 
               <div className="flex justify-end">
                 <Button
@@ -515,23 +673,41 @@ export default function AdminPaymentsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Client ID</Label>
+                  <Label>API Key</Label>
                   <Input
-                    value={shopierForm.client_id ?? ''}
-                    onChange={(e) => setShopierForm((p) => ({ ...p, client_id: e.target.value }))}
+                    value={shopierForm.shopier_api_key ?? ''}
+                    onChange={(e) => setShopierForm((p) => ({ ...p, shopier_api_key: e.target.value }))}
+                    placeholder="Shopier API Key"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Client Secret</Label>
+                  <Label>Secret</Label>
                   <Input
-                    value={shopierForm.client_secret ?? ''}
+                    type="password"
+                    value={shopierForm.shopier_secret ?? ''}
                     onChange={(e) =>
-                      setShopierForm((p) => ({ ...p, client_secret: e.target.value }))
+                      setShopierForm((p) => ({ ...p, shopier_secret: e.target.value }))
                     }
+                    placeholder="Shopier Secret"
                   />
                   <p className="text-xs text-muted-foreground">
                     Boş bırakırsanız mevcut gizli değer korunur.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Website Index</Label>
+                  <Input
+                    type="number"
+                    value={String(shopierForm.website_index ?? 1)}
+                    onChange={(e) =>
+                      setShopierForm((p) => ({ ...p, website_index: toNum(e.target.value, 1) }))
+                    }
+                    placeholder="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shopier panel → Mağaza Ayarları → Website Index
                   </p>
                 </div>
 
@@ -544,7 +720,34 @@ export default function AdminPaymentsPage() {
                     }
                   />
                 </div>
+
               </section>
+
+              <CoverImageSection
+                title="Shopier Logo"
+                imageUrl={shopierForm.logo_url ?? ''}
+                alt="Shopier"
+                showStoragePreview={false}
+                saving={uploadingLogo}
+                onUrlChange={(url) => setShopierForm((p) => ({ ...p, logo_url: url }))}
+                onAltChange={() => {}}
+                onRemove={() => setShopierForm((p) => ({ ...p, logo_url: '' }))}
+                onPickFile={async (file) => {
+                  try {
+                    const asset = await createAsset({ file, bucket: 'payments', folder: 'payments/logos' }).unwrap();
+                    const url = asset.url ?? '';
+                    setShopierForm((p) => ({ ...p, logo_url: url }));
+                    const existing = findProvider(SHOPIER_KEY);
+                    if (existing?.id && url) {
+                      await updateProvider({ id: existing.id, body: { logo_url: url } }).unwrap();
+                    }
+                    toast.success('Logo kaydedildi');
+                  } catch {
+                    toast.error('Logo yüklenemedi');
+                  }
+                }}
+                inputId="shopier-logo-upload"
+              />
 
               <div className="flex justify-end">
                 <Button
@@ -556,6 +759,176 @@ export default function AdminPaymentsPage() {
                     } catch (e) {
                       console.error(e);
                       toast.error('Shopier kaydedilemedi');
+                    }
+                  }}
+                >
+                  <Save className="w-4 h-4" />
+                  Kaydet
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===================== STRIPE ===================== */}
+        <TabsContent value="stripe" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Stripe</CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              <div className="flex flex-col gap-2">
+                <Label>Stripe Webhook URL</Label>
+                <div className="flex items-center gap-2">
+                  <Input value={stripeWebhookUrl} readOnly />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={async () => {
+                      const ok = await writeClipboard(stripeWebhookUrl);
+                      if (ok) toast.success('Kopyalandı');
+                      else toast.error('Kopyalanamadı');
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                    Kopyala
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Stripe Dashboard → Webhooks → Bu URL'i ekleyin.
+                </p>
+              </div>
+
+              {findProvider(STRIPE_KEY) === null ? (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <p className="text-sm">
+                    Stripe sağlayıcısı tanımlı değil. Oluşturup konfigüre edebilirsiniz.
+                  </p>
+                  <Button
+                    disabled={busyProviders}
+                    onClick={async () => {
+                      try {
+                        await ensureProvider(STRIPE_KEY);
+                        toast.success('Stripe sağlayıcısı oluşturuldu');
+                      } catch (e) {
+                        console.error(e);
+                        toast.error('Stripe oluşturulamadı');
+                      }
+                    }}
+                  >
+                    Stripe Sağlayıcısı Oluştur
+                  </Button>
+                </div>
+              ) : null}
+
+              <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3 md:col-span-2">
+                  <Switch
+                    id="stripe_enabled"
+                    checked={stripeForm.enabled}
+                    onCheckedChange={(checked) =>
+                      setStripeForm((p) => ({ ...p, enabled: checked }))
+                    }
+                  />
+                  <Label htmlFor="stripe_enabled" className="font-medium">
+                    Stripe Aktif
+                  </Label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="stripe_test_mode"
+                    checked={(stripeForm.mode ?? 'test') === 'test'}
+                    onCheckedChange={(checked) =>
+                      setStripeForm((p) => ({ ...p, mode: checked ? 'test' : 'live' }))
+                    }
+                  />
+                  <Label htmlFor="stripe_test_mode" className="font-medium">
+                    Test Mode
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Komisyon (%)</Label>
+                  <Input
+                    type="number"
+                    value={String(stripeForm.commission ?? 0)}
+                    onChange={(e) =>
+                      setStripeForm((p) => ({ ...p, commission: toNum(e.target.value, 0) }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Secret Key</Label>
+                  <Input
+                    value={stripeForm.secret_key ?? ''}
+                    onChange={(e) => setStripeForm((p) => ({ ...p, secret_key: e.target.value }))}
+                    placeholder="sk_test_... veya sk_live_..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Boş bırakırsanız mevcut değer korunur.
+                  </p>
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Webhook Secret</Label>
+                  <Input
+                    type="password"
+                    value={stripeForm.webhook_secret ?? ''}
+                    onChange={(e) =>
+                      setStripeForm((p) => ({ ...p, webhook_secret: e.target.value }))
+                    }
+                    placeholder="whsec_..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Stripe Dashboard → Webhooks → Signing secret. Boş bırakırsanız mevcut değer korunur.
+                  </p>
+                </div>
+
+              </section>
+
+              <CoverImageSection
+                title="Stripe Logo"
+                imageUrl={stripeForm.logo_url ?? ''}
+                alt="Stripe"
+                showStoragePreview={false}
+                saving={uploadingLogo}
+                onUrlChange={(url) => setStripeForm((p) => ({ ...p, logo_url: url }))}
+                onAltChange={() => {}}
+                onRemove={() => setStripeForm((p) => ({ ...p, logo_url: '' }))}
+                onPickFile={async (file) => {
+                  try {
+                    const asset = await createAsset({ file, bucket: 'payments', folder: 'payments/logos' }).unwrap();
+                    const url = asset.url ?? '';
+                    setStripeForm((p) => ({ ...p, logo_url: url }));
+                    const existing = findProvider(STRIPE_KEY);
+                    if (existing?.id && url) {
+                      await updateProvider({ id: existing.id, body: { logo_url: url } }).unwrap();
+                    }
+                    toast.success('Logo kaydedildi');
+                  } catch {
+                    toast.error('Logo yüklenemedi');
+                  }
+                }}
+                inputId="stripe-logo-upload"
+              />
+
+              <div className="flex justify-end">
+                <Button
+                  className="gap-2"
+                  disabled={busyProviders || findProvider(STRIPE_KEY) === null}
+                  onClick={async () => {
+                    try {
+                      await saveProvider(
+                        STRIPE_KEY,
+                        buildStripeBody(stripeForm, findProvider(STRIPE_KEY)?.public_config ?? null),
+                      );
+                    } catch (e) {
+                      console.error(e);
+                      toast.error('Stripe kaydedilemedi');
                     }
                   }}
                 >
@@ -631,14 +1004,91 @@ export default function AdminPaymentsPage() {
                   </Label>
                 </div>
 
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="papara_test_mode"
+                    checked={paparaForm.test_mode === true}
+                    onCheckedChange={(checked) =>
+                      setPaparaForm((p) => ({ ...p, test_mode: checked }))
+                    }
+                  />
+                  <Label htmlFor="papara_test_mode" className="font-medium">
+                    Sandbox (Test) Mode
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Komisyon (%)</Label>
+                  <Input
+                    type="number"
+                    value={String(paparaForm.commission ?? 0)}
+                    onChange={(e) =>
+                      setPaparaForm((p) => ({ ...p, commission: toNum(e.target.value, 0) }))
+                    }
+                  />
+                </div>
+
                 <div className="space-y-2 md:col-span-2">
                   <Label>API Key</Label>
                   <Input
                     value={paparaForm.api_key ?? ''}
                     onChange={(e) => setPaparaForm((p) => ({ ...p, api_key: e.target.value }))}
+                    placeholder="Papara Merchant API Key"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Boş bırakırsanız mevcut değer korunur.
+                  </p>
+                </div>
+
+                <div className="space-y-2 md:col-span-2 border-t pt-4">
+                  <p className="text-sm font-medium text-muted-foreground">Yönlendirme URL'leri</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Başarılı Ödeme URL</Label>
+                  <Input
+                    value={paparaForm.ok_url ?? ''}
+                    onChange={(e) => setPaparaForm((p) => ({ ...p, ok_url: e.target.value }))}
+                    placeholder="https://example.com/odeme-basarili"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label>Başarısız Ödeme URL</Label>
+                  <Input
+                    value={paparaForm.fail_url ?? ''}
+                    onChange={(e) => setPaparaForm((p) => ({ ...p, fail_url: e.target.value }))}
+                    placeholder="https://example.com/odeme-basarisiz"
+                  />
+                </div>
+
               </section>
+
+              <CoverImageSection
+                title="Papara Logo"
+                imageUrl={paparaForm.logo_url ?? ''}
+                alt="Papara"
+                showStoragePreview={false}
+                saving={uploadingLogo}
+                onUrlChange={(url) => setPaparaForm((p) => ({ ...p, logo_url: url }))}
+                onAltChange={() => {}}
+                onRemove={() => setPaparaForm((p) => ({ ...p, logo_url: '' }))}
+                onPickFile={async (file) => {
+                  try {
+                    const asset = await createAsset({ file, bucket: 'payments', folder: 'payments/logos' }).unwrap();
+                    const url = asset.url ?? '';
+                    setPaparaForm((p) => ({ ...p, logo_url: url }));
+                    const existing = findProvider(PAPARA_KEY);
+                    if (existing?.id && url) {
+                      await updateProvider({ id: existing.id, body: { logo_url: url } }).unwrap();
+                    }
+                    toast.success('Logo kaydedildi');
+                  } catch {
+                    toast.error('Logo yüklenemedi');
+                  }
+                }}
+                inputId="papara-logo-upload"
+              />
 
               <div className="flex justify-end">
                 <Button
@@ -646,7 +1096,10 @@ export default function AdminPaymentsPage() {
                   disabled={busyProviders || findProvider(PAPARA_KEY) === null}
                   onClick={async () => {
                     try {
-                      await saveProvider(PAPARA_KEY, buildPaparaBody(paparaForm));
+                      await saveProvider(
+                        PAPARA_KEY,
+                        buildPaparaBody(paparaForm, findProvider(PAPARA_KEY)?.public_config ?? null),
+                      );
                     } catch (e) {
                       console.error(e);
                       toast.error('Papara kaydedilemedi');
@@ -710,8 +1163,7 @@ export default function AdminPaymentsPage() {
               )}
 
               <div className="text-xs text-muted-foreground">
-                Not: Özel ekranları olan sağlayıcılar (PayTR/Shopier/Papara) kendi sekmelerinden
-                yönetilmelidir.
+                Not: Özel ekranları olan sağlayıcılar (PayTR / Shopier / Stripe / Papara) kendi sekmelerinden yönetilmelidir.
               </div>
             </CardContent>
           </Card>

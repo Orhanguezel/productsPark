@@ -26,6 +26,7 @@ import { FakeOrderNotification } from './components/FakeOrderNotification';
 import { GlobalSeo } from '@/seo/GlobalSeo';
 import { RouteSeoLinks } from '@/seo/RouteSeoLinks';
 import { FooterCodeRenderer } from '@/seo/FooterCodeRenderer';
+import { HeaderCodeRenderer } from '@/seo/HeaderCodeRenderer';
 
 import { CampaignPopup } from './components/CampaignPopup';
 import { CartDrawer } from './components/CartDrawer';
@@ -50,7 +51,11 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
     return `https://www.googletagmanager.com/ns.html?id=${encodeURIComponent(gtmId)}`;
   }, [gtmId]);
 
-  const footerHtml = toStr(data?.custom_footer_code);
+  const footerHtmlRaw = toStr(data?.custom_footer_code).trim();
+  const footerHtml = /^["']+$/.test(footerHtmlRaw) ? '' : footerHtmlRaw;
+
+  const headerHtmlRaw = toStr(data?.custom_header_code).trim();
+  const headerHtml = /^["']+$/.test(headerHtmlRaw) ? '' : headerHtmlRaw;
 
   return (
     <div data-app className="min-h-screen bg-background text-foreground">
@@ -68,6 +73,9 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
       ) : null}
 
       {children}
+
+      {/* ✅ custom_header_code: head execute */}
+      {headerHtml.trim() ? <HeaderCodeRenderer html={headerHtml} /> : null}
 
       {/* ✅ custom_footer_code: body end execute */}
       {footerHtml.trim() ? <FooterCodeRenderer html={footerHtml} /> : null}

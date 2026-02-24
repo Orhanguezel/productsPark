@@ -13,6 +13,7 @@ export type PaymentProvider = {
   id: string;
   key: PaymentProviderKey;
   display_name: string;
+  logo_url: string | null;
   is_active: boolean;
   public_config: Record<string, unknown> | null;
 };

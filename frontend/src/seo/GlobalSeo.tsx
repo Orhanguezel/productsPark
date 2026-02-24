@@ -22,6 +22,9 @@ const nonEmpty = (v: unknown): string => {
 export function GlobalSeo() {
   const { data } = useSeoMetaQuery();
 
+  const siteTitle = nonEmpty((data as Record<string, unknown> | undefined)?.site_title);
+  const siteDescription = nonEmpty((data as Record<string, unknown> | undefined)?.site_description);
+
   const robotsMeta = nonEmpty(data?.robots_meta);
 
   const faviconUrl = nonEmpty(data?.favicon_url);
@@ -46,7 +49,7 @@ export function GlobalSeo() {
   const org = schemaEnabled ? safeJsonLd(nonEmpty(data?.schema_org_organization)) : null;
   const web = schemaEnabled ? safeJsonLd(nonEmpty(data?.schema_org_website)) : null;
 
-  const customHeader = nonEmpty(data?.custom_header_code);
+  // custom_header_code is executed via HeaderCodeRenderer in App.tsx
 
   const gtmInlineInit = useMemo(() => {
     if (!gtmId) return '';
@@ -67,6 +70,8 @@ gtag('config', '${gaId}');`;
   }, [gaId]);
 
   const shouldRender =
+    !!siteTitle ||
+    !!siteDescription ||
     !!robotsMeta ||
     !!faviconUrl ||
     !!appleTouchIcon ||
@@ -79,18 +84,22 @@ gtag('config', '${gaId}');`;
     !!twitterSite ||
     !!gtmId ||
     !!gaId ||
-    !!customHeader ||
     (schemaEnabled && (!!org || !!web));
 
   if (!shouldRender) return null;
 
   return (
     <Helmet>
+      {/* Default title/description — overridden per-route by SeoHelmet */}
+      {siteTitle ? <title>{siteTitle}</title> : null}
+      {siteDescription ? <meta name="description" content={siteDescription} /> : null}
+
       {/* Robots (global default) */}
       {robotsMeta ? <meta name="robots" content={robotsMeta} /> : null}
 
-      {/* Icons */}
-      {faviconUrl ? <link rel="icon" href={faviconUrl} /> : null}
+      {/* Icons — DB'den gelen URL'ler index.html static fallback'lerini override eder */}
+      {faviconUrl ? <link rel="icon" type="image/png" href={faviconUrl} /> : null}
+      {faviconUrl ? <link rel="shortcut icon" href={faviconUrl} /> : null}
       {appleTouchIcon ? <link rel="apple-touch-icon" href={appleTouchIcon} /> : null}
       {pwaIcon192 ? <link rel="icon" type="image/png" sizes="192x192" href={pwaIcon192} /> : null}
       {pwaIcon512 ? <link rel="icon" type="image/png" sizes="512x512" href={pwaIcon512} /> : null}
@@ -134,15 +143,6 @@ gtag('config', '${gaId}');`;
           dangerouslySetInnerHTML={{
             __html: gaInlineInit,
           }}
-        />
-      ) : null}
-
-      {/* Custom head code (intentionally NOT executed) */}
-      {customHeader ? (
-        <script
-          type="text/plain"
-          data-custom-head
-          dangerouslySetInnerHTML={{ __html: customHeader }}
         />
       ) : null}
 

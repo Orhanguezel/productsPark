@@ -14,8 +14,8 @@ INSERT INTO `site_settings` (`id`, `key`, `value`, `created_at`, `updated_at`) V
 -- ------------------------------------------------------------------
 -- ASSETS / BRAND
 -- ------------------------------------------------------------------
-('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0004', 'favicon_url', '', NOW(3), NOW(3)),
-('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0005', 'logo_url',    '', NOW(3), NOW(3)),
+('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0004', 'favicon_url', 'https://res.cloudinary.com/dbozv7wqd/image/upload/v1771925632/favicons/favicon-64x64.png',    NOW(3), NOW(3)),
+('b2f1ad0a-2f48-4b22-8b38-1b9c2c7a0005', 'logo_url',    'https://res.cloudinary.com/dbozv7wqd/image/upload/v1771925308/logos/logo-light.png', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- CUSTOM CODES (opsiyonel)

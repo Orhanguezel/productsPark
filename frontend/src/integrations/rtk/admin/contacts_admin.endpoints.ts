@@ -14,7 +14,7 @@ export const contactsAdminApi = baseApi.injectEndpoints({
     // GET /admin/contacts
     listContactsAdmin: b.query<ContactView[], ContactListParams | void>({
       query: (params) => {
-        const qs = buildContactsAdminListQuery(params ?? undefined);
+        const qs = buildContactsAdminListQuery(params as ContactListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       providesTags: (res) =>

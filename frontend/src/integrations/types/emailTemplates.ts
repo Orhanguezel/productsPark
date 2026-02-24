@@ -27,7 +27,7 @@ function toOptStr(v: unknown): string | null {
  * - otherwise returns null (so toBool(null) => false in most implementations)
  */
 function asBoolLike(v: unknown): BoolLike {
-  if (v == null) return v; // null | undefined
+  if (v == null) return v as BoolLike; // null | undefined
   if (typeof v === 'boolean') return v;
   if (v === 0 || v === 1) return v;
 

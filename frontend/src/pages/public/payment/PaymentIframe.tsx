@@ -135,6 +135,13 @@ export default function PaymentIframe() {
     .toLowerCase();
   const iframeUrl = String(session?.iframe_url ?? session?.redirect_url ?? '').trim();
 
+  // Stripe / Papara: tam sayfa redirect (iframe desteklenmez)
+  const isRedirectProvider = providerKey === 'stripe' || providerKey === 'papara';
+  useEffect(() => {
+    if (!isRedirectProvider || !iframeUrl) return;
+    window.location.href = iframeUrl;
+  }, [isRedirectProvider, iframeUrl]);
+
   const shopierForm = useMemo(() => {
     const extra = (session as any)?.extra as Record<string, unknown> | null;
     const shopier = (extra && typeof extra === 'object' ? (extra as any).shopier : null) as

@@ -2,12 +2,17 @@
 // FILE: src/modules/payments/shopier.notify.ts
 // Shopier notify/callback handler (idempotent + signature verify)
 // - verifies Shopier signature
+// - updates payment_sessions + inserts/updates payments record
+// - status '1' or 'success' = paid; anything else = failed
 // - returns JSON { success: true } on accept
 // ===================================================================
 
 import type { RouteHandlerMethod } from 'fastify';
 import crypto from 'crypto';
+import { eq, and, desc } from 'drizzle-orm';
 
+import { db } from '@/db/client';
+import { payments, paymentSessions, paymentEvents } from './schema';
 import { getShopierConfig } from './service';
 
 /* -------------------- helpers -------------------- */
@@ -25,19 +30,61 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+function safeJsonStringify(v: unknown): string {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return '{"error":"json_stringify_failed"}';
+  }
+}
+
+// Shopier status: '1' = success, '0' = failed
+function resolveStatus(status: string): 'paid' | 'failed' {
+  const s = status.trim();
+  if (s === '1' || s === 'success') return 'paid';
+  return 'failed';
+}
+
 /* ==================================================================
-   SHOPIER — idempotency (process memory)
+   SHOPIER — idempotency (DB-backed, survives restarts + multi-instance)
    ================================================================== */
 
-const shopierSeen = new Map<string, number>();
-function shopierIdempotencyKey(platform_order_id: string, payment_id: string): string {
-  return `${platform_order_id}::${payment_id}`;
+async function shopierIsSeen(payment_id: string): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(and(eq(payments.provider, 'shopier'), eq(payments.transactionId, payment_id)))
+    .limit(1);
+  return !!existing;
 }
-function shopierMarkSeen(key: string) {
-  shopierSeen.set(key, Date.now());
-}
-function shopierIsSeen(key: string): boolean {
-  return shopierSeen.has(key);
+
+async function shopierMarkSeen(opts: {
+  platform_order_id: string;
+  payment_id: string;
+  status: string;
+  total_order_value?: string;
+}): Promise<string> {
+  const paymentStatus = resolveStatus(opts.status);
+  const amount = opts.total_order_value
+    ? Number(opts.total_order_value.replace(',', '.')).toFixed(2)
+    : '0.00';
+
+  const paymentId = crypto.randomUUID();
+  await db.insert(payments).values({
+    id: paymentId,
+    orderId: opts.platform_order_id.slice(0, 36),
+    provider: 'shopier',
+    currency: 'TRY',
+    amountAuthorized: amount,
+    amountCaptured: paymentStatus === 'paid' ? amount : '0.00',
+    amountRefunded: '0.00',
+    status: paymentStatus,
+    reference: opts.platform_order_id.slice(0, 255),
+    transactionId: opts.payment_id.slice(0, 255),
+    isTest: 0,
+  });
+
+  return paymentId;
 }
 
 /**
@@ -127,8 +174,7 @@ export const shopierNotifyHandler: RouteHandlerMethod = async (req, reply) => {
     return reply.code(400).send({ success: false, error: 'missing_fields' });
   }
 
-  const idemKey = shopierIdempotencyKey(platform_order_id, payment_id);
-  if (shopierIsSeen(idemKey)) {
+  if (await shopierIsSeen(payment_id)) {
     req.log.info(
       { platform_order_id, payment_id, status },
       'shopier-notify duplicate (idempotent ok)',
@@ -155,17 +201,65 @@ export const shopierNotifyHandler: RouteHandlerMethod = async (req, reply) => {
   }
 
   try {
-    shopierMarkSeen(idemKey);
+    const paymentStatus = resolveStatus(status);
+
+    // 1) Insert payment record with correct status
+    const paymentId = await shopierMarkSeen({
+      platform_order_id,
+      payment_id,
+      status,
+      total_order_value: total_order_value ?? undefined,
+    });
+
+    // 2) Update matching payment_session
+    const [session] = await db
+      .select()
+      .from(paymentSessions)
+      .where(
+        and(
+          eq(paymentSessions.providerKey, 'shopier'),
+          eq(paymentSessions.orderId, platform_order_id),
+        ),
+      )
+      .orderBy(desc(paymentSessions.createdAt))
+      .limit(1);
+
+    if (session && session.status === 'pending') {
+      await db
+        .update(paymentSessions)
+        .set({
+          status: paymentStatus,
+          extra: safeJsonStringify({
+            ...((() => {
+              try {
+                return session.extra ? JSON.parse(session.extra as any) : {};
+              } catch {
+                return {};
+              }
+            })()),
+            shopier_notify: {
+              status,
+              payment_id,
+              total_order_value: total_order_value ?? null,
+            },
+          }),
+        } as any)
+        .where(eq(paymentSessions.id, session.id));
+    }
+
+    // 3) Event log
+    await db.insert(paymentEvents).values({
+      id: crypto.randomUUID(),
+      paymentId,
+      eventType: 'notify',
+      message: paymentStatus === 'paid' ? 'shopier_notify_success' : 'shopier_notify_failed',
+      raw: safeJsonStringify(body),
+    } as any);
 
     req.log.info(
-      { platform_order_id, payment_id, status, signature_verified: sig.verifiedBy },
+      { platform_order_id, payment_id, status, paymentStatus, signature_verified: sig.verifiedBy },
       'shopier-notify accepted',
     );
-
-    // TODO (prod):
-    // - order/payment lookup by platform_order_id
-    // - status success -> mark paid
-    // - fulfillment, mail, audit log
 
     return reply.send({ success: true });
   } catch (err) {

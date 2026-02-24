@@ -181,7 +181,6 @@ export const {
   useTurkpinProductListMutation,
   useTurkpinBalanceMutation,
 
-  useShopierCallbackMutation,
 
   useDeleteUserOrdersMutation,
   useSitemapQuery,

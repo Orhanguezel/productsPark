@@ -23,7 +23,7 @@ export const customPagesAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCustomPagesAdmin: b.query<CustomPageView[], CustomPagesAdminListParams | void>({
       query: (params) => {
-        const qs = buildCustomPagesAdminListQuery(params ?? undefined);
+        const qs = buildCustomPagesAdminListQuery(params as CustomPagesAdminListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       transformResponse: (res: unknown): CustomPageView[] =>

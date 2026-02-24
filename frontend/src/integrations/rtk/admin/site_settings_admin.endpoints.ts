@@ -107,7 +107,13 @@ export const siteSettingsAdminApi = extendedApi.injectEndpoints({
         body: toBulkUpsertSiteSettingsApiBody(items),
       }),
       transformResponse: (res: unknown): AdminSiteSetting[] => normalizeAdminSiteSettingList(res),
-      invalidatesTags: [{ type: 'SiteSettings' as const, id: 'LIST' }],
+      invalidatesTags: (result) =>
+        result?.length
+          ? [
+              ...result.map((s) => ({ type: 'SiteSettings' as const, id: s.key })),
+              { type: 'SiteSettings' as const, id: 'LIST' },
+            ]
+          : [{ type: 'SiteSettings' as const, id: 'LIST' }],
     }),
 
     // DELETE /admin/site_settings/:key

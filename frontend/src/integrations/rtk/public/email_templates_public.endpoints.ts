@@ -28,7 +28,7 @@ export const emailTemplatesPublicApi = baseApi.injectEndpoints({
     listEmailTemplatesPublic: b.query<EmailTemplatePublic[], EmailTemplatesPublicListParams | void>(
       {
         query: (params) => {
-          const qs = toEmailTemplatesPublicQuery(params ?? undefined);
+          const qs = toEmailTemplatesPublicQuery(params as EmailTemplatesPublicListParams | undefined);
           return { url: `${BASE}${qs}`, method: 'GET' };
         },
         transformResponse: (res: unknown): EmailTemplatePublic[] =>

@@ -1,5 +1,5 @@
 // src/components/FakeOrderNotification.tsx
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { ShoppingBag } from "lucide-react";
 import {
@@ -11,9 +11,11 @@ import {
 import type { FakeOrderNotification } from "@/integrations/types";
 
 export function FakeOrderNotification() {
-  const { data: settings } = useGetPublicFakeNotificationSettingsQuery(); // ⬅️ değişti
+  const { data: settings } = useGetPublicFakeNotificationSettingsQuery();
   const { data: pool } = useListPublicFakeOrdersQuery();
   const { data: firstRandom } = useGetPublicRandomFakeOrderQuery();
+
+  const firstShownRef = useRef(false);
 
   const pick = (rows?: FakeOrderNotification[]): FakeOrderNotification | undefined => {
     if (!rows || rows.length === 0) return undefined;
@@ -39,16 +41,23 @@ export function FakeOrderNotification() {
     );
   };
 
+  // İlk bildirimi yalnızca bir kez göster (settings ve veriler hazır olduğunda)
   useEffect(() => {
     if (!settings?.fake_notifications_enabled) return;
-    const t = setTimeout(() => { show(firstRandom ?? pick(pool)); }, (settings.notification_delay ?? 10) * 1000);
+    if (firstShownRef.current) return;
+    const t = setTimeout(() => {
+      firstShownRef.current = true;
+      show(firstRandom ?? pick(pool));
+    }, (settings.notification_delay ?? 10) * 1000);
     return () => clearTimeout(t);
-  }, [settings, firstRandom, pool]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, pool, firstRandom]);
 
   useEffect(() => {
     if (!settings?.fake_notifications_enabled) return;
     const t = setInterval(() => { show(pick(pool)); }, (settings.notification_interval ?? 30) * 1000);
     return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, pool]);
 
   return null;

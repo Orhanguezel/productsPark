@@ -23,7 +23,7 @@ export const couponsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCouponsAdmin: b.query<Coupon[], CouponListParams | void>({
       query: (params) => {
-        const qs = toCouponsQuery(params ?? undefined);
+        const qs = toCouponsQuery(params as CouponListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       transformResponse: (res: unknown): Coupon[] => normalizeCouponList(res),

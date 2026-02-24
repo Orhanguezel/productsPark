@@ -108,6 +108,8 @@ export function buildCheckoutPaymentOptions(args: {
     const name = toTrimStr((m as any).display_name) || key;
     const type = toTrimStr((m as any).type);
 
+    const commissionRate = getCommissionRateFromMethod(m);
+
     if (type === 'bank_transfer' || key === 'bank_transfer') {
       const cfg = isPlainObject((m as any).config)
         ? ((m as any).config as Record<string, unknown>)
@@ -119,6 +121,7 @@ export function buildCheckoutPaymentOptions(args: {
         id: 'bank_transfer', // ✅ force provider key
         name,
         enabled: true,
+        ...(commissionRate > 0 ? { commission: commissionRate } : {}),
         ...(acc.iban ? { iban: acc.iban } : {}),
         ...(acc.account_holder ? { account_holder: acc.account_holder } : {}),
         ...(acc.bank_name ? { bank_name: acc.bank_name } : {}),
@@ -127,7 +130,12 @@ export function buildCheckoutPaymentOptions(args: {
       continue;
     }
 
-    out.push({ id: key, name, enabled: true });
+    out.push({
+      id: key,
+      name,
+      enabled: true,
+      ...(commissionRate > 0 ? { commission: commissionRate } : {}),
+    });
   }
 
   if (ensureWallet && !out.some((x) => x.id === 'wallet')) {

@@ -92,6 +92,13 @@ export const env = {
     DIRECT_REQUEST: toBool(process.env.PAYTR_DIRECT_REQUEST, false),
   },
 
+  STRIPE: {
+    SECRET_KEY: process.env.STRIPE_SECRET_KEY || "",
+    WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || "",
+    OK_URL: process.env.STRIPE_OK_URL || "",
+    FAIL_URL: process.env.STRIPE_FAIL_URL || "",
+  },
+
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
 
   GOOGLE: {

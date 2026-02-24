@@ -62,7 +62,7 @@ function mapRow(r: typeof popups.$inferSelect) {
 
     // ▼ tablo alanlarından besle
     display_pages: r.display_pages ?? "all",
-    display_frequency: r.show_once ? "once" : "always",
+    display_frequency: r.display_frequency ?? (r.show_once ? "once" : "always"),
     delay_seconds: Number(r.delay ?? 0),
     duration_seconds: r.duration_seconds ?? null,
     priority: r.priority ?? null,

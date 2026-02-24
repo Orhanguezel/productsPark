@@ -26,6 +26,7 @@ export const footerSections = mysqlTable(
     // TEXT / LONGTEXT alanlarında DEFAULT veremiyoruz → controller '[]' yazıyor.
     // SQL tarafında JSON_VALID CHECK ile korunur (migration dosyasında).
     links: text("links").notNull(),
+    section_type: varchar("section_type", { length: 20 }).notNull().default("links"),
     order_num: int("order_num").notNull().default(0),
     is_active: boolean("is_active").notNull().default(true),
     created_at: datetime("created_at", { fsp: 3 })

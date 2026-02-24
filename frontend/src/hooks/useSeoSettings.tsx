@@ -235,6 +235,13 @@ const allowedKeys = [
   'google_site_verification',
   'bing_site_verification',
 
+  // ---------------- Home FAQ texts ----------------
+  'home_faq_title',
+  'home_faq_subtitle',
+  'home_faq_cta_title',
+  'home_faq_cta_subtitle',
+  'home_faq_cta_button',
+
   // ---------------- Schema.org ----------------
   'schema_org_enabled',
   'schema_org_organization',

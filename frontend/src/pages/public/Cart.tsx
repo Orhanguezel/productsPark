@@ -388,6 +388,11 @@ const Cart = () => {
       return;
     }
 
+    if (data.per_user_limit != null && data.per_user_limit <= 0) {
+      toast.error("Bu kupon artık kullanılamaz");
+      return;
+    }
+
     if (subtotal < (data.min_purchase ?? 0)) {
       toast.error(`Minimum ${data.min_purchase} ₺ alışveriş gerekli`);
       return;

@@ -25,7 +25,7 @@ export const cartsAdminApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCartsAdmin: b.query<AdminCart[], AdminCartsListParams | void>({
       query: (params) => {
-        const qs = toAdminCartsQuery(params ?? undefined);
+        const qs = toAdminCartsQuery(params as AdminCartsListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       transformResponse: (res: unknown): AdminCart[] => normalizeAdminCartList(res),

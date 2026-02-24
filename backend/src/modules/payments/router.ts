@@ -23,10 +23,16 @@ import {
 
   // public aggregate
   getPublicPaymentMethodsHandler,
+
+  // PayTR admin actions
+  paytrRefundHandler,
+  paytrStatusHandler,
 } from './controller';
 
 import { paytrNotifyHandler } from './paytr.notify';
 import { shopierNotifyHandler } from './shopier.notify';
+import { stripeWebhookHandler } from './stripe.webhook';
+import { paparaNotifyHandler } from './papara.notify';
 
 export async function registerPayments(app: FastifyInstance) {
   // Public aggregate for checkout
@@ -46,10 +52,26 @@ export async function registerPayments(app: FastifyInstance) {
   app.post('/payment_sessions', createPaymentSessionHandler);
   app.get('/payment_sessions/:id', getPaymentSessionByIdHandler);
 
-  // PayTR notify (public)
+  // PayTR notify (public — called by PayTR server)
   // IMPORTANT: expose this URL in payment_providers.public_config.notification_url
   app.post('/paytr/notify', paytrNotifyHandler);
 
+  // PayTR İade (Refund) — auth required
+  // Body: { merchant_oid, return_amount, reference_no? }
+  app.post('/paytr/refund', { preHandler: [requireAuth] }, paytrRefundHandler);
+
+  // PayTR Durum Sorgu (Status Query) — auth required
+  // Body: { merchant_oid }
+  app.post('/paytr/status', { preHandler: [requireAuth] }, paytrStatusHandler);
+
   // Shopier notify (public)
   app.post('/shopier/notify', shopierNotifyHandler);
+
+  // Stripe webhook (public — called by Stripe servers)
+  // config: { rawBody: true } → fastify-raw-body plugin bu rotada req.rawBody doldurur
+  app.post('/stripe/webhook', { config: { rawBody: true } }, stripeWebhookHandler);
+
+  // Papara notify (public — called by Papara servers; supports GET + POST)
+  app.post('/papara/notify', paparaNotifyHandler);
+  app.get('/papara/notify', paparaNotifyHandler);
 }

@@ -24,6 +24,7 @@ CREATE TABLE `popups` (
   -- Durum/zamanlama
   `is_active`         TINYINT(1)     NOT NULL DEFAULT 0,
   `show_once`         TINYINT(1)     NOT NULL DEFAULT 0,
+  `display_frequency` VARCHAR(16)    NOT NULL DEFAULT 'always',  -- always|once|daily|weekly
   `delay`             INT            NOT NULL DEFAULT 0,         -- saniye
 
   `valid_from`        DATETIME(3)    DEFAULT NULL,
@@ -59,7 +60,7 @@ CREATE TABLE `popups` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================
--- POPUPS SEED (FE alanlarıyla birlikte)
+-- POPUPS SEED (FE alanlarıyla birlikte, display_frequency dahil)
 -- =============================================================
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
@@ -68,46 +69,73 @@ INSERT IGNORE INTO `popups`
 (`id`, `title`, `content`,
  `image_url`, `image_asset_id`, `image_alt`,
  `button_text`, `button_url`,
- `is_active`, `show_once`, `delay`,
+ `is_active`, `show_once`, `display_frequency`, `delay`,
  `valid_from`, `valid_until`,
  `product_id`, `coupon_code`, `display_pages`, `priority`, `duration_seconds`,
  `created_at`, `updated_at`)
 VALUES
--- 1) Üyelik/ilk sipariş – kupon kodlu, ürünsiz
-('b57879a1-bdb0-4ccd-90a6-fae11d42850b',
- 'Üye Ol İlk Siparişinde %10 İndirim Kap',
- 'Sitemize üye olarak yapacağınız ilk siparişlerde geçerli indirim kodunuz hazır.',
- 'https://krbintayhtsfoqpkgsbv.supabase.co/storage/v1/object/public/blog-images/popup-images/gagx81xi1uh-1760559551779.png',
- NULL,
- 'Popup kapak görseli',
- 'Alışverişe Başla', '/kayit',
- 0, 0, 3,
- NULL, NULL,
- NULL, '2025', 'all', 90, 0,
- '2025-10-09 18:54:42.000', '2025-10-15 20:19:18.000'),
 
--- 2) Ürün odaklı – anasayfa, 2 sn gecikme, otomatik kapanma 12 sn
+-- 1) Üyelik/ilk sipariş – kupon kodlu, tüm sayfalarda, once gösterim (aktif)
+('b57879a1-bdb0-4ccd-90a6-fae11d42850b',
+ 'Üye Ol, İlk Siparişinde %10 İndirim Kazan!',
+ 'Sitemize üye olarak yapacağınız ilk siparişlerde geçerli özel indirim kodunuz hazır. Hemen kayıt olun, fırsatı kaçırmayın!',
+ 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80',
+ NULL,
+ 'Alışveriş kampanya görseli',
+ 'Ücretsiz Üye Ol', '/kayit',
+ 1, 1, 'once', 3,
+ NULL, NULL,
+ NULL, 'HOSGELDIN10', 'all', 90, 0,
+ NOW(3), NOW(3)),
+
+-- 2) Genel kampanya – anasayfa, daily gösterim, 2 sn gecikme, 15 sn kapanma (aktif)
 ('caa4a1c1-9f39-4a64-8d34-0e2f6b4fbd77',
- '500 Takipçide Hafta Sonu Fırsatı',
- 'Sadece bu hafta sonuna özel! 500 Takipçi paketinde sepette ekstra indirim.',
- 'https://placehold.co/800x400?text=500+Takipci',
+ 'Bu Ay Özel Fırsatlar Sizi Bekliyor!',
+ 'Dijital ürünlerde büyük indirimler! Oyun anahtarları, yazılım lisansları ve daha fazlası için hemen göz atın.',
+ 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80',
  NULL,
  'Kampanya görseli',
- 'Paketi İncele', '/urun/500-takipci',
- 0, 0, 2,
- '2025-10-10 00:00:00.000', '2025-10-13 23:59:59.000',
- '0132e42e-d46a-444d-9080-a419aec29c9c', NULL, 'home', 80, 12,
- '2025-10-10 10:00:00.000', '2025-10-10 10:00:00.000'),
+ 'Fırsatları Keşfet', '/urunler',
+ 1, 0, 'daily', 2,
+ NULL, NULL,
+ NULL, NULL, 'home', 80, 15,
+ NOW(3), NOW(3)),
 
--- 3) Kupon + ürün – ürün sayfalarında göster, tek seferlik gösterim
+-- 3) Kupon popup – ürün sayfalarında göster, weekly gösterim (aktif)
 ('9a7f1a4b-0a56-4c1a-8f41-2f7b0f8d3c9e',
- 'Windows 11 Pro için Ekim İndirimi',
- 'Windows 11 Pro Retail anahtarlarında sınırlı süreli kampanya! Sepette kuponu kullanmayı unutmayın.',
- 'https://placehold.co/800x400?text=Windows+11+Pro',
+ 'Yazılım Lisanslarında Haftalık Fırsat!',
+ 'Windows, Office ve daha birçok yazılım lisansında özel indirim! Sepette kupon kodunu kullanarak ekstra tasarruf edin.',
+ 'https://images.unsplash.com/photo-1633419461186-7d40a38105ec?w=800&q=80',
  NULL,
- 'Windows kampanya',
- 'Şimdi Al', '/urun/windows-11-pro-retail-key',
- 0, 1, 1,
- '2025-10-10 00:00:00.000', '2025-11-01 23:59:59.000',
- '6c76a7b2-54ed-4290-8d83-c118533c5ee0', '2025', 'products', 70, 0,
- '2025-10-10 12:00:00.000', '2025-10-10 12:00:00.000');
+ 'Yazılım kampanya görseli',
+ 'Ürünleri İncele', '/urunler',
+ 1, 0, 'weekly', 1,
+ NULL, NULL,
+ NULL, 'YAZILIM15', 'products', 70, 0,
+ NOW(3), NOW(3)),
+
+-- 4) Sosyal medya takipçi paketi – anasayfa, daily gösterim (aktif)
+('d2e3f4a5-b6c7-8901-dcba-ef2345678901',
+ 'Sosyal Medyada Büyü – Takipçi Paketleri',
+ 'Instagram, TikTok, YouTube ve daha fazlası için uygun fiyatlı takipçi paketleri! Güvenli ve hızlı teslimat.',
+ 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80',
+ NULL,
+ 'Sosyal medya takipçi kampanyası',
+ 'Paketleri Gör', '/urunler',
+ 1, 0, 'daily', 4,
+ NULL, NULL,
+ NULL, 'SOSYAL10', 'home', 60, 0,
+ NOW(3), NOW(3)),
+
+-- 5) Oyun hesabı/key kampanyası – ürün sayfaları, once gösterim (aktif)
+('e3f4a5b6-c7d8-9012-edcb-fa3456789012',
+ 'Oyun Keylerinde Büyük İndirim!',
+ 'Steam, Epic Games ve diğer platformlara ait oyun anahtarlarında sınırsız seçenek, uygun fiyat garantisi.',
+ 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800&q=80',
+ NULL,
+ 'Oyun anahtar kampanyası',
+ 'Oyunlara Bak', '/urunler',
+ 1, 1, 'once', 2,
+ NULL, NULL,
+ NULL, 'OYUN20', 'products', 50, 0,
+ NOW(3), NOW(3));

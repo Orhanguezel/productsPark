@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 export const couponListQuerySchema = z.object({
-  is_active: z.union([z.literal(0), z.literal(1), z.boolean()]).optional(),
+  is_active: z
+    .union([z.string(), z.number(), z.boolean()])
+    .transform((v: unknown) => v === true || v === 1 || v === '1' || v === 'true')
+    .optional(),
   q: z.string().optional(), // code içinde arama
   limit: z.coerce.number().int().positive().max(500).optional(),
   offset: z.coerce.number().int().nonnegative().optional(),

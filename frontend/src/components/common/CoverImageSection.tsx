@@ -146,11 +146,16 @@ export function CoverImageSection({
 
           {showUrlPreview ? (
             displayUrl ? (
-              <img
-                src={displayUrl}
-                alt={alt}
-                className="mt-2 h-32 w-56 rounded border object-cover"
-              />
+              <div
+                className="mt-2 h-32 w-56 rounded border flex items-center justify-center"
+                style={{ background: 'repeating-conic-gradient(#e5e7eb 0% 25%, #f9fafb 0% 50%) 0 0 / 16px 16px' }}
+              >
+                <img
+                  src={displayUrl}
+                  alt={alt}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
             ) : (
               <div className="mt-2 h-32 w-56 rounded border bg-gray-50" />
             )

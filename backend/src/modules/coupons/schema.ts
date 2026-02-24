@@ -30,6 +30,7 @@ export const coupons = mysqlTable(
     min_purchase: decimal("min_purchase", { precision: 10, scale: 2 }),
     max_discount: decimal("max_discount", { precision: 10, scale: 2 }),
     usage_limit: int("usage_limit"),
+    per_user_limit: int("per_user_limit"),
     used_count: int("used_count").notNull().default(0),
 
     // 🔥 Uygulama kapsamı + id listeleri

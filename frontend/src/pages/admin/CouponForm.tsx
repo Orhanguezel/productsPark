@@ -57,6 +57,7 @@ type FormState = {
   min_purchase: number;
   max_discount: number | null;
   usage_limit: number | null;
+  per_user_limit: number | null;
 
   valid_from: string; // YYYY-MM-DD (UI)
   valid_until: string | null; // YYYY-MM-DD | null (UI)
@@ -107,6 +108,7 @@ const defaults: FormState = {
   min_purchase: 0,
   max_discount: null,
   usage_limit: null,
+  per_user_limit: null,
 
   valid_from: todayStr(),
   valid_until: null,
@@ -184,6 +186,7 @@ export default function CouponForm() {
 
         // model: max_uses => FE: usage_limit
         usage_limit: data.max_uses == null ? null : numOr(data.max_uses, 0),
+        per_user_limit: data.per_user_limit == null ? null : numOr(data.per_user_limit, 0),
 
         // ✅ asla undefined verme
         valid_from: vf,
@@ -243,6 +246,7 @@ export default function CouponForm() {
       min_purchase: Number(formData.min_purchase) || 0,
       max_discount: formData.max_discount != null ? Number(formData.max_discount) : null,
       usage_limit: formData.usage_limit != null ? Number(formData.usage_limit) : null,
+      per_user_limit: formData.per_user_limit != null ? Number(formData.per_user_limit) : null,
 
       // ✅ UI date (YYYY-MM-DD) gönderiyoruz. Mapper (toCouponApiBody) bunu null/str olarak taşır.
       valid_from: formData.valid_from,
@@ -392,7 +396,7 @@ export default function CouponForm() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="usage_limit">Maksimum Kullanım (boş = sınırsız)</Label>
+                  <Label htmlFor="usage_limit">Toplam Kullanım Limiti (boş = sınırsız)</Label>
                   <Input
                     id="usage_limit"
                     type="number"
@@ -401,6 +405,23 @@ export default function CouponForm() {
                       setFormData((s) => ({
                         ...s,
                         usage_limit: e.target.value ? Number(e.target.value) : null,
+                      }))
+                    }
+                    min="1"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="per_user_limit">Kişi Başı Kullanım Limiti (boş = sınırsız)</Label>
+                  <Input
+                    id="per_user_limit"
+                    type="number"
+                    placeholder="1"
+                    value={formData.per_user_limit ?? ''}
+                    onChange={(e) =>
+                      setFormData((s) => ({
+                        ...s,
+                        per_user_limit: e.target.value ? Number(e.target.value) : null,
                       }))
                     }
                     min="1"

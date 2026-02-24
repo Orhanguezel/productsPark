@@ -10,6 +10,7 @@ import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import rawBody from 'fastify-raw-body';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -150,6 +151,13 @@ export async function createApp() {
   }) as FastifyInstance;
 
   // --- CORS ---
+  // Raw body — Stripe webhook signature verify için gerekli
+  await app.register(rawBody, {
+    field: 'rawBody',
+    global: false,   // sadece config: { rawBody: true } olan rotalar okur
+    encoding: 'utf8',
+  });
+
   await app.register(cors, {
     origin: parseCorsOrigins(env.CORS_ORIGIN as unknown as string | string[] | undefined),
     credentials: true,

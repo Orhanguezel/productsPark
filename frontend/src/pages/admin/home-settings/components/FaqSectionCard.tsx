@@ -18,6 +18,12 @@ import {
 import type { Faq } from "@/integrations/types";
 import { toast } from "sonner";
 
+type AnyFaqListResponse =
+  | Faq[]
+  | { items?: Faq[]; data?: Faq[]; rows?: Faq[]; result?: Faq[] }
+  | undefined
+  | null;
+
 /** FE içinde kullanılacak lokal Faq modeli */
 interface EditableFaq {
   id?: string;
@@ -62,13 +68,23 @@ const mapFaqToEditable = (faq: Faq): EditableFaq => ({
   _isDirty: false,
 });
 
+const pickFaqRows = (resp: AnyFaqListResponse): Faq[] => {
+  if (!resp) return [];
+  if (Array.isArray(resp)) return resp;
+  const candidates = [resp.items, resp.data, resp.rows, resp.result];
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+  return [];
+};
+
 export function FaqSectionCard({
   settings,
   onChange,
 }: HomeSettingsSectionProps) {
   // ---- RTK: faqs listesi ----
   const {
-    data: faqList = [],
+    data: faqListRaw,
     isLoading: isFaqLoading,
     isError: isFaqError,
   } = useListFaqsAdminQuery({
@@ -88,8 +104,9 @@ export function FaqSectionCard({
 
   // RTK'dan gelen listeyi lokalde hydrate et
   useEffect(() => {
+    const faqList = pickFaqRows(faqListRaw as AnyFaqListResponse);
     setRows(faqList.map(mapFaqToEditable));
-  }, [faqList]);
+  }, [faqListRaw]);
 
   const handleItemChange = (
     localId: string,
@@ -180,7 +197,13 @@ export function FaqSectionCard({
       // invalidate + refetch ile liste yenilenecek, effect tekrar hydrate edecek
     } catch (err) {
       console.error("FAQ save error:", err);
-      toast.error("SSS kaydedilirken hata oluştu.");
+      const apiErr = err as { data?: { error?: { message?: string }; message?: string } };
+      const code = apiErr?.data?.error?.message || apiErr?.data?.message || '';
+      const friendly: Record<string, string> = {
+        slug_already_exists: "Bu slug zaten kullanılıyor. Farklı bir soru girin.",
+        invalid_body: "Geçersiz veri. Tüm zorunlu alanları doldurun.",
+      };
+      toast.error(friendly[code] || code || "SSS kaydedilirken hata oluştu.");
     }
   };
 

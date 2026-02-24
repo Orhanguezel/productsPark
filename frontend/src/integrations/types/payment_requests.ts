@@ -180,6 +180,7 @@ export type PaymentRequestsListParams = {
 
   limit?: number;
   offset?: number;
+  include?: string[];
 };
 
 export function toPaymentRequestsListQuery(

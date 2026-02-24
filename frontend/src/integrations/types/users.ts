@@ -47,7 +47,7 @@ export type UserRole = {
 
 /* ---- Admin users list/update payload tipleri ---- */
 export type AdminUsersListParams = {
-  ids: string[];
+  ids?: string[];
   q?: string;
   role?: UserRoleName;
   is_active?: boolean;

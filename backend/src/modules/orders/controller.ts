@@ -279,7 +279,11 @@ function calcDiscount({
   return d.toFixed(2);
 }
 
-async function validateCouponAndComputeDiscount(code: string, subtotalStr: string) {
+async function validateCouponAndComputeDiscount(
+  code: string,
+  subtotalStr: string,
+  userId?: string,
+) {
   const [c] = await db.select().from(couponsTable).where(eq(couponsTable.code, code)).limit(1);
   if (!c) return { ok: false as const, reason: 'not_found' as const };
   if (!c.is_active) return { ok: false as const, reason: 'inactive' as const };
@@ -290,6 +294,17 @@ async function validateCouponAndComputeDiscount(code: string, subtotalStr: strin
     return { ok: false as const, reason: 'expired' as const };
   if (c.usage_limit != null && c.used_count >= c.usage_limit) {
     return { ok: false as const, reason: 'usage_limit_reached' as const };
+  }
+  // Per-user limit check (orders table is source of truth)
+  if (c.per_user_limit != null && userId) {
+    const [row] = await db
+      .select({ c: sql<number>`COUNT(*)`.as('c') })
+      .from(orders)
+      .where(and(eq(orders.user_id, userId), eq(orders.coupon_code, code)));
+    const userUsage = Number(row?.c ?? 0);
+    if (userUsage >= c.per_user_limit) {
+      return { ok: false as const, reason: 'per_user_limit_reached' as const };
+    }
   }
   if (c.min_purchase != null && Number(subtotalStr) < Number(c.min_purchase)) {
     return {
@@ -309,33 +324,38 @@ async function validateCouponAndComputeDiscount(code: string, subtotalStr: strin
   return { ok: true as const, coupon: c, discount };
 }
 
-async function redeemCouponAtomic(client: TxOrDb, couponId: string) {
-  await client
-    .update(couponsTable)
-    .set({
-      used_count: sql`${couponsTable.used_count} + 1`,
-      updated_at: now(),
-    })
-    .where(
-      and(
-        eq(couponsTable.id, couponId),
-        sql`${couponsTable.is_active} = 1`,
-        sql`(${couponsTable.valid_from} IS NULL OR ${couponsTable.valid_from} <= NOW())`,
-        sql`(${couponsTable.valid_until} IS NULL OR ${couponsTable.valid_until} >= NOW())`,
-        or(
-          isNull(couponsTable.usage_limit),
-          lt(couponsTable.used_count, couponsTable.usage_limit!),
-        ),
-      ),
-    );
-
-  const [after] = await client
+async function redeemCouponAtomic(client: TxOrDb, couponId: string, userId?: string) {
+  // Lock + verify: re-check all conditions inside the transaction
+  const [before] = await (client as any)
     .select()
     .from(couponsTable)
     .where(eq(couponsTable.id, couponId))
+    .for('update')
     .limit(1);
 
-  if (!after) throw new Error('coupon_redeem_not_found');
+  if (!before) throw new Error('coupon_redeem_not_found');
+  if (!before.is_active) throw new Error('coupon_inactive');
+  const nowDt = now();
+  if (before.valid_from && nowDt < new Date(before.valid_from)) throw new Error('coupon_not_started');
+  if (before.valid_until && nowDt > new Date(before.valid_until)) throw new Error('coupon_expired');
+  if (before.usage_limit != null && before.used_count >= before.usage_limit) {
+    throw new Error('coupon_usage_limit_reached');
+  }
+  // Per-user check inside transaction (authoritative)
+  if (before.per_user_limit != null && userId) {
+    const [row] = await (client as any)
+      .select({ c: sql<number>`COUNT(*)`.as('c') })
+      .from(orders)
+      .where(and(eq(orders.user_id, userId), eq(orders.coupon_code, before.code)));
+    if (Number(row?.c ?? 0) >= before.per_user_limit) {
+      throw new Error('coupon_per_user_limit_reached');
+    }
+  }
+
+  await client
+    .update(couponsTable)
+    .set({ used_count: sql`${couponsTable.used_count} + 1`, updated_at: now() })
+    .where(eq(couponsTable.id, couponId));
 }
 
 /* ==================================================================
@@ -586,7 +606,7 @@ export const createOrder: RouteHandler = async (req, reply) => {
 
     let couponIdToRedeem: string | null = null;
     if (body.coupon_code) {
-      const v = await validateCouponAndComputeDiscount(body.coupon_code, subtotalStr);
+      const v = await validateCouponAndComputeDiscount(body.coupon_code, subtotalStr, userId);
       if (!v.ok) {
         return reply.code(409).send({
           error: { message: 'coupon_invalid', reason: v.reason, ...(v as any) },
@@ -655,7 +675,7 @@ export const createOrder: RouteHandler = async (req, reply) => {
         orderNumber,
       });
 
-      if (couponIdToRedeem) await redeemCouponAtomic(tx, couponIdToRedeem);
+      if (couponIdToRedeem) await redeemCouponAtomic(tx, couponIdToRedeem, userId);
     });
 
     const [created] = await db.select().from(orders).where(eq(orders.id, id));
@@ -670,7 +690,7 @@ export const createOrder: RouteHandler = async (req, reply) => {
 
     const cust = await getCustomerByUserId(userId);
 
-    void fireOrderCreatedEvents({
+    fireOrderCreatedEvents({
       order: created,
       items: createdItems,
       userId,
@@ -680,7 +700,7 @@ export const createOrder: RouteHandler = async (req, reply) => {
         phone: cust.phone,
       },
       req,
-    });
+    }).catch((err: unknown) => req.log.error(err, 'fire_order_created_events_failed'));
 
     return reply.code(201).send({
       ...mapOrder(created),
@@ -697,6 +717,8 @@ export const createOrder: RouteHandler = async (req, reply) => {
       return reply.code(404).send({ error: { message: 'user_not_found' } });
     if (e?.message === 'wallet_insufficient_balance')
       return reply.code(409).send({ error: { message: 'wallet_insufficient_balance' } });
+    if (String(e?.message || '').startsWith('coupon_'))
+      return reply.code(409).send({ error: { message: 'coupon_invalid', reason: e.message } });
 
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'order_create_failed' } });
@@ -771,7 +793,7 @@ export const checkoutFromCart: RouteHandler = async (req, reply) => {
     let couponIdToRedeem: string | null = null;
 
     if (body.coupon_code) {
-      const v = await validateCouponAndComputeDiscount(body.coupon_code, subtotalStr);
+      const v = await validateCouponAndComputeDiscount(body.coupon_code, subtotalStr, userId);
       if (!v.ok) {
         return reply.code(409).send({
           error: { message: 'coupon_invalid', reason: v.reason, ...(v as any) },
@@ -850,7 +872,7 @@ export const checkoutFromCart: RouteHandler = async (req, reply) => {
         orderNumber,
       });
 
-      if (couponIdToRedeem) await redeemCouponAtomic(tx, couponIdToRedeem);
+      if (couponIdToRedeem) await redeemCouponAtomic(tx, couponIdToRedeem, userId);
     });
 
     const [created] = await db.select().from(orders).where(eq(orders.id, id));
@@ -863,7 +885,7 @@ export const checkoutFromCart: RouteHandler = async (req, reply) => {
 
     const cust = await getCustomerByUserId(userId);
 
-    void fireOrderCreatedEvents({
+    fireOrderCreatedEvents({
       order: created,
       items: createdItems,
       userId,
@@ -873,7 +895,7 @@ export const checkoutFromCart: RouteHandler = async (req, reply) => {
         phone: cust.phone,
       },
       req,
-    });
+    }).catch((err: unknown) => req.log.error(err, 'fire_order_created_events_failed'));
 
     return reply.code(201).send({
       ...mapOrder(created),
@@ -890,6 +912,8 @@ export const checkoutFromCart: RouteHandler = async (req, reply) => {
       return reply.code(404).send({ error: { message: 'user_not_found' } });
     if (String(e?.message || '') === 'wallet_insufficient_balance')
       return reply.code(409).send({ error: { message: 'wallet_insufficient_balance' } });
+    if (String(e?.message || '').startsWith('coupon_'))
+      return reply.code(409).send({ error: { message: 'coupon_invalid', reason: e.message } });
 
     req.log.error(e);
     return reply.code(500).send({ error: { message: 'checkout_failed' } });
@@ -1001,266 +1025,3 @@ export const updateOrderItem: RouteHandler = async (req, reply) => {
   }
 };
 
-// small helper: prevents accidental non-string enum values
-function TidyString(v: unknown): string {
-  return String(v ?? '').trim();
-}
-function TidyMethod(v: unknown): any {
-  const s = TidyString(v);
-  return s;
-}
-function TidyPayment(v: unknown): any {
-  const s = TidyString(v);
-  return s;
-}
-// using direct:
-function Tidy(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyEnum(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyMaybe(v: unknown) {
-  const s = String(v ?? '').trim();
-  return s || null;
-}
-// keep minimal usage:
-function TidyNonEmpty(v: unknown) {
-  return String(v ?? '').trim();
-}
-// for checkout above:
-function TidyStr(v: unknown) {
-  return String(v ?? '').trim();
-}
-// and finally:
-function TidyPM(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyPS(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyPP(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// used in checkout insert:
-function TidyPaymentMethod(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyPaymentStatus(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// single use to avoid TS complaining:
-function TidySafe(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyNumber(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// THIS is what we used above:
-function TidyWallet(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyOrder(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// Practical:
-function TidyAny(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyNull(v: unknown) {
-  const s = String(v ?? '').trim();
-  return s || null;
-}
-
-// Actual used in checkout insert:
-function TidyPay(v: unknown) {
-  return String(v ?? '').trim();
-}
-function TidyOrderNo(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// Keep a single function:
-function TidyX(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// For the one place:
-function TidyMethodX(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// And the one I called:
-function TidyM(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// Final (used in checkout insert line):
-function TidyPMX(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// Real one referenced above:
-function TidyS(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// ---- the only one we referenced in code:
-function TidyY(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// sorry TS, we’ll just define:
-function TidyZ(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// Replace the line `payment_method: body.payment_method,` with:
-function TidyPayMethod(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// In our code above we used:
-function TidyPaymentMethodFinal(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// and referenced:
-function TidyFinal(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// Actual call used:
-function TidyPaymentMethodCall(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// --- simplest alias used above:
-function TidyPaymentMethodAlias(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// I used `TidyString` earlier; for checkout insert we used `Rna` mistakenly.
-// We'll define the actual referenced function name:
-function Stringy(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// ✅ This is the only one we used in code: `TidyMethod` was not used.
-// Let's just keep one and use it:
-function StringMethod(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// For the one call I put `TidyString(body.payment_method)`? not used.
-// In checkout insert I wrote `payment_method: body.payment_method` then changed to `TidyMethod` mistakenly.
-// We'll provide a clean fix: we will use `StringMethod` directly.
-function Razor(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-// ⛔ NOTE: Above extra tidies were from iterative editing. If you want absolutely clean file,
-// tell me and I’ll send a second “minimal-no-dup-helpers” version.
-// For now, just set payment_method directly from schema parse (it’s already validated by Zod).
-function SafeEnum<T extends string>(v: any): T {
-  return v as T;
-}
-
-// Use this for the one place in checkout:
-function StringEnum(v: any) {
-  return v as any;
-}
-function Any(v: any) {
-  return v;
-}
-function Identity<T>(x: T) {
-  return x;
-}
-function StringCast(v: any) {
-  return v as any;
-}
-function Stringify(v: any) {
-  return v as any;
-}
-
-// Needed because I used `TidyMethod` name in checkout insert above:
-function TidyMethodFix(v: any) {
-  return v as any;
-}
-function TidyPaymentFix(v: any) {
-  return v as any;
-}
-
-// IMPORTANT: Replace this line in checkout insert:
-//   payment_method: body.payment_method,
-// with:
-//   payment_method: body.payment_method,
-// because schema already guarantees enum. If TS complains, cast:
-//   payment_method: body.payment_method as any,
-function StringMethodFix(v: any) {
-  return v as any;
-}
-
-// For the one actual symbol I used in code: `Rna` doesn’t exist; so:
-function StringyFix(v: any) {
-  return v as any;
-}
-
-// In the checkout insert above I used `payment_method: body.payment_method` (OK).
-// I also used `payment_method: body.payment_method` in createOrder (OK).
-// No need to change further.
-function _noop() {}
-// -------------------------------------------------------------------
-
-function StringyPaymentMethod(v: any) {
-  return v as any;
-}
-function StringyPaymentStatus(v: any) {
-  return v as any;
-}
-function StringyPaymentProvider(v: any) {
-  return v as any;
-}
-function StringyPaymentId(v: any) {
-  return v as any;
-}
-function StringyNotes(v: any) {
-  return v as any;
-}
-function StringyCoupon(v: any) {
-  return v as any;
-}
-function StringyOrderNumber(v: any) {
-  return v as any;
-}
-function StringySubtotal(v: any) {
-  return v as any;
-}
-function StringyTotal(v: any) {
-  return v as any;
-}
-function StringyDiscount(v: any) {
-  return v as any;
-}
-function StringyCouponDiscount(v: any) {
-  return v as any;
-}
-function StringyIp(v: any) {
-  return v as any;
-}
-function StringyUa(v: any) {
-  return v as any;
-}
-
-// One real helper used above (checkout insert):
-function StringyMethodFix2(v: any) {
-  return v as any;
-}
-
-// ✅ The only identifier referenced in checkout insert is `Rna`? not anymore.
-// Keep file as-is after you paste, and remove the dead helper block if you want.
-// ===================================================================

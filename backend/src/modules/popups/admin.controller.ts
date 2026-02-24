@@ -78,7 +78,7 @@ function mapRow(r: PopupRow) {
     button_link: r.button_url ?? "",
     is_active: !!r.is_active,
 
-    display_frequency: r.show_once ? "once" : "always",
+    display_frequency: r.display_frequency ?? (r.show_once ? "once" : "always"),
     delay_seconds: Number(r.delay ?? 0),
 
     start_date: toIso(r.valid_from),
@@ -161,6 +161,7 @@ export const adminCreatePopup: RouteHandler = async (req, reply) => {
 
       is_active: input.is_active === undefined ? false : toBool(input.is_active),
       show_once: input.display_frequency === "once",
+      display_frequency: input.display_frequency ?? "always",
       delay: input.delay_seconds ?? 0,
       valid_from: toDateOrNull(input.start_date),
       valid_until: toDateOrNull(input.end_date),

@@ -71,13 +71,13 @@ export function makeAdminController(_app: FastifyInstance) {
       const withRole = await Promise.all(
         base.map(async (u) => ({
           ...u,
-          role: await getPrimaryRole(u.id),
+          role: await getPrimaryRole(u.id).catch(() => null),
         })),
       );
 
       const filtered = q.role ? withRole.filter((u) => u.role === q.role) : withRole;
 
-      return reply.send(filtered.map((u) => pickUserDto(u, u.role)));
+      return reply.send(filtered.map((u) => pickUserDto(u, u.role ?? 'user')));
     },
 
     /** GET /admin/users/:id */
@@ -150,7 +150,7 @@ export function makeAdminController(_app: FastifyInstance) {
         await tx.delete(userRoles).where(eq(userRoles.user_id, id));
         if (roles.length > 0) {
           await tx.insert(userRoles).values(
-            roles.map((r) => ({
+            roles.map((r: string) => ({
               id: randomUUID(),
               user_id: id,
               role: r,

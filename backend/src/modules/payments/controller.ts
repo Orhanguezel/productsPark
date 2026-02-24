@@ -38,7 +38,12 @@ import type {
 
 import { getSiteSettingsMap } from '@/modules/siteSettings/service';
 import { createPaytrToken } from '@/modules/functions/paytr/service';
+import { createPaytrRefund } from '@/modules/functions/paytr/refund';
+import { queryPaytrStatus } from '@/modules/functions/paytr/status';
 import { createShopierForm } from '@/modules/functions/shopier/service';
+import { createStripeCheckoutSession } from '@/modules/functions/stripe/service';
+import { createPaparaPayment } from '@/modules/functions/papara/service';
+import { getStripeConfig, getPaparaConfig } from './service';
 
 // -------------------------- helpers --------------------------
 
@@ -228,6 +233,7 @@ const mapProvider = (r: typeof paymentProviders.$inferSelect): PaymentProvider =
   id: r.id,
   key: r.key,
   display_name: r.displayName,
+  logo_url: r.logoUrl ?? null,
   is_active: Boolean(r.isActive),
   public_config: parseJsonObject(r.publicConfig),
 });
@@ -736,6 +742,140 @@ export const createPaymentSessionHandler: RouteHandlerMethod = async (req, reply
     return reply.code(201).send(mapSession(row));
   }
 
+  // ===================================================================
+  // Stripe (hosted checkout redirect)
+  // ===================================================================
+  if (providerKey === 'stripe') {
+    const amountTry = toNum(body.amount);
+    if (!Number.isFinite(amountTry) || amountTry <= 0) {
+      return reply.code(400).send({ error: { message: 'invalid_amount' } });
+    }
+
+    const orderRef = orderIdIn ?? `OID_${Date.now()}`;
+    const metaObj = (body.meta ?? null) as Record<string, unknown> | null;
+
+    let stripeCfg: Awaited<ReturnType<typeof getStripeConfig>>;
+    try {
+      stripeCfg = await getStripeConfig('stripe');
+    } catch (e: any) {
+      return reply.code(502).send({ error: { message: e?.message || 'stripe_config_missing' } });
+    }
+
+    const frontendBase = stripeCfg.okUrl.replace(/\/odeme-basarili.*$/, '');
+
+    let stripeResult: { session_id: string; checkout_url: string };
+    try {
+      stripeResult = await createStripeCheckoutSession({
+        merchant_oid: orderRef,
+        payment_amount_kurus: Math.round(amountTry * 100),
+        currency: (body.currency ?? 'TRY').toLowerCase(),
+        customer_email:
+          (typeof body.customer?.email === 'string' && body.customer.email.trim()) || undefined,
+        product_name:
+          (typeof metaObj?.product_name === 'string' && (metaObj.product_name as string).trim()) ||
+          'Sipariş Ödemesi',
+        success_url: `${frontendBase}/odeme-basarili`,
+        cancel_url: `${frontendBase}/odeme-basarisiz`,
+      });
+    } catch (e: any) {
+      req.log.error({ err: e?.message || e, orderRef }, 'stripe-create-session failed');
+      return reply.code(502).send({ error: { message: 'stripe_session_failed', detail: e?.message } });
+    }
+
+    await db.insert(paymentSessions).values({
+      id,
+      providerKey,
+      orderId: orderRef,
+      amount: toDecimal(body.amount),
+      currency: body.currency ?? 'TRY',
+      status: 'pending',
+      clientSecret: null,
+      iframeUrl: null,
+      redirectUrl: stripeResult.checkout_url,
+      extra: toJsonString({
+        ...(metaObj ?? {}),
+        stripe: {
+          session_id: stripeResult.session_id,
+          checkout_url: stripeResult.checkout_url,
+        },
+      }),
+    } as unknown as typeof paymentSessions.$inferInsert);
+
+    const [row] = await db
+      .select()
+      .from(paymentSessions)
+      .where(eq(paymentSessions.id, id))
+      .limit(1);
+
+    if (!row) return reply.code(500).send({ error: { message: 'session_create_failed' } });
+    return reply.code(201).send(mapSession(row));
+  }
+
+  // ===================================================================
+  // Papara (hosted payment redirect)
+  // ===================================================================
+  if (providerKey === 'papara') {
+    const amountTry = toNum(body.amount);
+    if (!Number.isFinite(amountTry) || amountTry <= 0) {
+      return reply.code(400).send({ error: { message: 'invalid_amount' } });
+    }
+
+    const orderRef = orderIdIn ?? `OID_${Date.now()}`;
+    const metaObj = (body.meta ?? null) as Record<string, unknown> | null;
+
+    let paparaCfg: Awaited<ReturnType<typeof getPaparaConfig>>;
+    try {
+      paparaCfg = await getPaparaConfig('papara');
+    } catch (e: any) {
+      return reply.code(502).send({ error: { message: e?.message || 'papara_config_missing' } });
+    }
+
+    let paparaResult: { id: string; paymentUrl: string };
+    try {
+      paparaResult = await createPaparaPayment({
+        amount: amountTry,
+        referenceId: orderRef,
+        orderDescription:
+          (typeof metaObj?.product_name === 'string' && (metaObj.product_name as string).trim()) ||
+          'Sipariş Ödemesi',
+        notificationUrl: paparaCfg.notificationUrl ?? undefined,
+        redirectUrl: paparaCfg.redirectUrl ?? undefined,
+        failUrl: paparaCfg.failUrl ?? undefined,
+      });
+    } catch (e: any) {
+      req.log.error({ err: e?.message || e, orderRef }, 'papara-create-payment failed');
+      return reply.code(502).send({ error: { message: 'papara_payment_failed', detail: e?.message } });
+    }
+
+    await db.insert(paymentSessions).values({
+      id,
+      providerKey,
+      orderId: orderRef,
+      amount: toDecimal(body.amount),
+      currency: body.currency ?? 'TRY',
+      status: 'pending',
+      clientSecret: null,
+      iframeUrl: null,
+      redirectUrl: paparaResult.paymentUrl,
+      extra: toJsonString({
+        ...(metaObj ?? {}),
+        papara: {
+          id: paparaResult.id,
+          paymentUrl: paparaResult.paymentUrl,
+        },
+      }),
+    } as unknown as typeof paymentSessions.$inferInsert);
+
+    const [row] = await db
+      .select()
+      .from(paymentSessions)
+      .where(eq(paymentSessions.id, id))
+      .limit(1);
+
+    if (!row) return reply.code(500).send({ error: { message: 'session_create_failed' } });
+    return reply.code(201).send(mapSession(row));
+  }
+
   await db.insert(paymentSessions).values({
     id,
     providerKey,
@@ -801,4 +941,87 @@ export const getPublicPaymentMethodsHandler: RouteHandlerMethod = async (_req, r
 
   const resp: PublicPaymentMethodsResp = { currency, guest_order_enabled, methods };
   return reply.send(resp);
+};
+
+// ===================================================================
+// PayTR Refund Handler
+// POST /paytr/refund  (auth required)
+// Body: { merchant_oid: string, return_amount: number, reference_no?: string }
+// ===================================================================
+
+const paytrRefundBody = z.object({
+  merchant_oid: z.string().min(1),
+  return_amount: z.number().positive(),
+  reference_no: z.string().max(64).optional(),
+});
+
+export const paytrRefundHandler: RouteHandlerMethod = async (req, reply) => {
+  const parsed = paytrRefundBody.safeParse((req as any).body ?? {});
+  if (!parsed.success) {
+    return reply.code(400).send({ error: { message: 'validation_error', details: parsed.error.format() } });
+  }
+
+  const { merchant_oid, return_amount, reference_no } = parsed.data;
+
+  try {
+    const result = await createPaytrRefund({ merchant_oid, return_amount, reference_no });
+
+    if (result.status !== 'success') {
+      return reply.code(422).send({
+        error: {
+          message: 'paytr_refund_rejected',
+          err_no: result.err_no ?? null,
+          err_msg: result.err_msg ?? null,
+        },
+      });
+    }
+
+    return reply.send({
+      status: 'success',
+      merchant_oid: result.merchant_oid ?? merchant_oid,
+      return_amount: result.return_amount ?? String(return_amount),
+      is_test: result.is_test ?? 0,
+    });
+  } catch (e: any) {
+    req.log.error({ err: e?.message }, 'paytr-refund error');
+    return reply.code(502).send({ error: { message: e?.message || 'paytr_refund_failed' } });
+  }
+};
+
+// ===================================================================
+// PayTR Status Query Handler
+// POST /paytr/status  (auth required)
+// Body: { merchant_oid: string }
+// ===================================================================
+
+const paytrStatusBody = z.object({
+  merchant_oid: z.string().min(1),
+});
+
+export const paytrStatusHandler: RouteHandlerMethod = async (req, reply) => {
+  const parsed = paytrStatusBody.safeParse((req as any).body ?? {});
+  if (!parsed.success) {
+    return reply.code(400).send({ error: { message: 'validation_error', details: parsed.error.format() } });
+  }
+
+  const { merchant_oid } = parsed.data;
+
+  try {
+    const result = await queryPaytrStatus(merchant_oid);
+
+    if (result.status === 'error') {
+      return reply.code(422).send({
+        error: {
+          message: 'paytr_status_rejected',
+          err_no: result.err_no ?? null,
+          err_msg: result.err_msg ?? null,
+        },
+      });
+    }
+
+    return reply.send(result);
+  } catch (e: any) {
+    req.log.error({ err: e?.message }, 'paytr-status error');
+    return reply.code(502).send({ error: { message: e?.message || 'paytr_status_failed' } });
+  }
 };

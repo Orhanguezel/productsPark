@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { formatPrice } from '@/lib/utils';
 import type { CheckoutPaymentMethodOption } from '@/integrations/types';
 
-type UiPaymentId = 'wallet' | 'bank_transfer' | 'paytr' | 'shopier';
+type UiPaymentId = 'wallet' | 'bank_transfer' | 'paytr' | 'shopier' | 'stripe' | 'papara';
 
 const toUiPaymentId = (v: unknown): UiPaymentId | '' => {
   const s = typeof v === 'string' ? v.trim() : '';
@@ -20,6 +20,8 @@ const toUiPaymentId = (v: unknown): UiPaymentId | '' => {
     case 'bank_transfer':
     case 'paytr':
     case 'shopier':
+    case 'stripe':
+    case 'papara':
       return s;
     default:
       return '';
@@ -65,13 +67,25 @@ export const CheckoutPaymentMethodsCard: React.FC<Props> = ({
             const isBank = active && mid === 'bank_transfer';
             const isPaytr = active && mid === 'paytr';
             const isShopier = active && mid === 'shopier';
+            const isStripe = active && mid === 'stripe';
+            const isPapara = active && mid === 'papara';
+
+            const methodCommission =
+              typeof (method as any).commission === 'number'
+                ? ((method as any).commission as number)
+                : 0;
 
             return (
               <div key={methodId} className="border rounded-lg p-4">
                 <div className="flex items-center space-x-2 mb-2">
                   <RadioGroupItem value={methodId} id={methodId} />
-                  <Label htmlFor={methodId} className="cursor-pointer font-semibold">
+                  <Label htmlFor={methodId} className="cursor-pointer font-semibold flex items-center gap-2">
                     {methodName}
+                    {methodCommission > 0 && (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        (Komisyon: %{methodCommission})
+                      </span>
+                    )}
                   </Label>
                 </div>
 
@@ -96,7 +110,7 @@ export const CheckoutPaymentMethodsCard: React.FC<Props> = ({
                   </div>
                 )}
 
-                {(isPaytr || isShopier) && loading && (
+                {(isPaytr || isShopier || isStripe || isPapara) && loading && (
                   <div className="ml-6 mt-3 text-center py-8">
                     <p className="text-muted-foreground">Ödeme sayfası hazırlanıyor...</p>
                   </div>

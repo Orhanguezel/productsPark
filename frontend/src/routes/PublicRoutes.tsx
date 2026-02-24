@@ -16,6 +16,7 @@ const PaymentInfo = lazy(() => import('../pages/public/payment/PaymentInfo'));
 const DepositPaymentInfo = lazy(() => import('../pages/public/payment/DepositPaymentInfo'));
 const PaymentIframe = lazy(() => import('../pages/public/payment/PaymentIframe'));
 const PaymentSuccess = lazy(() => import('../pages/public/payment/PaymentSuccess'));
+const PaymentFail = lazy(() => import('../pages/public/payment/PaymentFail'));
 const PaymentPending = lazy(() => import('../pages/public/payment/PaymentPending'));
 const Auth = lazy(() => import('../pages/public/Auth'));
 const PasswordReset = lazy(() => import('../pages/public/PasswordReset'));
@@ -27,6 +28,7 @@ const Documentation = lazy(() => import('../pages/public/Documentation'));
 const Dashboard = lazy(() => import('../pages/public/account/Dashboard'));
 const Support = lazy(() => import('../pages/public/Support'));
 const CouponDetailPage = lazy(() => import('../pages/public/CouponDetailPage'));
+const Campaigns = lazy(() => import('../pages/public/Campaigns'));
 const NotFound = lazy(() => import('../pages/public/NotFound'));
 const UserOrderDetail = lazy(() => import('../pages/public/UserOrderDetail'));
 const CustomPage = lazy(() => import('../pages/public/CustomPage'));
@@ -52,6 +54,7 @@ export default function PublicRoutes() {
 
       <Route path="odeme-iframe" element={<PaymentIframe />} />
       <Route path="odeme-basarili" element={<PaymentSuccess />} />
+      <Route path="odeme-basarisiz" element={<PaymentFail />} />
       <Route path="odeme-beklemede" element={<PaymentPending />} />
       <Route path="odeme-bildirimi" element={<PaymentPending />} />
 
@@ -64,6 +67,7 @@ export default function PublicRoutes() {
       <Route path="iletisim" element={<Contact />} />
       <Route path="dokumantasyon" element={<Documentation />} />
       <Route path="coupon" element={<CouponDetailPage />} />
+      <Route path="kampanyalar" element={<Campaigns />} />
 
       <Route path="hesabim" element={<Dashboard />} />
       <Route path="siparis/:id" element={<UserOrderDetail />} />

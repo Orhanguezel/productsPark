@@ -65,6 +65,15 @@ export type SiteSettings = {
   seo_privacy_description?: string | null;
 
   // ------------------------------------------------------------------
+  // HOME FAQ SECTION (home settings)
+  // ------------------------------------------------------------------
+  home_faq_title?: string | null;
+  home_faq_subtitle?: string | null;
+  home_faq_cta_title?: string | null;
+  home_faq_cta_subtitle?: string | null;
+  home_faq_cta_button?: string | null;
+
+  // ------------------------------------------------------------------
   // ASSETS / BRAND (misc seed)
   // ------------------------------------------------------------------
   favicon_url?: string | null;

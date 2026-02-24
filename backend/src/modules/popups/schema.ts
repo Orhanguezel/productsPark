@@ -32,7 +32,8 @@ export const popups = mysqlTable(
 
     // Görünürlük
     is_active: tinyint("is_active").notNull().default(0).$type<boolean>(),
-    show_once: tinyint("show_once").notNull().default(0).$type<boolean>(), // FE: display_frequency === 'once'
+    show_once: tinyint("show_once").notNull().default(0).$type<boolean>(), // geriye dönük uyum
+    display_frequency: varchar("display_frequency", { length: 16 }).default("always"), // always|once|daily|weekly
     delay: int("delay").notNull().default(0), // FE: delay_seconds
 
     // Tarih aralığı

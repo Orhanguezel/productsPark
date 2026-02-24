@@ -1,24 +1,11 @@
 // =============================================================
 // FILE: src/components/admin/AdminSidebar.tsx
-// FINAL — Admin Sidebar (adds payments module menu)
-// - NEW: payments -> /admin/payments
-// - Keeps existing routes intact
 // =============================================================
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from 'next-themes';
 import { toast } from '@/hooks/use-toast';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from '@/components/ui/sidebar';
 import {
   BarChart3,
   ShoppingCart,
@@ -42,8 +29,8 @@ import {
   Mail,
   Send,
 } from 'lucide-react';
-
-import { useAuthLogoutMutation } from '@/integrations/hooks';
+import { cn } from '@/lib/utils';
+import { useAuthLogoutMutation, useGetSiteSettingByKeyQuery } from '@/integrations/hooks';
 
 export type MenuValue =
   | 'dashboard'
@@ -74,7 +61,7 @@ export type MenuValue =
 
 const menuGroups: {
   label: string;
-  items: { title: string; icon: React.ComponentType<any>; value: MenuValue }[];
+  items: { title: string; icon: React.ComponentType<{ className?: string | undefined }>; value: MenuValue }[];
 }[] = [
   {
     label: 'Genel',
@@ -104,8 +91,6 @@ const menuGroups: {
       { title: 'Kuponlar', icon: Ticket, value: 'coupons' },
       { title: 'Cüzdan Talepleri', icon: Wallet, value: 'deposit-requests' },
       { title: 'Ödeme Talepleri', icon: CreditCard, value: 'payment-requests' },
-
-      // ✅ NEW: separate payments module
       { title: 'Ödeme Ayarları', icon: CreditCard, value: 'payments' },
     ],
   },
@@ -127,7 +112,7 @@ const menuGroups: {
     ],
   },
   {
-    label: 'Ayarlar',
+    label: 'Sistem',
     items: [{ title: 'Yedekleme', icon: Database, value: 'backup' }],
   },
 ];
@@ -136,7 +121,6 @@ const routeMap: Record<MenuValue, string> = {
   dashboard: '/admin',
   reports: '/admin/reports',
   'home-settings': '/admin/home-settings',
-
   products: '/admin/products',
   categories: '/admin/categories',
   blog: '/admin/blog',
@@ -145,24 +129,18 @@ const routeMap: Record<MenuValue, string> = {
   popups: '/admin/popups',
   'fake-notifications': '/admin/fake-notifications',
   contacts: '/admin/contacts',
-
   orders: '/admin/orders',
   coupons: '/admin/coupons',
   'deposit-requests': '/admin/deposit-requests',
   'payment-requests': '/admin/payment-requests',
   'wallet-transactions': '/admin/wallet-transactions',
-
-  // ✅ NEW
   payments: '/admin/payments',
-
   tickets: '/admin/tickets',
   users: '/admin/users',
-
   'email-templates': '/admin/email-templates',
   'api-providers': '/admin/api-providers',
   'turkpin-settings': '/admin/turkpin-settings',
   telegram: '/admin/telegram',
-
   settings: '/admin/settings',
   backup: '/admin/backup',
 };
@@ -170,30 +148,32 @@ const routeMap: Record<MenuValue, string> = {
 interface AdminSidebarProps {
   activeTab: MenuValue;
   onTabChange?: (value: MenuValue) => void;
+  isOpen?: boolean;
 }
 
-export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
-  const { state } = useSidebar();
+export function AdminSidebar({ activeTab, onTabChange, isOpen = true }: AdminSidebarProps) {
   const navigate = useNavigate();
-  const isCollapsed = state === 'collapsed';
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
+  const { data: lightLogoSetting } = useGetSiteSettingByKeyQuery('light_logo');
+  const { data: darkLogoSetting } = useGetSiteSettingByKeyQuery('dark_logo');
+  const { data: siteNameSetting } = useGetSiteSettingByKeyQuery('site_name');
+
+  const siteName = (siteNameSetting?.value as string) || 'Admin';
+  const logoUrl = isDark
+    ? ((darkLogoSetting?.value as string) || (lightLogoSetting?.value as string) || '')
+    : ((lightLogoSetting?.value as string) || '');
 
   const [logout, { isLoading: logoutLoading }] = useAuthLogoutMutation();
 
   const handleLogout = async () => {
     try {
       await logout().unwrap();
-      toast({
-        title: 'Çıkış Yapıldı',
-        description: 'Başarıyla çıkış yaptınız.',
-      });
+      toast({ title: 'Çıkış Yapıldı', description: 'Başarıyla çıkış yaptınız.' });
       navigate('/giris');
-    } catch (error) {
-      console.error('Logout error:', error);
-      toast({
-        title: 'Hata',
-        description: 'Çıkış yapılırken bir hata oluştu.',
-        variant: 'destructive',
-      });
+    } catch {
+      toast({ title: 'Hata', description: 'Çıkış yapılırken bir hata oluştu.', variant: 'destructive' });
     }
   };
 
@@ -203,70 +183,116 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
   };
 
   return (
-    <Sidebar className={isCollapsed ? 'w-14' : 'w-64'} collapsible="icon">
-      <SidebarContent>
-        <div className="p-4 border-b">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">D</span>
-            </div>
-            {!isCollapsed && (
-              <div>
-                <h2 className="font-bold">Admin Panel</h2>
-                <p className="text-xs text-muted-foreground">Dijital Market</p>
+    <aside
+      style={{ width: isOpen ? 256 : 64 }}
+      className={cn(
+        'flex-shrink-0 flex flex-col',
+        'border-r bg-card dark:bg-card',
+        'overflow-hidden',
+        'transition-[width] duration-200 ease-in-out',
+      )}
+    >
+      {/* Brand */}
+      <div className={cn(
+        'border-b flex-shrink-0 overflow-hidden',
+        isOpen ? 'px-4 py-4 flex flex-col items-center gap-2' : 'h-16 flex items-center justify-center px-2',
+      )}>
+        {logoUrl ? (
+          <>
+            <img
+              src={logoUrl}
+              alt={siteName}
+              className={isOpen ? 'h-12 w-auto max-w-full object-contain' : 'h-8 w-8 object-contain'}
+            />
+            {isOpen && (
+              <div className="text-center">
+                <p className="text-sm font-semibold leading-tight">{siteName}</p>
+                <p className="text-xs text-muted-foreground">Admin Panel</p>
               </div>
             )}
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className={cn(
+              'bg-primary rounded-lg flex items-center justify-center flex-shrink-0',
+              isOpen ? 'w-12 h-12' : 'w-8 h-8',
+            )}>
+              <span className={cn('text-primary-foreground font-bold', isOpen ? 'text-lg' : 'text-sm')}>
+                {siteName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            {isOpen && (
+              <div className="text-center">
+                <h2 className="font-bold text-sm leading-tight">{siteName}</h2>
+                <p className="text-xs text-muted-foreground">Admin Panel</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
+      {/* Menu — scrollable */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2">
         {menuGroups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.value}>
-                    <SidebarMenuButton
-                      type="button"
-                      onClick={() => handleMenuClick(item.value)}
-                      className={
-                        activeTab === item.value
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                          : ''
-                      }
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <div key={group.label} className="mb-1">
+            {isOpen && (
+              <p className="px-4 pt-2 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                {group.label}
+              </p>
+            )}
+            {!isOpen && <div className="my-1 mx-2 h-px bg-border" />}
+            <div className="px-2 space-y-0.5">
+              {group.items.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => handleMenuClick(item.value)}
+                  title={item.title}
+                  className={cn(
+                    'w-full flex items-center rounded-md px-2 py-2 text-sm transition-colors',
+                    isOpen ? 'gap-2 justify-start' : 'justify-center',
+                    activeTab === item.value
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-accent hover:text-accent-foreground text-foreground',
+                  )}
+                >
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  {isOpen && <span className="truncate whitespace-nowrap">{item.title}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
+      </div>
 
-        <div className="mt-auto p-4 border-t space-y-2">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => navigate('/')}>
-                <Home className="h-4 w-4" />
-                {!isCollapsed && <span>Ana Sayfaya Dön</span>}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={handleLogout}
-                disabled={logoutLoading}
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              >
-                <LogOut className="h-4 w-4" />
-                {!isCollapsed && <span>Çıkış Yap</span>}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </div>
-      </SidebarContent>
-    </Sidebar>
+      {/* Footer */}
+      <div className="p-2 border-t flex-shrink-0 space-y-0.5">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          title="Ana Sayfaya Dön"
+          className={cn(
+            'w-full flex items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground text-foreground',
+            isOpen ? 'gap-2 justify-start' : 'justify-center',
+          )}
+        >
+          <Home className="h-4 w-4 flex-shrink-0" />
+          {isOpen && <span className="whitespace-nowrap">Ana Sayfaya Dön</span>}
+        </button>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={logoutLoading}
+          title="Çıkış Yap"
+          className={cn(
+            'w-full flex items-center rounded-md px-2 py-2 text-sm transition-colors text-destructive hover:bg-destructive/10',
+            isOpen ? 'gap-2 justify-start' : 'justify-center',
+          )}
+        >
+          <LogOut className="h-4 w-4 flex-shrink-0" />
+          {isOpen && <span className="whitespace-nowrap">Çıkış Yap</span>}
+        </button>
+      </div>
+    </aside>
   );
 }

@@ -6,6 +6,8 @@ export const paymentMethods = [
   'wallet',
   'paytr',
   'shopier',
+  'stripe',
+  'papara',
 ] as const;
 
 // DB ENUM ile birebir (DDL: ('pending','processing','completed','cancelled','refunded'))

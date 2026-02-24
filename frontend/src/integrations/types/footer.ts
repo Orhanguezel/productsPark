@@ -62,6 +62,7 @@ export type ApiFooterSection = {
 
   title?: string | null;
   links?: string | FooterLink[] | null;
+  section_type?: string | null;
 
   is_active?: boolean | 0 | 1 | '0' | '1' | 'true' | 'false' | null;
 
@@ -77,6 +78,8 @@ export type FooterSection = {
   id: string;
   title: string;
   links: FooterLink[];
+  /** 'links' (default) | 'payment_methods' */
+  section_type: string;
   is_active: boolean;
   display_order: number;
 
@@ -127,6 +130,7 @@ export function normalizeFooterSection(row: ApiFooterSection): FooterSection {
     id: String(row.id ?? ''),
     title: String(row.title ?? ''),
     links,
+    section_type: typeof row.section_type === 'string' && row.section_type.trim() ? row.section_type.trim() : 'links',
     is_active: toBool(row.is_active, true),
     display_order: toNum(row.display_order ?? row.position ?? 0),
 

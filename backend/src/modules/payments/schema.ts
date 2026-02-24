@@ -15,6 +15,7 @@ export const paymentProviders = mysqlTable('payment_providers', {
   id: char('id', { length: 36 }).primaryKey().notNull(),
   key: varchar('key', { length: 64 }).notNull(),
   displayName: varchar('display_name', { length: 128 }).notNull(),
+  logoUrl: varchar('logo_url', { length: 500 }),
   isActive: tinyint('is_active').notNull().default(1),
 
   publicConfig: text('public_config'),

@@ -36,7 +36,10 @@ VALUES
   NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  6, 1),
 
 ('24c49639-01d0-4274-8fb9-c31ed64d0726', 'Kullanım Koşulları',     '/kullanim-kosullari',
-  NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  7, 1)
+  NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  7, 1),
+
+('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'Çerez Politikası',       '/cerez-politikasi',
+  NULL, 'footer', 'f942a930-6743-4ecc-b4b3-1fd6b77f9d77', 'custom', NULL, NULL,  8, 1)
 ON DUPLICATE KEY UPDATE
   `label`      = VALUES(`label`),
   `url`        = VALUES(`url`),

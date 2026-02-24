@@ -47,7 +47,7 @@ const updateTicketBodyBaseSchema = z.object({
 });
 
 export const updateTicketBodySchema = updateTicketBodyBaseSchema.refine(
-  (v) => Object.keys(v).length > 0,
+  (v: object) => Object.keys(v).length > 0,
   { message: "Boş patch gönderilemez." },
 );
 

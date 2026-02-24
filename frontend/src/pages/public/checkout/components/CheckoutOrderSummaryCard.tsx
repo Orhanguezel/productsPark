@@ -16,7 +16,7 @@ type CartItemRenderable = {
   products: { name: string; price: number; quantity_options?: unknown };
 };
 
-type UiPaymentId = 'paytr' | 'shopier' | 'wallet' | 'bank_transfer';
+type UiPaymentId = 'paytr' | 'shopier' | 'stripe' | 'papara' | 'wallet' | 'bank_transfer';
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
   !!x && typeof x === 'object' && !Array.isArray(x);
@@ -64,6 +64,8 @@ const toUiPaymentId = (v: unknown): UiPaymentId | '' => {
   switch (s) {
     case 'paytr':
     case 'shopier':
+    case 'stripe':
+    case 'papara':
     case 'wallet':
     case 'bank_transfer':
       return s;
@@ -103,13 +105,15 @@ export const CheckoutOrderSummaryCard: React.FC<Props> = ({
 
   const buttonLabel = loading
     ? 'İşleniyor...'
-    : payId === 'paytr' || payId === 'shopier'
+    : payId === 'paytr' || payId === 'shopier' || payId === 'stripe'
       ? 'Kredi Kartı ile Öde'
-      : payId === 'bank_transfer'
-        ? 'Havale/EFT ile Devam Et'
-        : payId === 'wallet'
-          ? 'Cüzdan ile Öde'
-          : 'Ödemeyi Tamamla';
+      : payId === 'papara'
+        ? 'Papara ile Öde'
+        : payId === 'bank_transfer'
+          ? 'Havale/EFT ile Devam Et'
+          : payId === 'wallet'
+            ? 'Cüzdan ile Öde'
+            : 'Ödemeyi Tamamla';
 
   const subtotal = toNum((checkoutData as any).subtotal, 0);
   const discount = toNum((checkoutData as any).discount, 0);

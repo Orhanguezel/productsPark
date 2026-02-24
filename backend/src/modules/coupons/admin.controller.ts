@@ -54,6 +54,7 @@ const mapRow = (r: CouponRow) => ({
   max_discount: r.max_discount == null ? null : Number(r.max_discount),
   is_active: !!r.is_active,
   max_uses: r.usage_limit == null ? null : Number(r.usage_limit),
+  per_user_limit: r.per_user_limit == null ? null : Number(r.per_user_limit),
   used_count: r.used_count == null ? null : Number(r.used_count),
   valid_from: iso(r.valid_from),
   valid_until: iso(r.valid_until),
@@ -146,6 +147,7 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
         min_purchase: z.coerce.number().nonnegative().nullable().optional(),
         max_discount: z.coerce.number().nonnegative().nullable().optional(),
         usage_limit: z.coerce.number().int().positive().nullable().optional(),
+        per_user_limit: z.coerce.number().int().positive().nullable().optional(),
         valid_from: z.union([z.string(), z.date()]).nullable().optional(),
         valid_until: z.union([z.string(), z.date()]).nullable().optional(),
         is_active: boolLike.optional(),
@@ -195,6 +197,7 @@ export const adminCreateCoupon: RouteHandler = async (req, reply) => {
       max_discount:
         input.max_discount == null ? null : toDecStr(input.max_discount),
       usage_limit: input.usage_limit ?? null,
+      per_user_limit: input.per_user_limit ?? null,
       used_count: 0,
       valid_from: toDateOrNull(input.valid_from),
       valid_until: toDateOrNull(input.valid_until),
@@ -258,6 +261,12 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
           .positive()
           .nullable()
           .optional(),
+        per_user_limit: z
+          .coerce.number()
+          .int()
+          .positive()
+          .nullable()
+          .optional(),
         valid_from: z.union([z.string(), z.date()]).nullable().optional(),
         valid_until: z.union([z.string(), z.date()]).nullable().optional(),
         is_active: boolLike.optional(),
@@ -307,6 +316,8 @@ export const adminUpdateCoupon: RouteHandler = async (req, reply) => {
         patch.max_discount == null ? null : toDecStr(patch.max_discount);
     if (patch.usage_limit !== undefined)
       updates.usage_limit = patch.usage_limit ?? null;
+    if (patch.per_user_limit !== undefined)
+      updates.per_user_limit = patch.per_user_limit ?? null;
     if (patch.valid_from !== undefined)
       updates.valid_from = toDateOrNull(patch.valid_from);
     if (patch.valid_until !== undefined)

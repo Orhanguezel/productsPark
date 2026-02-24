@@ -20,6 +20,8 @@ export function pickUserDto(u: UserRow, role: string) {
     created_at: u.created_at,
     last_login_at: u.last_sign_in_at,
 
+    wallet_balance: Number(u.wallet_balance ?? 0),
+
     // ✅ profil resmi
     profile_image: (u as any).profile_image ?? null,
     profile_image_asset_id: (u as any).profile_image_asset_id ?? null,

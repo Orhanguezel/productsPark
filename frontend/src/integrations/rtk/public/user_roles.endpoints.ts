@@ -23,19 +23,17 @@ const extendedApi = baseApi.enhanceEndpoints({
 
 export const userRolesApi = extendedApi.injectEndpoints({
   endpoints: (b) => ({
-    listUserRoles: b.query<UserRole[], UserRolesListParams | void>({
+    listUserRoles: b.query<UserRole[], UserRolesListParams | undefined>({
       query: (params) => {
-        const p = params ?? {};
         const sp = new URLSearchParams();
+        if (params?.user_id) sp.set('user_id', params.user_id);
+        if (params?.role) sp.set('role', params.role);
 
-        if (p.user_id) sp.set('user_id', p.user_id);
-        if (p.role) sp.set('role', p.role);
+        sp.set('order', params?.order ?? 'created_at');
+        sp.set('direction', params?.direction ?? 'asc');
 
-        sp.set('order', p.order ?? 'created_at');
-        sp.set('direction', p.direction ?? 'asc');
-
-        if (typeof p.limit === 'number') sp.set('limit', String(p.limit));
-        if (typeof p.offset === 'number') sp.set('offset', String(p.offset));
+        if (typeof params?.limit === 'number') sp.set('limit', String(params!.limit));
+        if (typeof params?.offset === 'number') sp.set('offset', String(params!.offset));
 
         const qs = sp.toString();
         return { url: qs ? `${BASE}?${qs}` : BASE, method: 'GET' };

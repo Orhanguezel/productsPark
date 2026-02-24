@@ -31,7 +31,7 @@ import {
  * toBool sadece BoolLike kabul ettiği için pickFirst(unknown) önce buradan geçirilir.
  */
 function asBoolLike(x: unknown): BoolLike {
-  if (x == null) return x; // null | undefined
+  if (x == null) return x as BoolLike; // null | undefined
   if (typeof x === 'boolean') return x;
   if (x === 0 || x === 1) return x;
 
@@ -151,6 +151,14 @@ export type CampaignPopupView = {
 
   button_text: string | null;
   button_link: string | null;
+
+  // Display logic fields
+  display_pages: string;
+  display_frequency: string;
+  delay_seconds: number;
+  duration_seconds: number | null;
+  coupon_code: string | null;
+  product_id: string | null;
 
   created_at?: string;
   updated_at?: string;
@@ -274,6 +282,16 @@ export function normalizeCampaignPopup(row: unknown): CampaignPopupView {
 
     button_text,
     button_link,
+
+    display_pages: toStr(pickFirst(r, ['display_pages', 'displayPages'])).trim() || 'all',
+    display_frequency: toStr(pickFirst(r, ['display_frequency', 'displayFrequency'])).trim() || 'always',
+    delay_seconds: Math.max(0, Math.trunc(toNum(pickFirst(r, ['delay_seconds', 'delaySeconds']), 0))),
+    duration_seconds: (() => {
+      const v = pickFirst(r, ['duration_seconds', 'durationSeconds']);
+      return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+    })(),
+    coupon_code: pickOptStr(r, ['coupon_code', 'couponCode']) ?? null,
+    product_id: pickOptStr(r, ['product_id', 'productId']) ?? null,
 
     ...(createdAt ? { created_at: createdAt } : {}),
     ...(updatedAt ? { updated_at: updatedAt } : {}),

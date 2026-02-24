@@ -25,7 +25,7 @@ export const blogAdminApi = extendedApi.injectEndpoints({
   endpoints: (b) => ({
     listBlogPostsAdmin: b.query<BlogPost[], BlogListParams | void>({
       query: (params) => {
-        const qs = toBlogListQuery(params ?? undefined);
+        const qs = toBlogListQuery(params as BlogListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       transformResponse: (res: unknown): BlogPost[] => normalizeBlogPostList(res),

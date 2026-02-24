@@ -36,7 +36,7 @@ import {
 
 import type { WalletTransaction as WalletTxn, CreateOrderBody } from '@/integrations/types';
 
-type PaymentMethodId = 'havale' | 'eft' | 'paytr' | 'shopier';
+type PaymentMethodId = 'havale' | 'eft' | 'paytr' | 'shopier' | 'stripe' | 'papara';
 
 type PaymentMethod = {
   id: PaymentMethodId;
@@ -337,6 +337,26 @@ export function WalletTab({ txns, txLoading }: { txns: WalletTxn[]; txLoading?: 
         continue;
       }
 
+      if (key === 'stripe') {
+        methods.push({
+          id: 'stripe',
+          name: (p as any).display_name || 'Kredi Kartı (Stripe)',
+          enabled: true,
+          commission,
+        });
+        continue;
+      }
+
+      if (key === 'papara') {
+        methods.push({
+          id: 'papara',
+          name: (p as any).display_name || 'Papara',
+          enabled: true,
+          commission,
+        });
+        continue;
+      }
+
     }
 
     return uniqById(methods);
@@ -386,6 +406,8 @@ export function WalletTab({ txns, txLoading }: { txns: WalletTxn[]; txLoading?: 
 
     if (selectedPayment === 'paytr') await handlePayTRPayment();
     else if (selectedPayment === 'shopier') await handleShopierPayment();
+    else if (selectedPayment === 'stripe') await handleStripePayment();
+    else if (selectedPayment === 'papara') await handlePaparaPayment();
     else if (selectedPayment === 'havale' || selectedPayment === 'eft') {
       toast.success('Ödeme bilgilerine yönlendiriliyorsunuz...');
       window.location.href = `/bakiye-odeme-bilgileri?amount=${encodeURIComponent(
@@ -563,6 +585,145 @@ export function WalletTab({ txns, txLoading }: { txns: WalletTxn[]; txLoading?: 
     } catch (e) {
       console.error('Shopier payment error:', e);
 
+      const backendMsg = pickRtkErrorMessage(e);
+      toast.error(backendMsg || (e instanceof Error ? e.message : 'Ödeme başlatılamadı'));
+    } finally {
+      setDepositing(false);
+    }
+  };
+
+  /* ---------- Stripe Card ---------- */
+  const handleStripePayment = async () => {
+    if (!user) return;
+
+    const amount = Number(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const stripeMethod = paymentMethods.find((m) => m.id === 'stripe');
+    const commissionRate = stripeMethod?.commission ?? 0;
+    const commission = (amount * commissionRate) / 100;
+    const finalTotal = amount + commission;
+    const subtotalStr = amount.toFixed(2);
+    const finalStr = finalTotal.toFixed(2);
+
+    setDepositing(true);
+    try {
+      const orderNumber = `WALLET${Date.now()}`;
+
+      const orderBody: CreateOrderBody = {
+        order_number: orderNumber,
+        payment_method: 'stripe',
+        payment_status: 'pending',
+        notes: 'Cüzdan bakiye yükleme',
+        items: [
+          {
+            product_id: WALLET_PRODUCT_ID,
+            product_name: 'Cüzdan Bakiye Yükleme',
+            quantity: 1,
+            price: subtotalStr,
+            total: subtotalStr,
+            options: { type: 'wallet_topup' },
+          },
+        ],
+        subtotal: subtotalStr,
+        discount: '0.00',
+        total: finalStr,
+      };
+
+      const order = await createOrder(orderBody).unwrap();
+
+      const prof = pickProfileName(profileData);
+      const displayName = `${prof.first ?? 'Müşteri'} ${prof.last ?? ''}`.trim();
+
+      const session = await createPaymentSession({
+        provider_key: 'stripe',
+        order_id: (order as any).id,
+        amount: finalTotal,
+        currency: 'TRY',
+        customer: {
+          id: user.id ?? undefined,
+          email: user.email ?? '',
+          name: displayName,
+        },
+        meta: { product_name: 'Cüzdan Bakiye Yükleme' },
+      }).unwrap();
+
+      const sessionId = String((session as any)?.id ?? '').trim();
+      if (!sessionId) throw new Error('payment_session_id_missing');
+
+      sessionStorage.setItem(
+        'payment_session',
+        JSON.stringify({ id: sessionId, provider_key: 'stripe', order_id: (order as any).id }),
+      );
+
+      navigate(`/odeme-iframe?session_id=${encodeURIComponent(sessionId)}`);
+    } catch (e) {
+      const backendMsg = pickRtkErrorMessage(e);
+      toast.error(backendMsg || (e instanceof Error ? e.message : 'Ödeme başlatılamadı'));
+    } finally {
+      setDepositing(false);
+    }
+  };
+
+  /* ---------- Papara ---------- */
+  const handlePaparaPayment = async () => {
+    if (!user) return;
+
+    const amount = Number(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const paparaMethod = paymentMethods.find((m) => m.id === 'papara');
+    const commissionRate = paparaMethod?.commission ?? 0;
+    const commission = (amount * commissionRate) / 100;
+    const finalTotal = amount + commission;
+    const subtotalStr = amount.toFixed(2);
+    const finalStr = finalTotal.toFixed(2);
+
+    setDepositing(true);
+    try {
+      const orderNumber = `WALLET${Date.now()}`;
+
+      const orderBody: CreateOrderBody = {
+        order_number: orderNumber,
+        payment_method: 'papara',
+        payment_status: 'pending',
+        notes: 'Cüzdan bakiye yükleme',
+        items: [
+          {
+            product_id: WALLET_PRODUCT_ID,
+            product_name: 'Cüzdan Bakiye Yükleme',
+            quantity: 1,
+            price: subtotalStr,
+            total: subtotalStr,
+            options: { type: 'wallet_topup' },
+          },
+        ],
+        subtotal: subtotalStr,
+        discount: '0.00',
+        total: finalStr,
+      };
+
+      const order = await createOrder(orderBody).unwrap();
+
+      const session = await createPaymentSession({
+        provider_key: 'papara',
+        order_id: (order as any).id,
+        amount: finalTotal,
+        currency: 'TRY',
+        customer: { id: user.id ?? undefined, email: user.email ?? '' },
+        meta: { product_name: 'Cüzdan Bakiye Yükleme' },
+      }).unwrap();
+
+      const sessionId = String((session as any)?.id ?? '').trim();
+      if (!sessionId) throw new Error('payment_session_id_missing');
+
+      sessionStorage.setItem(
+        'payment_session',
+        JSON.stringify({ id: sessionId, provider_key: 'papara', order_id: (order as any).id }),
+      );
+
+      navigate(`/odeme-iframe?session_id=${encodeURIComponent(sessionId)}`);
+    } catch (e) {
       const backendMsg = pickRtkErrorMessage(e);
       toast.error(backendMsg || (e instanceof Error ? e.message : 'Ödeme başlatılamadı'));
     } finally {

@@ -23,6 +23,9 @@ export type CheckoutPaymentMethodOption = {
   name: string;
   enabled: boolean;
 
+  /** Commission percentage (e.g. 2.5 for 2.5%) */
+  commission?: number;
+
   // bank_transfer only (optional UI hints)
   iban?: string;
   account_holder?: string;

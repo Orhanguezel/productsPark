@@ -156,16 +156,18 @@ const Navbar = () => {
                 <img
                   src={logoUrl}
                   alt={siteName}
-                  className="h-8 w-auto object-contain"
+                  className="h-12 w-auto object-contain"
                 />
               ) : (
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-sm">
-                    {siteName.charAt(0)}
-                  </span>
-                </div>
+                <>
+                  <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                    <span className="text-primary-foreground font-bold text-base">
+                      {siteName.charAt(0)}
+                    </span>
+                  </div>
+                  <span className="font-bold text-xl">{siteName}</span>
+                </>
               )}
-              <span className="font-bold text-xl">{siteName}</span>
             </Link>
 
             {/* Desktop Menu */}

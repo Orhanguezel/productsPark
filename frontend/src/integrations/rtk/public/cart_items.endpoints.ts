@@ -28,7 +28,7 @@ export const cartItemsApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     listCartItems: b.query<PublicCartItem[], PublicCartItemsListParams | void>({
       query: (params) => {
-        const qs = toPublicCartItemsQuery(params ?? undefined);
+        const qs = toPublicCartItemsQuery(params as PublicCartItemsListParams | undefined);
         return { url: `${BASE}${qs}`, method: 'GET' };
       },
       transformResponse: (res: unknown): PublicCartItem[] => normalizePublicCartItemList(res),

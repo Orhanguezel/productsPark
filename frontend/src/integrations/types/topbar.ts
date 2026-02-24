@@ -27,7 +27,7 @@ const optStr = (v: unknown): string | null => {
  * normalize aşamasında toBool'a unknown vermemek için.
  */
 const asBoolLike = (x: unknown): BoolLike => {
-  if (x == null) return x; // null | undefined
+  if (x == null) return x as BoolLike; // null | undefined
   if (typeof x === 'boolean') return x;
   if (x === 0 || x === 1) return x;
 

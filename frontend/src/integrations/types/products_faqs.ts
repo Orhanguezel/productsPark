@@ -73,7 +73,7 @@ const nullify = (v: unknown): string | null => {
 
 /** unknown -> BoolLike daraltma (common BoolLike union’una uyumlu) */
 const asBoolLike = (v: unknown): BoolLike => {
-  if (v === null || typeof v === 'undefined') return v;
+  if (v === null || typeof v === 'undefined') return v as BoolLike;
   if (typeof v === 'boolean') return v;
   if (v === 0 || v === 1) return v;
 

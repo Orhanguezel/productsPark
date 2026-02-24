@@ -18,13 +18,12 @@ import {
 } from '@/components/ui/dialog';
 
 import { useAuth } from '@/hooks/useAuth';
-import { ShoppingBag, Users, DollarSign, Clock, Eye } from 'lucide-react';
+import { ShoppingBag, Users, DollarSign, Clock, Eye, PanelLeft } from 'lucide-react';
 
 import { TicketManagement } from '@/components/admin/TicketManagement';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import type { MenuValue } from '@/components/admin/AdminSidebar';
 
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
 import { formatPrice } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +46,7 @@ const Admin = () => {
   const { user, loading: authLoading, isAdmin } = useAuth();
 
   const [activeTab, setActiveTab] = useState<MenuValue>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [stats, setStats] = useState({
     todayOrders: 0,
@@ -204,14 +204,15 @@ const Admin = () => {
   if (!user || !isAdmin) return null;
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <AdminSidebar activeTab={activeTab} onTabChange={handleTabChange} />
+    <div className="h-screen w-full flex overflow-hidden bg-background">
+      <AdminSidebar activeTab={activeTab} onTabChange={handleTabChange} isOpen={sidebarOpen} />
 
-        <div className="flex-1 flex flex-col">
-          <header className="h-16 border-b flex items-center px-6 bg-background sticky top-0 z-10">
-            <SidebarTrigger />
-            <h1 className="text-2xl font-bold ml-4">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="h-16 flex-shrink-0 border-b flex items-center px-6 bg-background sticky top-0 z-10">
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(v => !v)} className="h-8 w-8 mr-2">
+            <PanelLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold">
               {activeTab === 'dashboard' && 'Dashboard'}
               {activeTab === 'products' && 'Ürün Yönetimi'}
               {activeTab === 'orders' && 'Sipariş Yönetimi'}
@@ -422,7 +423,6 @@ const Admin = () => {
           </main>
         </div>
       </div>
-    </SidebarProvider>
   );
 };
 

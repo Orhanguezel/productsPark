@@ -15,6 +15,7 @@ import {
   useListMenuItemsQuery,
   useGetSiteSettingByKeyQuery,
   useListFooterSectionsQuery,
+  useListPaymentProvidersQuery,
 } from '@/integrations/hooks';
 import type { MenuItem, JsonLike, FooterSection as FooterSectionModel } from '@/integrations/types';
 
@@ -69,7 +70,13 @@ const Footer = () => {
     order: 'asc',
   });
 
-  const footerSections: FooterSectionModel[] = footerSectionsData;
+  // Bölümleri ayır: link bölümleri vs özel bölümler
+  const footerSections: FooterSectionModel[] = footerSectionsData.filter(
+    (s) => s.section_type !== 'payment_methods',
+  );
+  const paymentMethodsSection = footerSectionsData.find(
+    (s) => s.section_type === 'payment_methods',
+  );
 
   // RTK: site_settings – sosyal linkler
   const { data: facebookSetting } = useGetSiteSettingByKeyQuery('facebook_url');
@@ -83,6 +90,40 @@ const Footer = () => {
     instagram: toStr(instagramSetting?.value, DEFAULT_SOCIAL_LINKS.instagram),
     youtube: toStr(youtubeSetting?.value, DEFAULT_SOCIAL_LINKS.youtube),
   };
+  const socialItems = [
+    {
+      key: 'facebook',
+      href: socialLinks.facebook,
+      label: 'Facebook',
+      Icon: FacebookIcon,
+      className:
+        'bg-[#1877F2]/10 text-[#1877F2] border-[#1877F2]/30 hover:bg-[#1877F2] hover:text-white',
+    },
+    {
+      key: 'twitter',
+      href: socialLinks.twitter,
+      label: 'X / Twitter',
+      Icon: TwitterIcon,
+      className:
+        'bg-slate-500/10 text-slate-700 border-slate-500/30 hover:bg-slate-700 hover:text-white dark:text-slate-300 dark:hover:bg-slate-200 dark:hover:text-slate-900',
+    },
+    {
+      key: 'instagram',
+      href: socialLinks.instagram,
+      label: 'Instagram',
+      Icon: InstagramIcon,
+      className:
+        'bg-[#E4405F]/10 text-[#E4405F] border-[#E4405F]/30 hover:bg-[#E4405F] hover:text-white',
+    },
+    {
+      key: 'youtube',
+      href: socialLinks.youtube,
+      label: 'YouTube',
+      Icon: YoutubeIcon,
+      className:
+        'bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/30 hover:bg-[#FF0000] hover:text-white',
+    },
+  ] as const;
 
   // RTK: site_settings – footer metinleri
   const { data: companyNameSetting } = useGetSiteSettingByKeyQuery('footer_company_name');
@@ -91,6 +132,10 @@ const Footer = () => {
   const { data: footerEmailSetting } = useGetSiteSettingByKeyQuery('footer_email');
   const { data: phoneSetting } = useGetSiteSettingByKeyQuery('footer_phone');
   const { data: addressSetting } = useGetSiteSettingByKeyQuery('footer_address');
+
+  // RTK: aktif ödeme sağlayıcıları (footer logolar için)
+  const { data: paymentProviders = [] } = useListPaymentProvidersQuery({ is_active: true });
+  const providersWithLogo = paymentProviders.filter((p) => p.logo_url);
 
   // RTK: site_settings – logo
   const { data: lightLogoSetting } = useGetSiteSettingByKeyQuery('light_logo');
@@ -132,53 +177,36 @@ const Footer = () => {
                 <img
                   src={logoUrl}
                   alt={footerSettings.company_name}
-                  className="h-8 w-auto object-contain"
+                  className="h-14 w-auto object-contain"
                 />
               ) : (
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-sm">
-                    {footerSettings.company_name.charAt(0)}
+                <>
+                  <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
+                    <span className="text-primary-foreground font-bold text-lg">
+                      {footerSettings.company_name.charAt(0)}
+                    </span>
+                  </div>
+                  <span className="font-bold text-xl text-foreground">
+                    {footerSettings.company_name}
                   </span>
-                </div>
+                </>
               )}
-              <span className="font-bold text-xl text-foreground">
-                {footerSettings.company_name}
-              </span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">{footerSettings.description}</p>
-            <div className="flex gap-3">
-              <a
-                href={socialLinks.facebook}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground flex items-center justify-center transition-smooth"
-              >
-                <FacebookIcon className="w-4 h-4" />
-              </a>
-              <a
-                href={socialLinks.twitter}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground flex items-center justify-center transition-smooth"
-              >
-                <TwitterIcon className="w-4 h-4" />
-              </a>
-              <a
-                href={socialLinks.instagram}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground flex items-center justify-center transition-smooth"
-              >
-                <InstagramIcon className="w-4 h-4" />
-              </a>
-              <a
-                href={socialLinks.youtube}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground flex items-center justify-center transition-smooth"
-              >
-                <YoutubeIcon className="w-4 h-4" />
-              </a>
+            <div className="flex gap-2">
+              {socialItems.map(({ key, href, label, Icon, className }) => (
+                <a
+                  key={key}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  title={label}
+                  className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 ${className}`}
+                >
+                  <Icon className="w-[18px] h-[18px]" />
+                </a>
+              ))}
             </div>
           </div>
 
@@ -193,9 +221,9 @@ const Footer = () => {
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   {sectionItems.map((item) => (
                     <li key={item.id}>
-                      <a href={item.url} className="hover:text-primary transition-smooth">
+                      <Link to={item.url ?? '#'} className="hover:text-primary transition-smooth">
                         {item.title}
-                      </a>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -210,9 +238,9 @@ const Footer = () => {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 {orphanItems.map((item) => (
                   <li key={item.id}>
-                    <a href={item.url} className="hover:text-primary transition-smooth">
+                    <Link to={item.url ?? '#'} className="hover:text-primary transition-smooth">
                       {item.title}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -249,19 +277,44 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="border-t border-border mt-12 pt-8">
+        {paymentMethodsSection && providersWithLogo.length > 0 && (
+          <div className="border-t border-border mt-8 pt-8">
+            <h3 className="font-semibold text-sm text-foreground mb-4">{paymentMethodsSection.title}</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              {providersWithLogo.map((p) => (
+                <div
+                  key={p.id}
+                  className="h-10 px-3 rounded-lg border border-border bg-background flex items-center justify-center hover:border-primary/40 transition-colors"
+                  title={p.display_name}
+                >
+                  <img
+                    src={p.logo_url!}
+                    alt={p.display_name}
+                    className="h-6 w-auto object-contain"
+                    style={{ maxWidth: '80px' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="border-t border-border mt-8 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
             <p>{footerSettings.copyright}</p>
             <div className="flex flex-wrap gap-4">
-              <a href="#" className="hover:text-primary transition-smooth">
+              <Link to="/kampanyalar" className="hover:text-primary transition-smooth">
+                Kampanyalar
+              </Link>
+              <Link to="/kullanim-kosullari" className="hover:text-primary transition-smooth">
                 Kullanım Koşulları
-              </a>
-              <a href="#" className="hover:text-primary transition-smooth">
+              </Link>
+              <Link to="/gizlilik-sozlesmesi" className="hover:text-primary transition-smooth">
                 Gizlilik Politikası
-              </a>
-              <a href="#" className="hover:text-primary transition-smooth">
+              </Link>
+              <Link to="/cerez-politikasi" className="hover:text-primary transition-smooth">
                 Çerez Politikası
-              </a>
+              </Link>
             </div>
           </div>
         </div>

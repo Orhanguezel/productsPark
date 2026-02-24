@@ -24,6 +24,7 @@ import ThemeColorsSettingsCard from './components/ThemeColorsSettingsCard';
 import PopupManagement from '../PopupManagement';
 import TopbarManagement from './components/TopbarManagement';
 import FooterSettingsCard from './components/FooterSettingsCard';
+import HeaderSettingsCard from './components/HeaderSettingsCard';
 
 import {
   useGetPaymentProviderByKeyQuery,
@@ -494,6 +495,7 @@ export default function SettingsPage() {
           <TabsTrigger value="smtp">SMTP</TabsTrigger>
           <TabsTrigger value="integrations">Entegrasyonlar</TabsTrigger>
           <TabsTrigger value="popups">Popuplar</TabsTrigger>
+          <TabsTrigger value="header">Header</TabsTrigger>
           <TabsTrigger value="topbar">Topbar</TabsTrigger>
           <TabsTrigger value="footer">Footer</TabsTrigger>
         </TabsList>
@@ -532,6 +534,10 @@ export default function SettingsPage() {
 
         <TabsContent value="popups" className="space-y-4">
           <PopupManagement />
+        </TabsContent>
+
+        <TabsContent value="header" className="space-y-4">
+          <HeaderSettingsCard settings={settings} setSettings={setSettings} />
         </TabsContent>
 
         <TabsContent value="topbar" className="space-y-4">

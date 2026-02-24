@@ -7,7 +7,7 @@
     "rootDir": "src",
     "outDir": "dist",
 
-    "baseUrl": ".",
+    "baseUrl": "",
     "paths": { "@/*": ["src/*"] },
 
     "esModuleInterop": true,
@@ -19,7 +19,7 @@
     "sourceMap": false,
 
     "types": ["node"],
-    "typeRoots": ["./node_modules/@types"],
+    "typeRoots": ["node_modules/@types"],
     "ignoreDeprecations": "5.0"
   },
   "include": [

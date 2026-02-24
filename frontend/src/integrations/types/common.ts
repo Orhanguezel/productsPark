@@ -148,7 +148,7 @@ export function getBoolProp(obj: unknown, key: string): boolean | undefined {
 
 export function jsonLikeToBoolLike(v: JsonLike | undefined): BoolLike {
   // BoolLike union: boolean | 0 | 1 | '0' | '1' | 'true' | 'false' | null | undefined
-  if (v === null || typeof v === 'undefined') return v;
+  if (v === null || typeof v === 'undefined') return v as BoolLike;
 
   if (typeof v === 'boolean') return v;
   if (v === 0 || v === 1) return v;
@@ -186,7 +186,7 @@ export function isValidEmail(email: string): boolean {
  * (common.ts'deki BoolLike union'una %100 uyumlu)
  */
 export const asBoolLike = (v: unknown): BoolLike => {
-  if (v === null || typeof v === 'undefined') return v; // null | undefined
+  if (v === null || typeof v === 'undefined') return v as BoolLike; // null | undefined
   if (typeof v === 'boolean') return v;
   if (v === 0 || v === 1) return v;
 

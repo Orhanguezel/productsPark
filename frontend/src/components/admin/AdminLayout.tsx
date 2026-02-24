@@ -1,15 +1,14 @@
 // =============================================================
 // FILE: src/components/admin/AdminLayout.tsx
-// FINAL — Admin Layout (adds payments module tab support)
 // =============================================================
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AdminSidebar, type MenuValue } from './AdminSidebar';
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { ModeToggle } from '@/components/ModeToggle';
-
+import { Button } from '@/components/ui/button';
+import { PanelLeft } from 'lucide-react';
 import { useStatusQuery } from '@/integrations/hooks';
 
 interface AdminLayoutProps {
@@ -26,6 +25,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading: authLoading } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const { data: statusData, isLoading: statusLoading } = useStatusQuery();
 
@@ -48,8 +48,6 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     if (path.includes('/deposit-requests')) return 'deposit-requests';
     if (path.includes('/payment-requests')) return 'payment-requests';
     if (path.includes('/wallet-transactions')) return 'wallet-transactions';
-
-    // ✅ NEW: payments module
     if (path.includes('/payments')) return 'payments';
 
     if (path.includes('/tickets')) return 'tickets';
@@ -99,22 +97,37 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
   if (!user || !isAdmin) return null;
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <AdminSidebar activeTab={getActiveTab()} onTabChange={() => {}} />
+    /* Tüm sayfa — ekranı doldur, dışarı taşma yok */
+    <div className="h-screen w-full flex overflow-hidden bg-background">
 
-        <div className="flex-1 flex flex-col">
-          <header className="h-16 border-b flex items-center justify-between px-6 bg-background sticky top-0 z-10">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger />
-              <h1 className="text-2xl font-bold">{title}</h1>
-            </div>
-            <ModeToggle />
-          </header>
+      {/* Sidebar */}
+      <AdminSidebar
+        activeTab={getActiveTab()}
+        onTabChange={() => {}}
+        isOpen={sidebarOpen}
+      />
 
-          <main className="flex-1 p-6 overflow-auto">{children}</main>
-        </div>
+      {/* Sağ taraf: header + içerik */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <header className="h-16 flex-shrink-0 border-b flex items-center justify-between px-4 bg-background z-10">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="h-8 w-8"
+            >
+              <PanelLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-xl font-bold truncate">{title}</h1>
+          </div>
+          <ModeToggle />
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-6">
+          {children}
+        </main>
       </div>
-    </SidebarProvider>
+    </div>
   );
 }

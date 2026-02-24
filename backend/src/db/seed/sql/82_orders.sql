@@ -12,7 +12,7 @@ CREATE TABLE `orders` (
   `user_id`          CHAR(36)      NOT NULL,
 
   `status`           ENUM('pending','processing','completed','cancelled','refunded') NOT NULL DEFAULT 'pending',
-  `payment_method`   ENUM('credit_card','bank_transfer','wallet','paytr','shopier')  NOT NULL,
+  `payment_method`   ENUM('credit_card','bank_transfer','wallet','paytr','shopier','stripe','papara')  NOT NULL,
   `payment_status`   VARCHAR(50)   NOT NULL DEFAULT 'pending',
 
   `subtotal`         DECIMAL(10,2) NOT NULL,

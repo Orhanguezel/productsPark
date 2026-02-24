@@ -9,19 +9,21 @@
 // =============================================================
 
 import React, { useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
 
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+
+import SeoHelmet from '@/seo/SeoHelmet';
 
 import { Card, CardContent } from '@/components/ui/card';
 
 import { Shield, Zap, HeadphonesIcon, Award, Users, Target, type LucideIcon } from 'lucide-react';
 
 import type { CustomPageView, PageState, AboutPageContent } from '@/integrations/types';
-import { nonEmpty, imgSrc, getOrigin, hasText, safeParseJson } from '@/integrations/types';
+import { nonEmpty, imgSrc, hasText, safeParseJson } from '@/integrations/types';
 
 import { useGetCustomPageBySlugQuery } from '@/integrations/hooks';
+import { useSeoSettings } from '@/hooks/useSeoSettings';
 
 
 const iconMap: Record<string, LucideIcon> = {
@@ -47,16 +49,14 @@ export default function About() {
   const slug = 'hakkimizda';
 
   const { data, isLoading, isError } = useGetCustomPageBySlugQuery({ slug });
+  const { settings: seoSettings } = useSeoSettings();
 
   const pageState = usePageState({ isLoading, isError, hasData: !!data });
 
-  const canonicalUrl = useMemo(() => {
-    const origin = getOrigin();
-    return origin ? `${origin}/${slug}` : '';
-  }, [slug]);
-
-  const metaTitle = nonEmpty(data?.meta_title);
-  const metaDesc = nonEmpty(data?.meta_description);
+  // SEO: reads from site_settings (seo_about_title / seo_about_description)
+  // — same source as /admin/settings "Diğer Sayfalar" section
+  const metaTitle = nonEmpty(seoSettings.seo_about_title) || null;
+  const metaDesc = nonEmpty(seoSettings.seo_about_description) || null;
 
   // data is CustomPageView; its "content" is a string (HTML or JSON string). Here: JSON.
   const content = useMemo<AboutPageContent | null>(() => {
@@ -87,14 +87,13 @@ export default function About() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Same pattern as Blog/Categories: canonical + optional title/description (no fallbacks) */}
-      {canonicalUrl || metaTitle || metaDesc ? (
-        <Helmet>
-          {metaTitle ? <title>{metaTitle}</title> : null}
-          {metaDesc ? <meta name="description" content={metaDesc} /> : null}
-          {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
-        </Helmet>
-      ) : null}
+      {/* Route SEO via SeoHelmet — no fallbacks, only explicit meta values */}
+      <SeoHelmet
+        title={metaTitle}
+        description={metaDesc}
+        ogType="article"
+        imageUrl={featuredImage || null}
+      />
 
       <Navbar />
 

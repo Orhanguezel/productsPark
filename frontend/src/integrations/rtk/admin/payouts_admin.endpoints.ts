@@ -125,11 +125,12 @@ export const payoutsAdminApi = baseApi.injectEndpoints({
       query: (params) => {
         const qp = params ? toPayoutListQuery(params) : undefined;
         // format ayrıca taşınabilir
+        const typedParams = params as PayoutsExportParams | undefined;
         const qp2 =
-          params?.format && qp
-            ? { ...qp, format: params.format }
-            : params?.format
-            ? { format: params.format }
+          typedParams?.format && qp
+            ? { ...qp, format: typedParams.format }
+            : typedParams?.format
+            ? { format: typedParams.format }
             : qp;
 
         return {

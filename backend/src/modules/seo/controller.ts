@@ -196,6 +196,9 @@ type SeoMetaResponse = {
 };
 
 const SEO_META_KEYS = [
+  'site_title',
+  'site_description',
+
   'robots_meta',
 
   'favicon_url',
@@ -297,10 +300,16 @@ export const seoMetaController: RouteHandler = async (_req, reply) => {
     custom_header_code: string;
     custom_footer_code: string;
 
+    site_title: string;
+    site_description: string;
+
     updated_at: string | null;
   };
 
   const res: SeoMetaResponse = {
+    site_title: toStr(bag.site_title).trim(),
+    site_description: toStr(bag.site_description).trim(),
+
     robots_meta: toStr(bag.robots_meta).trim() || 'index,follow',
 
     favicon_url: toStr(bag.favicon_url).trim(),

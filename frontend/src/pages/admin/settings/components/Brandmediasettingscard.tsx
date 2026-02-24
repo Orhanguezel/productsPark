@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ImagePlus, Trash2, X, Image, Palette, Share2, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
-import { useGetSiteSettingByKeyQuery } from '@/integrations/hooks';
+import { useCreateAssetAdminMutation } from '@/integrations/hooks';
 import type { Dispatch, SetStateAction } from 'react';
 
 interface Props {
@@ -32,30 +32,20 @@ interface Props {
   setSettings: Dispatch<SetStateAction<any>>;
 }
 
-// Cloudinary unsigned upload helper
-async function uploadToCloudinary(
-  file: File,
-  cloudName: string,
-  preset: string,
-  folder: string,
-): Promise<string> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', preset);
-  formData.append('folder', folder);
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || 'Cloudinary yükleme hatası');
-  }
-
-  const data = await res.json();
-  return data.secure_url as string;
+// Extract URL from storage upload response (supports various response shapes)
+function pickUrl(res: unknown): string | null {
+  if (!res || typeof res !== 'object') return null;
+  const r = res as Record<string, unknown>;
+  const url =
+    (typeof r.url === 'string' ? r.url : null) ??
+    (typeof r.public_url === 'string' ? r.public_url : null) ??
+    (r.data && typeof (r.data as Record<string, unknown>).url === 'string'
+      ? (r.data as Record<string, unknown>).url as string
+      : null) ??
+    (r.asset && typeof (r.asset as Record<string, unknown>).url === 'string'
+      ? (r.asset as Record<string, unknown>).url as string
+      : null);
+  return url ?? null;
 }
 
 // Tek bir medya alanı: önizleme + URL input + yükleme butonu + temizle
@@ -171,36 +161,13 @@ function MediaField({
 
 export default function BrandMediaSettingsCard({ settings, setSettings }: Props) {
   const [uploading, setUploading] = useState<string | null>(null);
-
-  // Cloudinary config'i site_settings'den çek
-  const { data: cloudNameSetting } = useGetSiteSettingByKeyQuery('cloudinary_cloud_name');
-  const { data: presetSetting } = useGetSiteSettingByKeyQuery('cloudinary_unsigned_preset');
-  const { data: folderSetting } = useGetSiteSettingByKeyQuery('cloudinary_folder');
-
-  const cloudName =
-    typeof cloudNameSetting?.value === 'string' && cloudNameSetting.value.trim()
-      ? cloudNameSetting.value.trim()
-      : '';
-  const preset =
-    typeof presetSetting?.value === 'string' && presetSetting.value.trim()
-      ? presetSetting.value.trim()
-      : '';
-  const folder =
-    typeof folderSetting?.value === 'string' && folderSetting.value.trim()
-      ? folderSetting.value.trim()
-      : 'brand';
+  const [uploadAsset] = useCreateAssetAdminMutation();
 
   const update = (key: string, value: string) => {
     setSettings((prev: Record<string, unknown>) => ({ ...prev, [key]: value }));
   };
 
   const handleUpload = async (key: string, file: File) => {
-    if (!cloudName || !preset) {
-      toast.error('Cloudinary ayarları eksik. Entegrasyonlar sekmesinden yapılandırın.');
-      return;
-    }
-
-    // Dosya boyut kontrolü (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("Dosya boyutu 5MB'dan küçük olmalıdır");
       return;
@@ -208,7 +175,16 @@ export default function BrandMediaSettingsCard({ settings, setSettings }: Props)
 
     try {
       setUploading(key);
-      const url = await uploadToCloudinary(file, cloudName, preset, folder);
+      const res = await uploadAsset({
+        file,
+        bucket: 'brand',
+        folder: 'logos',
+        metadata: { module: 'brand', kind: key },
+      }).unwrap();
+
+      const url = pickUrl(res);
+      if (!url) throw new Error('Yükleme tamamlandı ama URL alınamadı');
+
       update(key, url);
       toast.success('Görsel yüklendi');
     } catch (err) {

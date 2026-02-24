@@ -25,7 +25,7 @@ const storageUpdateBaseSchema = z.object({
 
 export const storageUpdateSchema = storageUpdateBaseSchema
   .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: "no_fields_to_update" });
+  .refine((v: object) => Object.keys(v).length > 0, { message: "no_fields_to_update" });
 
 export type StorageUpdateInput = z.infer<typeof storageUpdateSchema>;
 

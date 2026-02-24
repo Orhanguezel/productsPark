@@ -93,6 +93,7 @@ const listProvidersAdminQuery = z
 const updateProviderAdminBody = z.object({
   key: z.string().min(1).optional(),
   display_name: z.string().min(1).optional(),
+  logo_url: z.string().max(500).nullable().optional(),
   is_active: z
     .union([
       z.boolean(),
@@ -146,6 +147,7 @@ const mapProviderAdmin = (
     id: r.id,
     key: r.key,
     display_name: r.displayName,
+    logo_url: r.logoUrl ?? null,
     is_active: Boolean(r.isActive),
     public_config: pub,
     secret_config: includeSecret ? (maskSecret ? maskSecrets(sec) : sec) : null,
@@ -272,6 +274,7 @@ export async function createPaymentProviderAdminHandler(
     id,
     key: b.key,
     displayName: b.display_name,
+    logoUrl: b.logo_url ?? null,
     isActive,
     publicConfig: toJsonString(b.public_config ?? null),
     secretConfig: toJsonString(b.secret_config ?? null),
@@ -350,6 +353,7 @@ export async function updatePaymentProviderAdminHandler(
 
   if (b.key) patch.key = b.key;
   if (b.display_name) patch.displayName = b.display_name;
+  if (b.logo_url !== undefined) patch.logoUrl = b.logo_url ?? null;
   if (b.is_active !== undefined) {
     patch.isActive =
       b.is_active === true || b.is_active === 1 || b.is_active === '1' || b.is_active === 'true'

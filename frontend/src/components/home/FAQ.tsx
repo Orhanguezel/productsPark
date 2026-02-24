@@ -41,16 +41,16 @@ function pickFaqRows(resp: AnyFaqListResponse): Faq[] {
 
 const FAQ: React.FC = () => {
   // ✅ site_settings texts
-  const { settings } = useSeoSettings(); // seoOnly: false olmalı
+  const { flat } = useSeoSettings(); // seoOnly: false olmalı
 
-  const title = toStr((settings as any)?.home_faq_title).trim() || 'Sıkça Sorulan Sorular';
+  const title = toStr(flat?.home_faq_title).trim() || 'Sıkça Sorulan Sorular';
   const subtitle =
-    toStr((settings as any)?.home_faq_subtitle).trim() ||
+    toStr(flat?.home_faq_subtitle).trim() ||
     'Merak ettiklerinizin cevaplarını burada bulabilirsiniz';
 
-  const ctaTitle = toStr((settings as any)?.home_faq_cta_title).trim();
-  const ctaSubtitle = toStr((settings as any)?.home_faq_cta_subtitle).trim();
-  const ctaButton = toStr((settings as any)?.home_faq_cta_button).trim() || 'Bize Ulaşın →';
+  const ctaTitle = toStr(flat?.home_faq_cta_title).trim();
+  const ctaSubtitle = toStr(flat?.home_faq_cta_subtitle).trim();
+  const ctaButton = toStr(flat?.home_faq_cta_button).trim() || 'Bize Ulaşın →';
 
   // ✅ FAQs from DB (category yok)
   const { data, isLoading, isFetching, isError, error } = useListFaqsQuery({

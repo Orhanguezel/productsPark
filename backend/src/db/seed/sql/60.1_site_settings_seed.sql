@@ -83,8 +83,8 @@ NOW(3), NOW(3)),
 ('fb9431b3-fa22-490d-8529-bcf7f3a57290', 'footer_phone',        '+90 555 555 55 55', NOW(3), NOW(3)),
 ('faf0f287-8395-4ee9-8a5e-91f2caf07f79', 'footer_description',  'Güvenilir dijital ürün satış platformu. En uygun fiyatlarla lisans, hesap, yazılım ve daha fazlası.', NOW(3), NOW(3)),
 ('c74ee6fd-7e93-47d2-8006-d0af348b7890', 'footer_copyright',    '© 2025 Dijital Market. Tüm hakları saklıdır.', NOW(3), NOW(3)),
-('55fd06de-2343-426d-b8ce-3b0ad6fe854d', 'light_logo',          '', NOW(3), NOW(3)),
-('d7cdd57c-58cc-4463-bfa6-7eb694017c53', 'dark_logo',           '', NOW(3), NOW(3)),
+('55fd06de-2343-426d-b8ce-3b0ad6fe854d', 'light_logo', 'https://res.cloudinary.com/dbozv7wqd/image/upload/v1771925308/logos/logo-light.png',   NOW(3), NOW(3)),
+('d7cdd57c-58cc-4463-bfa6-7eb694017c53', 'dark_logo',  'https://res.cloudinary.com/dbozv7wqd/image/upload/v1771925680/logos/logo-dark.png', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- SOSYAL MEDYA / HARİCİ SERVİSLER

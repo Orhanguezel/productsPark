@@ -23,6 +23,7 @@ function mapRowAdmin(r: typeof footerSections.$inferSelect) {
     id: r.id,
     title: r.title,
     links: r.links, // JSON string
+    section_type: r.section_type ?? 'links',
     display_order: r.order_num,
     is_active: r.is_active,
     created_at: r.created_at?.toISOString?.(),

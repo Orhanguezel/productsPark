@@ -30,6 +30,7 @@ export type PaymentProviderAdmin = {
   id: string;
   key: PaymentProviderKey;
   display_name: string;
+  logo_url: string | null;
   is_active: boolean;
 
   public_config: JsonObject | null;
@@ -44,6 +45,7 @@ export type PaymentProviderPublic = {
   id: string;
   key: PaymentProviderKey;
   display_name: string;
+  logo_url: string | null;
   is_active: boolean;
 
   public_config: JsonObject | null;
@@ -60,6 +62,7 @@ export type ApiPaymentProvider = Partial<{
   display_name: unknown;
   name: unknown;
 
+  logo_url: unknown;
   is_active: unknown;
 
   public_config: unknown; // string|object|null
@@ -101,6 +104,7 @@ export function normalizePaymentProviderAdmin(row: unknown): PaymentProviderAdmi
     id,
     key,
     display_name: pickDisplayName(r),
+    logo_url: typeof r.logo_url === 'string' && r.logo_url.trim() ? r.logo_url.trim() : null,
     is_active: toBool(asBoolLike(r.is_active), false),
     public_config: toJsonObjectOrNull(r.public_config),
     secret_config: toJsonObjectOrNull(r.secret_config),
@@ -127,6 +131,7 @@ export function normalizePaymentProviderPublic(row: unknown): PaymentProviderPub
     id: toTrimStr(r.id),
     key: toTrimStr(r.key) as PaymentProviderKey,
     display_name: pickDisplayName(r),
+    logo_url: typeof r.logo_url === 'string' && r.logo_url.trim() ? r.logo_url.trim() : null,
     is_active: toBool(asBoolLike(r.is_active), false),
     public_config: toJsonObjectOrNull(r.public_config),
     ...(created_at ? { created_at } : {}),
@@ -170,6 +175,7 @@ export function toPaymentProvidersListQuery(
 export type UpsertPaymentProviderAdminBody = Partial<{
   key: PaymentProviderKey;
   display_name: string;
+  logo_url: string | null;
 
   is_active: BoolLike;
 
@@ -184,6 +190,7 @@ export function toUpsertPaymentProviderAdminBody(
 
   if (typeof b.key !== 'undefined') out.key = b.key;
   if (typeof b.display_name !== 'undefined') out.display_name = b.display_name;
+  if (typeof b.logo_url !== 'undefined') out.logo_url = b.logo_url;
   if (typeof b.is_active !== 'undefined') out.is_active = b.is_active;
   if (typeof b.public_config !== 'undefined') out.public_config = b.public_config;
   if (typeof b.secret_config !== 'undefined') out.secret_config = b.secret_config;

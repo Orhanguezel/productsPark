@@ -17,7 +17,7 @@ INSERT INTO `site_settings` (`id`, `key`, `value`, `created_at`, `updated_at`) V
 -- APPLE TOUCH ICON
 -- iOS cihazlarda ana ekrana eklendiğinde görünecek ikon (180x180 px)
 -- ------------------------------------------------------------------
-('bm04a1b2-c3d4-e5f6-a7b8-c9d0e1f2a3b4', 'apple_touch_icon', '', NOW(3), NOW(3)),
+('bm04a1b2-c3d4-e5f6-a7b8-c9d0e1f2a3b4', 'apple_touch_icon', 'https://res.cloudinary.com/dbozv7wqd/image/upload/v1771925700/icons/apple-touch-icon.png', NOW(3), NOW(3)),
 
 -- ------------------------------------------------------------------
 -- PWA ICONS

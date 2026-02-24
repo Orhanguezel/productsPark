@@ -14,6 +14,7 @@ import { toNum } from '@/integrations/types';
 export const PAYTR_KEY = 'paytr' as const;
 export const SHOPIER_KEY = 'shopier' as const;
 export const PAPARA_KEY = 'papara' as const;
+export const STRIPE_KEY = 'stripe' as const;
 
 
 
@@ -157,7 +158,7 @@ export type ApiPaymentEventRow = Partial<{
 
 
 
-export type KnownProviderKey = typeof PAYTR_KEY | typeof SHOPIER_KEY | typeof PAPARA_KEY;
+export type KnownProviderKey = typeof PAYTR_KEY | typeof SHOPIER_KEY | typeof PAPARA_KEY | typeof STRIPE_KEY;
 
 export const PAYMENT_SITE_KEYS = [
   'bank_transfer_enabled',
@@ -190,14 +191,25 @@ export type ProviderForm = {
   merchant_id?: string;
   merchant_key?: string;
   merchant_salt?: string;
+  ok_url?: string;
+  fail_url?: string;
 
   // Shopier
-  client_id?: string;
-  client_secret?: string;
+  shopier_api_key?: string;
+  shopier_secret?: string;
+  website_index?: number;
   commission?: number;
+
+  // Stripe
+  secret_key?: string;
+  webhook_secret?: string;
+  mode?: string;
 
   // Papara
   api_key?: string;
+
+  // Shared
+  logo_url?: string;
 };
 
 /**
@@ -207,6 +219,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<KnownProviderKey, string> = {
   [PAYTR_KEY]: 'PayTR',
   [SHOPIER_KEY]: 'Shopier',
   [PAPARA_KEY]: 'Papara',
+  [STRIPE_KEY]: 'Stripe Kredi Kartı',
 };
 
 /**

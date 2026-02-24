@@ -217,6 +217,90 @@ export async function getPaytrConfig(providerKey: string = 'paytr'): Promise<Pay
 }
 
 /* =========================
+   Stripe
+   ========================= */
+
+export type StripeProviderConfig = {
+  secretKey: string;
+  webhookSecret: string;
+  okUrl: string;
+  failUrl: string;
+  mode: 'test' | 'live';
+};
+
+export async function getStripeConfig(providerKey: string = 'stripe'): Promise<StripeProviderConfig> {
+  const [row] = await db
+    .select()
+    .from(paymentProviders)
+    .where(and(eq(paymentProviders.key, providerKey), eq(paymentProviders.isActive, 1)))
+    .limit(1);
+
+  if (!row) throw new Error('stripe_provider_not_configured');
+
+  const pub = safeParseJson(row.publicConfig);
+  const sec = safeParseJson(row.secretConfig);
+
+  let secretKey =
+    cleanSecret(pickStr(sec, ['secret_key', 'secretKey', 'STRIPE_SECRET_KEY'])) ?? null;
+  let webhookSecret =
+    cleanSecret(pickStr(sec, ['webhook_secret', 'webhookSecret', 'STRIPE_WEBHOOK_SECRET'])) ?? null;
+
+  let okUrl = pickStr(pub, ['ok_url', 'okUrl', 'success_url']) ?? null;
+  let failUrl = pickStr(pub, ['fail_url', 'failUrl', 'cancel_url']) ?? null;
+
+  // ENV fallback
+  if (!secretKey) secretKey = cleanSecret(env.STRIPE.SECRET_KEY) ?? null;
+  if (!webhookSecret) webhookSecret = cleanSecret(env.STRIPE.WEBHOOK_SECRET) ?? null;
+  if (!okUrl && env.STRIPE.OK_URL) okUrl = env.STRIPE.OK_URL;
+  if (!failUrl && env.STRIPE.FAIL_URL) failUrl = env.STRIPE.FAIL_URL;
+
+  if (!secretKey) throw new Error('stripe_secret_key_missing');
+  if (!webhookSecret) throw new Error('stripe_webhook_secret_missing');
+  if (!okUrl || !failUrl) throw new Error('stripe_ok_fail_url_missing');
+
+  const modeRaw = (pickStr(pub, ['mode', 'MODE']) ?? (secretKey.startsWith('sk_test') ? 'test' : 'live')).toLowerCase();
+  const mode: 'test' | 'live' = modeRaw === 'test' ? 'test' : 'live';
+
+  return { secretKey, webhookSecret, okUrl, failUrl, mode };
+}
+
+/* =========================
+   Papara
+   ========================= */
+
+export type PaparaProviderConfig = {
+  apiKey: string;
+  testMode: boolean;
+  notificationUrl: string | null;
+  redirectUrl: string | null;
+  failUrl: string | null;
+};
+
+export async function getPaparaConfig(providerKey: string = 'papara'): Promise<PaparaProviderConfig> {
+  const [row] = await db
+    .select()
+    .from(paymentProviders)
+    .where(and(eq(paymentProviders.key, providerKey), eq(paymentProviders.isActive, 1)))
+    .limit(1);
+
+  if (!row) throw new Error('papara_provider_not_configured');
+
+  const pub = safeParseJson(row.publicConfig);
+  const sec = safeParseJson(row.secretConfig);
+
+  let apiKey = cleanSecret(pickStr(sec, ['api_key', 'apiKey', 'API_KEY', 'PAPARA_API_KEY'])) ?? null;
+  if (!apiKey) apiKey = cleanSecret(process.env.PAPARA_API_KEY) ?? null;
+  if (!apiKey) throw new Error('papara_api_key_missing');
+
+  const testMode = pickNum01(pub, ['test_mode', 'testMode'], 0) === 1;
+  const notificationUrl = pickStr(pub, ['notification_url', 'notificationUrl']) ?? null;
+  const redirectUrl = pickStr(pub, ['redirect_url', 'redirectUrl', 'ok_url', 'okUrl']) ?? null;
+  const failUrl = pickStr(pub, ['fail_url', 'failUrl']) ?? null;
+
+  return { apiKey, testMode, notificationUrl, redirectUrl, failUrl };
+}
+
+/* =========================
    Shopier
    ========================= */
 

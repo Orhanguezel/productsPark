@@ -434,8 +434,8 @@ const Checkout = () => {
         if (!isAuthError(e)) console.error('createPaymentRequest failed:', e);
       }
 
-      // ✅ PayTR
-      if (selectedPayment === 'paytr' || selectedPayment === 'shopier') {
+      // ✅ PayTR / Shopier / Stripe / Papara
+      if (selectedPayment === 'paytr' || selectedPayment === 'shopier' || selectedPayment === 'stripe' || selectedPayment === 'papara') {
         const currency = (publicMethodsResp as any)?.currency ?? 'TRY';
         const basket = buildPaytrBasket(items, commission);
 
@@ -481,9 +481,20 @@ const Checkout = () => {
 
       await clearCartAfterOrder();
       navigate('/odeme-bildirimi');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Checkout error:', err);
-      toast.error('Sipariş oluşturulurken hata oluştu');
+      const reason = err?.data?.reason ?? err?.data?.error?.reason ?? '';
+      if (reason === 'per_user_limit_reached' || reason === 'coupon_per_user_limit_reached') {
+        toast.error('Bu kuponu daha önce kullandınız');
+      } else if (reason === 'usage_limit_reached') {
+        toast.error('Kupon kullanım limiti dolmuş');
+      } else if (reason === 'not_found') {
+        toast.error('Geçersiz kupon kodu');
+      } else if (reason === 'expired') {
+        toast.error('Kupon süresi dolmuş');
+      } else {
+        toast.error('Sipariş oluşturulurken hata oluştu');
+      }
     } finally {
       setLoading(false);
     }
