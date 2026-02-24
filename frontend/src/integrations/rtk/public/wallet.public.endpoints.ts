@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/wallet.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/wallet.endpoints.ts
 // FINAL — Wallet Public RTK (create deposit + me balance + me txns)
 // BaseApi prefix assumed: "/api" (handled inside baseApi)
 // =============================================================

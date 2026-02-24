@@ -1,5 +1,5 @@
 // ===================================================================
-// FILE: src/integrations/metahub/rtk/endpoints/admin/telegram_webhook.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/telegram_webhook.endpoints.ts
 // FINAL — Telegram webhook admin endpoints (optional simulate)
 // ===================================================================
 

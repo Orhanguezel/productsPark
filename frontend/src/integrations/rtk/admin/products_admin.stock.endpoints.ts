@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/products_admin.stock.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/products_admin.stock.endpoints.ts
 // FINAL — Admin product stock RTK (list + set + delete + used)
 // - SINGLE SOURCE OF TRUTH for stock endpoints (no duplicates elsewhere)
 // - setProductStockAdmin args: { id, lines } (no body wrapper)

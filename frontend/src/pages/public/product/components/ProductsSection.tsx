@@ -210,7 +210,7 @@ const ProductsSection = ({
           <img
             src={
               product.image_url ||
-              'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=300&fit=crop'
+              'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=300&fit=crop&fm=webp&q=80'
             }
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-110 transition-smooth"
@@ -311,7 +311,7 @@ const ProductsSection = ({
             <img
               src={
                 product.image_url ||
-                'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=300&fit=crop'
+                'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=300&fit=crop&fm=webp&q=80'
               }
               alt={product.name}
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"

@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/functions.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/functions.endpoints.ts
 // FINAL — Functions RTK (+ sendTestMail)
 // - Telegram endpoints REMOVED (moved to telegram.endpoints.ts)
 // =============================================================

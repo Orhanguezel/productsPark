@@ -545,7 +545,7 @@ const Cart = () => {
                         <img
                           src={
                             product.image_url ||
-                            "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=200&h=150&fit=crop"
+                            "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=200&h=150&fit=crop&fm=webp&q=80"
                           }
                           alt={product.name}
                           className="w-24 h-20 object-cover rounded-lg"

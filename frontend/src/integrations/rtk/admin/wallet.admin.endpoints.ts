@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/wallet.admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/wallet.admin.endpoints.ts
 // FINAL — Wallet Admin RTK
 // BaseApi prefix assumed: "/api" (handled inside baseApi)
 //

@@ -1,6 +1,6 @@
 
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/health.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/health.endpoints.ts
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';
 

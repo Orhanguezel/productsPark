@@ -1,6 +1,6 @@
 
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/helpers/routePrefetch.ts
+// FILE: src/integrations/rtk/helpers/routePrefetch.ts
 // -------------------------------------------------------------
 import { store } from "@/store";
 

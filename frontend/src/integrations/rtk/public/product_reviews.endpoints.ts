@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/product_reviews.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/product_reviews.endpoints.ts
 // FINAL — Public Product Reviews RTK (list + create)
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

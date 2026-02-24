@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/helpers/autorefresh.ts
+// FILE: src/integrations/rtk/helpers/autorefresh.ts
 // -------------------------------------------------------------
 import { setupListeners } from "@reduxjs/toolkit/query";
 

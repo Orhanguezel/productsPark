@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/core/normalize.ts
+// FILE: src/integrations/core/normalize.ts
 // Ortak normalize yardımcıları (no-any, tip güvenli)
 // =============================================================
 

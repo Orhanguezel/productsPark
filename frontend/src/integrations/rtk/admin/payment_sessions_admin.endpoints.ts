@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/payment_sessions_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/payment_sessions_admin.endpoints.ts
 // FINAL — Payment Sessions (ADMIN) RTK
 // -------------------------------------------------------------
 

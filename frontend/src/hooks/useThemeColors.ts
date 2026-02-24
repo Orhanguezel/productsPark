@@ -5,7 +5,7 @@
 // =============================================================
 
 import { useEffect, useMemo } from 'react';
-import { useGetSiteSettingByKeyQuery } from '@/integrations/hooks';
+import { useListSiteSettingsQuery } from '@/integrations/hooks';
 
 // ==================== PRESETS ====================
 
@@ -229,71 +229,38 @@ function loadGoogleFont(fontImport: string) {
 }
 
 /**
- * Site ayarlarından tema renklerini ve stil ayarlarını çeker ve CSS değişkenlerine uygular
+ * Site ayarlarından tema renklerini ve stil ayarlarını çeker ve CSS değişkenlerine uygular.
+ * Tüm tema ayarları tek bir batch API çağrısıyla alınır (22+ bireysel request → 1).
  */
 export function useThemeColors() {
-  // Site ayarlarını çek - Renkler
-  const { data: enabledSetting } = useGetSiteSettingByKeyQuery('theme_colors_enabled');
-  const { data: presetSetting } = useGetSiteSettingByKeyQuery('theme_color_preset');
-  const { data: primarySetting } = useGetSiteSettingByKeyQuery('theme_primary_hsl');
-  const { data: glowSetting } = useGetSiteSettingByKeyQuery('theme_primary_glow_hsl');
-  const { data: accentSetting } = useGetSiteSettingByKeyQuery('theme_accent_hsl');
-  const { data: successSetting } = useGetSiteSettingByKeyQuery('theme_success_hsl');
-  const { data: destructiveSetting } = useGetSiteSettingByKeyQuery('theme_destructive_hsl');
-  const { data: secondarySetting } = useGetSiteSettingByKeyQuery('theme_secondary_hsl');
-  const { data: mutedSetting } = useGetSiteSettingByKeyQuery('theme_muted_hsl');
-  const { data: mutedForegroundSetting } = useGetSiteSettingByKeyQuery('theme_muted_foreground_hsl');
+  // Tek batch request — prefix='theme_' ile tüm tema ayarları
+  const { data: themeSettings = [] } = useListSiteSettingsQuery({ prefix: 'theme_' });
 
-  // Site ayarlarını çek - Font
-  const { data: fontSetting } = useGetSiteSettingByKeyQuery('theme_font_preset');
-  const { data: fontWeightSetting } = useGetSiteSettingByKeyQuery('theme_font_weight_preset');
-  const { data: letterSpacingSetting } = useGetSiteSettingByKeyQuery('theme_letter_spacing_preset');
-
-  // Site ayarlarını çek - Stil
-  const { data: radiusSetting } = useGetSiteSettingByKeyQuery('theme_radius_preset');
-  const { data: shadowSetting } = useGetSiteSettingByKeyQuery('theme_shadow_preset');
-  const { data: backgroundToneSetting } = useGetSiteSettingByKeyQuery(
-    'theme_background_tone_preset',
+  const settingsMap = useMemo(
+    () => Object.fromEntries(themeSettings.map((s) => [s.key, s.value])),
+    [themeSettings],
   );
-  const { data: cardStyleSetting } = useGetSiteSettingByKeyQuery('theme_card_style_preset');
-  const { data: borderStyleSetting } = useGetSiteSettingByKeyQuery('theme_border_style_preset');
-  const { data: animationSpeedSetting } = useGetSiteSettingByKeyQuery(
-    'theme_animation_speed_preset',
-  );
-
-  // Site ayarlarını çek - Navy/Hero
-  const { data: navySetting } = useGetSiteSettingByKeyQuery('theme_navy_hsl');
-  const { data: navyLightSetting } = useGetSiteSettingByKeyQuery('theme_navy_light_hsl');
-
-  // Site ayarlarını çek - Chart
-  const { data: chartPaletteSetting } = useGetSiteSettingByKeyQuery('theme_chart_palette_preset');
-
-  // Site ayarlarını çek - Dark Mode
-  const { data: darkBackgroundSetting } = useGetSiteSettingByKeyQuery('theme_dark_background_hsl');
-  const { data: darkCardSetting } = useGetSiteSettingByKeyQuery('theme_dark_card_hsl');
-  const { data: darkMutedSetting } = useGetSiteSettingByKeyQuery('theme_dark_muted_hsl');
-  const { data: darkBorderSetting } = useGetSiteSettingByKeyQuery('theme_dark_border_hsl');
 
   // Renk değerlerini hesapla
   const colors = useMemo(() => {
-    const isEnabled = enabledSetting?.value !== 'false';
+    const isEnabled = settingsMap['theme_colors_enabled'] !== 'false';
     if (!isEnabled) return null;
 
-    const preset = (presetSetting?.value as string) || 'green';
+    const preset = (settingsMap['theme_color_preset'] as string) || 'green';
 
     // Custom preset ise ayarlardan al, değilse preset'ten al
     if (preset === 'custom') {
       return {
-        primary: (primarySetting?.value as string) || DEFAULTS.primary,
-        primaryGlow: (glowSetting?.value as string) || DEFAULTS.primaryGlow,
-        accent: (accentSetting?.value as string) || DEFAULTS.accent,
-        success: (successSetting?.value as string) || DEFAULTS.success,
-        destructive: (destructiveSetting?.value as string) || DEFAULTS.destructive,
-        secondary: (secondarySetting?.value as string) || DEFAULTS.secondary,
-        muted: (mutedSetting?.value as string) || DEFAULTS.muted,
-        mutedForeground: (mutedForegroundSetting?.value as string) || DEFAULTS.mutedForeground,
-        navy: (navySetting?.value as string) || DEFAULTS.navy,
-        navyLight: (navyLightSetting?.value as string) || DEFAULTS.navyLight,
+        primary: (settingsMap['theme_primary_hsl'] as string) || DEFAULTS.primary,
+        primaryGlow: (settingsMap['theme_primary_glow_hsl'] as string) || DEFAULTS.primaryGlow,
+        accent: (settingsMap['theme_accent_hsl'] as string) || DEFAULTS.accent,
+        success: (settingsMap['theme_success_hsl'] as string) || DEFAULTS.success,
+        destructive: (settingsMap['theme_destructive_hsl'] as string) || DEFAULTS.destructive,
+        secondary: (settingsMap['theme_secondary_hsl'] as string) || DEFAULTS.secondary,
+        muted: (settingsMap['theme_muted_hsl'] as string) || DEFAULTS.muted,
+        mutedForeground: (settingsMap['theme_muted_foreground_hsl'] as string) || DEFAULTS.mutedForeground,
+        navy: (settingsMap['theme_navy_hsl'] as string) || DEFAULTS.navy,
+        navyLight: (settingsMap['theme_navy_light_hsl'] as string) || DEFAULTS.navyLight,
       };
     }
 
@@ -305,44 +272,29 @@ export function useThemeColors() {
       accent: presetColors.primary,
       success: presetColors.primary,
       destructive: DEFAULTS.destructive,
-      secondary: (secondarySetting?.value as string) || DEFAULTS.secondary,
-      muted: (mutedSetting?.value as string) || DEFAULTS.muted,
-      mutedForeground: (mutedForegroundSetting?.value as string) || DEFAULTS.mutedForeground,
-      navy: (navySetting?.value as string) || DEFAULTS.navy,
-      navyLight: (navyLightSetting?.value as string) || DEFAULTS.navyLight,
+      secondary: (settingsMap['theme_secondary_hsl'] as string) || DEFAULTS.secondary,
+      muted: (settingsMap['theme_muted_hsl'] as string) || DEFAULTS.muted,
+      mutedForeground: (settingsMap['theme_muted_foreground_hsl'] as string) || DEFAULTS.mutedForeground,
+      navy: (settingsMap['theme_navy_hsl'] as string) || DEFAULTS.navy,
+      navyLight: (settingsMap['theme_navy_light_hsl'] as string) || DEFAULTS.navyLight,
     };
-  }, [
-    enabledSetting?.value,
-    presetSetting?.value,
-    primarySetting?.value,
-    glowSetting?.value,
-    accentSetting?.value,
-    successSetting?.value,
-    destructiveSetting?.value,
-    secondarySetting?.value,
-    mutedSetting?.value,
-    mutedForegroundSetting?.value,
-    navySetting?.value,
-    navyLightSetting?.value,
-  ]);
+  }, [settingsMap]);
 
   // Stil ayarlarını hesapla
   const styles = useMemo(() => {
-    const isEnabled = enabledSetting?.value !== 'false';
+    const isEnabled = settingsMap['theme_colors_enabled'] !== 'false';
     if (!isEnabled) return null;
 
-    const fontPreset = (fontSetting?.value as string) || DEFAULTS.font;
-    const fontWeightPreset = (fontWeightSetting?.value as string) || DEFAULTS.fontWeight;
-    const letterSpacingPreset = (letterSpacingSetting?.value as string) || DEFAULTS.letterSpacing;
-    const radiusPreset = (radiusSetting?.value as string) || DEFAULTS.radius;
-    const shadowPreset = (shadowSetting?.value as string) || DEFAULTS.shadow;
-    const backgroundTonePreset =
-      (backgroundToneSetting?.value as string) || DEFAULTS.backgroundTone;
-    const cardStylePreset = (cardStyleSetting?.value as string) || DEFAULTS.cardStyle;
-    const borderStylePreset = (borderStyleSetting?.value as string) || DEFAULTS.borderStyle;
-    const animationSpeedPreset =
-      (animationSpeedSetting?.value as string) || DEFAULTS.animationSpeed;
-    const chartPalettePreset = (chartPaletteSetting?.value as string) || DEFAULTS.chartPalette;
+    const fontPreset = (settingsMap['theme_font_preset'] as string) || DEFAULTS.font;
+    const fontWeightPreset = (settingsMap['theme_font_weight_preset'] as string) || DEFAULTS.fontWeight;
+    const letterSpacingPreset = (settingsMap['theme_letter_spacing_preset'] as string) || DEFAULTS.letterSpacing;
+    const radiusPreset = (settingsMap['theme_radius_preset'] as string) || DEFAULTS.radius;
+    const shadowPreset = (settingsMap['theme_shadow_preset'] as string) || DEFAULTS.shadow;
+    const backgroundTonePreset = (settingsMap['theme_background_tone_preset'] as string) || DEFAULTS.backgroundTone;
+    const cardStylePreset = (settingsMap['theme_card_style_preset'] as string) || DEFAULTS.cardStyle;
+    const borderStylePreset = (settingsMap['theme_border_style_preset'] as string) || DEFAULTS.borderStyle;
+    const animationSpeedPreset = (settingsMap['theme_animation_speed_preset'] as string) || DEFAULTS.animationSpeed;
+    const chartPalettePreset = (settingsMap['theme_chart_palette_preset'] as string) || DEFAULTS.chartPalette;
 
     // Fallback değerleri
     const fontData = FONT_PRESETS[fontPreset] ?? FONT_PRESETS.inter!;
@@ -378,38 +330,20 @@ export function useThemeColors() {
       chartPalette: chartPaletteData,
       chartPalettePreset,
     };
-  }, [
-    enabledSetting?.value,
-    fontSetting?.value,
-    fontWeightSetting?.value,
-    letterSpacingSetting?.value,
-    radiusSetting?.value,
-    shadowSetting?.value,
-    backgroundToneSetting?.value,
-    cardStyleSetting?.value,
-    borderStyleSetting?.value,
-    animationSpeedSetting?.value,
-    chartPaletteSetting?.value,
-  ]);
+  }, [settingsMap]);
 
   // Dark mode ayarlarını hesapla
   const darkMode = useMemo(() => {
-    const isEnabled = enabledSetting?.value !== 'false';
+    const isEnabled = settingsMap['theme_colors_enabled'] !== 'false';
     if (!isEnabled) return null;
 
     return {
-      background: (darkBackgroundSetting?.value as string) || DEFAULTS.darkBackground,
-      card: (darkCardSetting?.value as string) || DEFAULTS.darkCard,
-      muted: (darkMutedSetting?.value as string) || DEFAULTS.darkMuted,
-      border: (darkBorderSetting?.value as string) || DEFAULTS.darkBorder,
+      background: (settingsMap['theme_dark_background_hsl'] as string) || DEFAULTS.darkBackground,
+      card: (settingsMap['theme_dark_card_hsl'] as string) || DEFAULTS.darkCard,
+      muted: (settingsMap['theme_dark_muted_hsl'] as string) || DEFAULTS.darkMuted,
+      border: (settingsMap['theme_dark_border_hsl'] as string) || DEFAULTS.darkBorder,
     };
-  }, [
-    enabledSetting?.value,
-    darkBackgroundSetting?.value,
-    darkCardSetting?.value,
-    darkMutedSetting?.value,
-    darkBorderSetting?.value,
-  ]);
+  }, [settingsMap]);
 
   // Tüm CSS değişkenlerini tek bir style tag ile uygula
   useEffect(() => {
@@ -532,7 +466,7 @@ export function useThemeColors() {
       animationSpeeds: ANIMATION_SPEED_PRESETS,
       chartPalettes: CHART_PALETTE_PRESETS,
     },
-    isEnabled: enabledSetting?.value !== 'false',
+    isEnabled: settingsMap['theme_colors_enabled'] !== 'false',
   };
 }
 

@@ -12,6 +12,19 @@
     <title>Dijimins</title>
     <meta name="description" content="Dijital Ürün Satış Platformu" />
 
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Preconnect: harici resim kaynakları -->
+    <link rel="preconnect" href="https://res.cloudinary.com" crossorigin />
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
+
+    <!-- Preconnect: Google Fonts (render-blocking süresini azaltır) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <!-- Static fallbacks — GlobalSeo (Helmet) runtime'da DB URL'leriyle override eder -->
     <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon/favicon-64x64.png" />

@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/public/fake_public_notifications.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/public/fake_public_notifications.endpoints.ts
 // FINAL — Fake Notifications RTK endpoints (clean; helpers in /types)
 // =============================================================
 

@@ -1,6 +1,6 @@
 
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/helpers/cachePolicy.ts
+// FILE: src/integrations/rtk/helpers/cachePolicy.ts
 // -------------------------------------------------------------
 export type CachePreset = {
   keepUnusedDataFor: number; // seconds

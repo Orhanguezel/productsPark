@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/payouts_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/payouts_admin.endpoints.ts
 // FINAL — Payouts (ADMIN) RTK
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

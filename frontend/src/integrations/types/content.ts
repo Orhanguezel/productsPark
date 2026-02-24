@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/db/types/content.ts
+// FILE: src/integrations/db/types/content.ts
 // =============================================================
 
 export type BlogPostRow = {

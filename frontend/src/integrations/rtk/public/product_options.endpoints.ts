@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/product_options.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/product_options.endpoints.ts
 // FINAL — Public Product Options RTK (list)
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

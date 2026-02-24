@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/products_admin.faqs.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/products_admin.faqs.endpoints.ts
 // FINAL — Admin Product FAQs RTK (CRUD + toggle + replace)
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

@@ -31,7 +31,7 @@ const ProductMediaSection = ({
   onSelectImage,
 }: ProductMediaSectionProps) => {
   const placeholder =
-    'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=600&fit=crop';
+    'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=600&fit=crop&fm=webp&q=80';
 
   // ✅ clamp index (gallery boş olsa bile güvenli)
   const safeIndex =

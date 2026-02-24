@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/product_faqs.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/product_faqs.endpoints.ts
 // FINAL — Public Product FAQs RTK
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

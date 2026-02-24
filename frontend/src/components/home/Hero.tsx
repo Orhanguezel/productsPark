@@ -120,6 +120,11 @@ const Hero = () => {
               <img
                 src={heroImg}
                 alt="Hero Background"
+                width={1920}
+                height={700}
+                fetchPriority="high"
+                loading="eager"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-background/30" />

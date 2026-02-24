@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/products.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/products.endpoints.ts
 // FINAL — Public Products RTK (list + listWithMeta + get + getBySlug)
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

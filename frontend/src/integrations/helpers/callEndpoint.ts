@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/helpers/callEndpoint.ts
+// FILE: src/integrations/rtk/helpers/callEndpoint.ts
 // Amaç: store.dispatch(...) sonrası unwrap + finally unsubscribe/reset
 // =============================================================
 import type { SubscriptionOptions } from "@reduxjs/toolkit/query";

@@ -1,0 +1,9 @@
+{
+  "name": "Dijital Market",
+  "short_name": "DijitMark",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": []
+}

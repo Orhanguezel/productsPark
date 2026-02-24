@@ -232,7 +232,7 @@ export const CartDrawer = () => {
                   <img
                     src={
                       item.products.image_url ||
-                      "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=80&h=80&fit=crop"
+                      "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=80&h=80&fit=crop&fm=webp&q=80"
                     }
                     alt={item.products.name}
                     className="w-20 h-20 object-cover rounded"

@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/payments_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/payments_admin.endpoints.ts
 // FINAL — Payments Admin RTK (types-driven, no local helpers)
 // -------------------------------------------------------------
 

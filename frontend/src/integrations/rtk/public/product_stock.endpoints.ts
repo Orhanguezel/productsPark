@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/product_stock.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/product_stock.endpoints.ts
 // FINAL — Public product stock RTK
 // -------------------------------------------------------------
 import { baseApi } from '@/integrations/baseApi';

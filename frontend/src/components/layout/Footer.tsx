@@ -177,6 +177,8 @@ const Footer = () => {
                 <img
                   src={logoUrl}
                   alt={footerSettings.company_name}
+                  width={200}
+                  height={56}
                   className="h-14 w-auto object-contain"
                 />
               ) : (
@@ -292,6 +294,8 @@ const Footer = () => {
                     alt={p.display_name}
                     className="h-6 w-auto object-contain"
                     style={{ maxWidth: '80px' }}
+                    width={80}
+                    height={24}
                   />
                 </div>
               ))}

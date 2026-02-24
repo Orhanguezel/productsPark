@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/rpc.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/rpc.endpoints.ts
 // -------------------------------------------------------------
 import { baseApi } from "@/integrations/baseApi";
 

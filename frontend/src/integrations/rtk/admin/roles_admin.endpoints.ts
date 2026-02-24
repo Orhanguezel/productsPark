@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/roles_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/roles_admin.endpoints.ts
 // FINAL — Roles Admin RTK (no helpers/normalizers here)
 // -------------------------------------------------------------
 

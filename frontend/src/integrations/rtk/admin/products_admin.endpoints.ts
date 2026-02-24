@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/products_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/products_admin.endpoints.ts
 // FINAL — Admin Products RTK (CRUD + bulk + toggles)
 // - IMPORTANT: Stock endpoints are NOT defined here (moved to products_admin.stock.endpoints.ts)
 // -------------------------------------------------------------

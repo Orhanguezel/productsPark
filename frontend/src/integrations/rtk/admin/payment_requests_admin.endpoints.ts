@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// FILE: src/integrations/metahub/rtk/endpoints/admin/payment_requests_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/payment_requests_admin.endpoints.ts
 // FINAL — Payment Requests (ADMIN) RTK
 // -------------------------------------------------------------
 

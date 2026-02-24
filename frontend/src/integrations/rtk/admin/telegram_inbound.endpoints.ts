@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/admin/telegram_inbound_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/telegram_inbound_admin.endpoints.ts
 // FINAL — add transformResponse for autoreply
 // =============================================================
 

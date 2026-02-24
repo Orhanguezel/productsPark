@@ -109,7 +109,7 @@ const Blog = () => {
                 <img
                   src={
                     post.image_url ||
-                    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=400&fit=crop"
+                    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=400&fit=crop&fm=webp&q=80"
                   }
                   alt={post.title}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"

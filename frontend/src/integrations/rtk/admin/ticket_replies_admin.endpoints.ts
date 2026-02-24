@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/admin/ticket_replies_admin.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/admin/ticket_replies_admin.endpoints.ts
 // FINAL — Ticket Replies (ADMIN) RTK (no helpers here)
 // - tagTypes: TicketReplies, SupportTickets
 // =============================================================

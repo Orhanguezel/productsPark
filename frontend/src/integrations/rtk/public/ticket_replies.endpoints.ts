@@ -1,5 +1,5 @@
 // =============================================================
-// FILE: src/integrations/metahub/rtk/endpoints/ticket_replies.endpoints.ts
+// FILE: src/integrations/rtk/endpoints/ticket_replies.endpoints.ts
 // FINAL — Ticket Replies (PUBLIC) RTK
 // - helpers/normalizers centralized in integrations/types/support.ts
 // - no any

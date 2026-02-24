@@ -156,6 +156,8 @@ const Navbar = () => {
                 <img
                   src={logoUrl}
                   alt={siteName}
+                  width={200}
+                  height={48}
                   className="h-12 w-auto object-contain"
                 />
               ) : (
@@ -195,6 +197,7 @@ const Navbar = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label={theme === 'dark' ? 'Açık temaya geç' : 'Koyu temaya geç'}
                   onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                   className="hidden md:flex"
                 >
@@ -206,6 +209,7 @@ const Navbar = () => {
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label="Sepet"
                 className="relative"
                 onClick={() => navigate('/sepet')}
               >
@@ -222,6 +226,7 @@ const Navbar = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label="Bildirimler"
                   className="relative"
                   onClick={() => navigate('/hesabim?tab=notifications')}
                 >
@@ -283,6 +288,7 @@ const Navbar = () => {
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label="Giriş Yap"
                     onClick={() => navigate('/giris')}
                   >
                     <UserIcon className="h-5 w-5" />
@@ -302,6 +308,7 @@ const Navbar = () => {
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label={isMenuOpen ? 'Menüyü kapat' : 'Menüyü aç'}
                 className="md:hidden"
                 onClick={() => setIsMenuOpen((v) => !v)}
               >

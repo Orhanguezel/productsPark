@@ -32,7 +32,7 @@ const colorMap: Record<string, string> = {
 
 const FALLBACK_GRADIENT = 'from-gray-500 to-gray-700';
 const FALLBACK_IMAGE =
-  'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=600&h=400&fit=crop';
+  'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=600&h=400&fit=crop&fm=webp&q=80';
 
 const SubcategoryGrid = ({ subcategories }: SubcategoryGridProps) => {
   return (
