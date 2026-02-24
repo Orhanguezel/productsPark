@@ -34,6 +34,8 @@ export const orders = mysqlTable(
       'wallet',
       'paytr',
       'shopier',
+      'stripe',
+      'papara',
     ]).notNull(),
 
     payment_status: varchar('payment_status', { length: 50 }).notNull().default('pending'),
