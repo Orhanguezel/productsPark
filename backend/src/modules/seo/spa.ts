@@ -82,6 +82,19 @@ function nonEmpty(v: unknown): string {
   return s || '';
 }
 
+/** Ensure Cloudinary image meets OG minimum (1200x630). Non-Cloudinary URLs pass through. */
+function ogImageUrl(url: string): string {
+  if (!url) return '';
+  // Match Cloudinary upload URLs and inject transform if missing
+  const match = url.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(v\d+\/.+)$/);
+  if (match) {
+    // Already has a transform (e.g. c_fill)? leave it alone
+    if (/\/[a-z]_[^/]+\/v\d+\//.test(url)) return url;
+    return `${match[1]}c_fill,w_1200,h_630,g_center/${match[2]}`;
+  }
+  return url;
+}
+
 /** Build meta tag HTML string from SeoMeta */
 function buildMetaHtml(meta: SeoMeta): string {
   const lines: string[] = [];
@@ -113,7 +126,8 @@ function buildMetaHtml(meta: SeoMeta): string {
     );
   }
   if (meta.ogImage) {
-    lines.push(`<meta property="og:image" content="${esc(meta.ogImage)}" />`);
+    const ogImg = ogImageUrl(meta.ogImage);
+    lines.push(`<meta property="og:image" content="${esc(ogImg)}" />`);
   }
   if (meta.ogUrl) {
     lines.push(`<meta property="og:url" content="${esc(meta.ogUrl)}" />`);
@@ -137,7 +151,8 @@ function buildMetaHtml(meta: SeoMeta): string {
     );
   }
   if (meta.ogImage) {
-    lines.push(`<meta name="twitter:image" content="${esc(meta.ogImage)}" />`);
+    const twImg = ogImageUrl(meta.ogImage);
+    lines.push(`<meta name="twitter:image" content="${esc(twImg)}" />`);
   }
 
   // JSON-LD
