@@ -34,6 +34,8 @@ type SeoMeta = {
   ogSiteName?: string;
   twitterCard?: string;
   jsonLd?: Record<string, unknown> | null;
+  /** Multiple JSON-LD blocks (e.g., Organization + WebSite on homepage) */
+  jsonLdExtra?: Array<Record<string, unknown>>;
 };
 
 type GlobalSeoCache = {
@@ -45,6 +47,10 @@ type GlobalSeoCache = {
   canonicalBaseUrl: string;
   twitterCard: string;
   twitterSite: string;
+  /** Schema.org JSON-LD objects */
+  schemaOrgEnabled: boolean;
+  schemaOrgOrganization: Record<string, unknown> | null;
+  schemaOrgWebsite: Record<string, unknown> | null;
   /** page-specific SEO from site_settings */
   pageSeo: Record<string, string>;
   fetchedAt: number;
@@ -80,6 +86,18 @@ function nonEmpty(v: unknown): string {
   if (typeof v !== 'string') return '';
   const s = v.trim();
   return s || '';
+}
+
+/** Safely parse a JSON-LD string from DB into an object */
+function safeJsonLdParse(s: unknown): Record<string, unknown> | null {
+  if (!s || typeof s !== 'string') return null;
+  const t = s.trim();
+  if (!t || t === '{}') return null;
+  try {
+    const obj = JSON.parse(t);
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
+  } catch { /* ignore */ }
+  return null;
 }
 
 /** Ensure Cloudinary image meets OG minimum (1200x630). Non-Cloudinary URLs pass through. */
@@ -163,6 +181,15 @@ function buildMetaHtml(meta: SeoMeta): string {
       );
     } catch { /* ignore */ }
   }
+  if (meta.jsonLdExtra?.length) {
+    for (const ld of meta.jsonLdExtra) {
+      try {
+        lines.push(
+          `<script type="application/ld+json">${JSON.stringify(ld)}</script>`,
+        );
+      } catch { /* ignore */ }
+    }
+  }
 
   return lines.join('\n    ');
 }
@@ -183,6 +210,10 @@ const GLOBAL_SEO_KEYS = [
   // logo fallback for og:image
   'logo_url',
   'light_logo',
+  // schema.org JSON-LD
+  'schema_org_enabled',
+  'schema_org_organization',
+  'schema_org_website',
   // page-specific SEO
   'seo_home_title',
   'seo_home_description',
@@ -226,6 +257,9 @@ async function getGlobalSeo(): Promise<GlobalSeoCache> {
     canonicalBaseUrl: nonEmpty(bag.canonical_base_url),
     twitterCard: nonEmpty(bag.twitter_card) || 'summary_large_image',
     twitterSite: nonEmpty(bag.twitter_site),
+    schemaOrgEnabled: ['true', '1', 'yes'].includes((bag.schema_org_enabled || '').toLowerCase()),
+    schemaOrgOrganization: safeJsonLdParse(bag.schema_org_organization),
+    schemaOrgWebsite: safeJsonLdParse(bag.schema_org_website),
     pageSeo: bag,
     fetchedAt: Date.now(),
   };
@@ -278,6 +312,13 @@ async function resolveStaticPage(
   const title = nonEmpty(g.pageSeo[entry.titleKey]) || g.siteTitle;
   const description = nonEmpty(g.pageSeo[entry.descKey]) || g.siteDescription;
 
+  // Homepage gets Organization + WebSite JSON-LD
+  const jsonLdExtra: Array<Record<string, unknown>> = [];
+  if (urlPath === '/') {
+    if (g.schemaOrgOrganization) jsonLdExtra.push(g.schemaOrgOrganization);
+    if (g.schemaOrgWebsite) jsonLdExtra.push(g.schemaOrgWebsite);
+  }
+
   return {
     title,
     description,
@@ -287,6 +328,7 @@ async function resolveStaticPage(
     ogImage: g.ogDefaultImage || undefined,
     ogSiteName: g.siteName,
     twitterCard: g.twitterCard,
+    ...(jsonLdExtra.length ? { jsonLdExtra } : {}),
   };
 }
 

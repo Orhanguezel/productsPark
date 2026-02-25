@@ -4,7 +4,7 @@
 
 /** Static file extensions that should NOT trigger SPA fallback */
 const STATIC_EXT =
-  /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|webp|avif|mp4|webm|pdf|zip|gz)$/i;
+  /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|webp|avif|mp4|webm|pdf|zip|gz)$/i;
 
 function isApiOrAssetPath(url: string): boolean {
   const path = url.split('?')[0];

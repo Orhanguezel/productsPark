@@ -309,6 +309,9 @@ export async function createApp() {
     { prefix: '/api' },
   );
 
+  // SEO routes at root level: /robots.txt, /sitemap.xml, /manifest.json, /seo/meta
+  await registerSeoRoutes(app);
+
   // SPA static + meta injection (only when dist/ exists)
   const distPath = path.resolve(process.cwd(), env.SPA_DIST_PATH);
   const distIndexExists = fs.existsSync(path.join(distPath, 'index.html'));
