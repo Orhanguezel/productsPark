@@ -386,6 +386,25 @@ export const createPaymentRequestHandler: RouteHandlerMethod = async (req, reply
   const [prov] = await db.select().from(paymentProviders).where(andAll(provConds)).limit(1);
   if (!prov) return reply.code(400).send({ error: { message: 'invalid_payment_method' } });
 
+  // Idempotency: aynı kullanıcı + sipariş + yöntem için mevcut talep varsa onu döndür.
+  // Böylece "Ödemeyi Yaptım" tekrar tıklamalarında duplicate kayıt oluşmaz.
+  const [existing] = await db
+    .select()
+    .from(paymentRequests)
+    .where(
+      andAll([
+        eq(paymentRequests.orderId, b.order_id),
+        eq(paymentRequests.userId, userId),
+        eq(paymentRequests.paymentMethod, b.payment_method),
+      ]),
+    )
+    .orderBy(desc(paymentRequests.createdAt))
+    .limit(1);
+
+  if (existing) {
+    return reply.send(mapPaymentReq(existing));
+  }
+
   await db.insert(paymentRequests).values({
     id,
     orderId: b.order_id,

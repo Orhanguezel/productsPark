@@ -6,7 +6,7 @@ VALUES
   'Cekilisbayisi',
   'smm',
   JSON_OBJECT(
-    'api_url', 'https://cekilisbayisi.com/api/v2',
+    'api_url', 'https://smmget.com/api/v2',
     'api_key', 'dd6a5d1ad1cda75ee74d34b238bf111c',
     'currency', 'TRY'
   ),

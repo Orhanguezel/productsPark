@@ -17,6 +17,7 @@ import { db } from '@/db/client';
 import { payments, paymentSessions, paymentEvents } from './schema';
 import { getStripeConfig } from './service';
 import { env } from '@/core/env';
+import { syncOrderAfterPayment } from './order-sync.service';
 
 function safeJsonStringify(v: unknown): string {
   try {
@@ -34,6 +35,7 @@ async function updateSessionAndPayment(opts: {
   newStatus: 'paid' | 'failed';
   rawEvent: unknown;
   eventType: string;
+  logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }): Promise<void> {
   const amountTry = (opts.amount_total / 100).toFixed(2);
   const paymentStatus = opts.newStatus;
@@ -97,6 +99,13 @@ async function updateSessionAndPayment(opts: {
     message: `stripe_${opts.eventType}`,
     raw: safeJsonStringify(opts.rawEvent),
   } as any);
+
+  await syncOrderAfterPayment({
+    orderId: opts.merchant_oid,
+    paymentStatus,
+    source: `stripe_${opts.eventType}`,
+    logger: opts.logger,
+  });
 }
 
 export const stripeWebhookHandler: RouteHandlerMethod = async (req, reply) => {
@@ -154,6 +163,7 @@ export const stripeWebhookHandler: RouteHandlerMethod = async (req, reply) => {
           newStatus: 'paid',
           rawEvent: event,
           eventType: 'checkout_completed',
+          logger: req.log,
         });
       }
     } else if (event.type === 'checkout.session.expired') {
@@ -168,6 +178,7 @@ export const stripeWebhookHandler: RouteHandlerMethod = async (req, reply) => {
         newStatus: 'failed',
         rawEvent: event,
         eventType: 'checkout_expired',
+        logger: req.log,
       });
     } else if (event.type === 'payment_intent.payment_failed') {
       const pi = event.data.object as Stripe.PaymentIntent;
@@ -181,6 +192,7 @@ export const stripeWebhookHandler: RouteHandlerMethod = async (req, reply) => {
         newStatus: 'failed',
         rawEvent: event,
         eventType: 'payment_failed',
+        logger: req.log,
       });
     }
     // Diğer event'ler sessizce yutulur (Stripe çok fazla event gönderir)

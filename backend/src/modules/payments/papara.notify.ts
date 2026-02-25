@@ -13,6 +13,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { payments, paymentSessions, paymentEvents } from './schema';
 import { getPaparaConfig } from './service';
+import { syncOrderAfterPayment } from './order-sync.service';
 
 /* -------------------- helpers -------------------- */
 
@@ -186,6 +187,13 @@ export const paparaNotifyHandler: RouteHandlerMethod = async (req, reply) => {
       message: paymentStatus === 'paid' ? 'papara_notify_success' : 'papara_notify_failed',
       raw: safeJsonStringify({ paparaId, referenceId, statusRaw, verified }),
     } as never);
+
+    await syncOrderAfterPayment({
+      orderId: orderId || referenceId,
+      paymentStatus,
+      source: 'papara_notify',
+      logger: req.log,
+    });
 
     req.log.info({ paparaId, referenceId, orderId, paymentStatus }, 'papara-notify accepted');
     return reply.send({ success: true });

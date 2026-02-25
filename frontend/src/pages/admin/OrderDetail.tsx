@@ -9,7 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Send, Edit, X, Check } from 'lucide-react';
+import { ArrowLeft, Send, Edit, X, Check, RefreshCw, RotateCcw } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
@@ -44,6 +44,8 @@ import {
   useListOrderItemsAdminQuery,
   useUpdateOrderStatusAdminMutation,
   useGetSiteSettingAdminByKeyQuery,
+  useCheckApiDeliveryStatusMutation,
+  useRetryApiDeliveryMutation,
 } from '@/integrations/hooks';
 
 import type { OrderItemView, OrderStatus } from '@/integrations/types';
@@ -74,11 +76,14 @@ export default function OrderDetail() {
   } = useListOrderItemsAdminQuery(id as string, { skip: !id });
 
   const [updateStatus, { isLoading: updatingStatus }] = useUpdateOrderStatusAdminMutation();
+  const [checkApiStatus] = useCheckApiDeliveryStatusMutation();
+  const [retryDelivery] = useRetryApiDeliveryMutation();
 
   // site_title ayarı (mail subject vs. için) — şimdilik sadece okunuyor
   useGetSiteSettingAdminByKeyQuery('site_title');
 
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [checkingApiStatus, setCheckingApiStatus] = useState(false);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>('');
   const [deliveryContent, setDeliveryContent] = useState<Record<string, string>>({});
@@ -130,11 +135,16 @@ export default function OrderDetail() {
       console.error('Error updating order status:', error);
       const err = error as { data?: any };
       const serverMsg = err?.data?.error?.message;
+      const serverDetails = err?.data?.error?.details;
       const msg =
         serverMsg === 'insufficient_auto_stock'
           ? 'Otomatik stok yetersiz. Ürün stokunu kontrol edin.'
           : serverMsg === 'payment_required'
           ? 'Ödeme yapılmadan bu duruma geçilemez.'
+          : typeof serverMsg === 'string' && serverMsg.trim()
+          ? serverMsg
+          : typeof serverDetails === 'string' && serverDetails.trim()
+          ? serverDetails
           : 'Durum güncellenirken bir hata oluştu.';
 
       toast({ title: 'Hata', description: msg, variant: 'destructive' });
@@ -157,6 +167,56 @@ export default function OrderDetail() {
         "Manuel teslimat endpoint'i henüz backend'e taşınmadı. Backend hazır olunca burası bağlanacak.",
       variant: 'destructive',
     });
+  };
+
+  const handleCheckAllApiStatuses = async () => {
+    if (!id) return;
+    setCheckingApiStatus(true);
+    try {
+      const apiItems = orderItems.filter(
+        (item) => item.api_order_id && safeLower(item.delivery_status) === 'processing',
+      );
+      for (const item of apiItems) {
+        try {
+          await checkApiStatus({ orderId: id, itemId: item.id }).unwrap();
+        } catch { /* per-item errors ok */ }
+      }
+      toast({ title: 'Başarılı', description: 'API durumları güncellendi.' });
+      refetchItems();
+    } catch {
+      toast({ title: 'Hata', description: 'API durumu kontrol edilirken hata oluştu.', variant: 'destructive' });
+    } finally {
+      setCheckingApiStatus(false);
+    }
+  };
+
+  const handleCheckSingleApiStatus = async (itemId: string) => {
+    if (!id) return;
+    setSubmitting(itemId);
+    try {
+      await checkApiStatus({ orderId: id, itemId }).unwrap();
+      toast({ title: 'Başarılı', description: 'API durumu güncellendi.' });
+      refetchItems();
+    } catch {
+      toast({ title: 'Hata', description: 'API durumu kontrol edilemedi.', variant: 'destructive' });
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const handleRetryApiDelivery = async (itemId: string) => {
+    if (!id) return;
+    setSubmitting(itemId);
+    try {
+      await retryDelivery({ orderId: id, itemId }).unwrap();
+      toast({ title: 'Başarılı', description: 'API siparişi tekrar gönderildi.' });
+      refetchItems();
+    } catch (error: any) {
+      const msg = error?.data?.error?.message ?? 'API siparişi gönderilemedi.';
+      toast({ title: 'Hata', description: msg, variant: 'destructive' });
+    } finally {
+      setSubmitting(null);
+    }
   };
 
   const handleStartEdit = (itemId: string, currentContent: string) => {
@@ -242,7 +302,13 @@ export default function OrderDetail() {
           </Button>
 
           {hasApiDelivery && (
-            <Button variant="outline" size="sm" disabled>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCheckAllApiStatuses}
+              disabled={checkingApiStatus}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${checkingApiStatus ? 'animate-spin' : ''}`} />
               API Durumunu Güncelle
             </Button>
           )}
@@ -375,15 +441,44 @@ export default function OrderDetail() {
 
                         <TableCell>
                           {item.api_order_id || item.turkpin_order_no ? (
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {item.api_order_id || item.turkpin_order_no}
-                            </code>
+                            <div className="flex items-center gap-1">
+                              <code className="text-xs bg-muted px-2 py-1 rounded">
+                                {item.api_order_id || item.turkpin_order_no}
+                              </code>
+                              {item.api_order_id && safeLower(item.delivery_status) === 'processing' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => handleCheckSingleApiStatus(item.id)}
+                                  disabled={submitting === item.id}
+                                >
+                                  <RefreshCw className={`w-3 h-3 ${submitting === item.id ? 'animate-spin' : ''}`} />
+                                </Button>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground text-xs">-</span>
                           )}
                         </TableCell>
 
-                        <TableCell>{getDeliveryBadge(item.delivery_status)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getDeliveryBadge(item.delivery_status)}
+                            {safeLower(item.delivery_status) === 'failed' && safeLower(item.products?.delivery_type) === 'api' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-xs px-2"
+                                onClick={() => handleRetryApiDelivery(item.id)}
+                                disabled={submitting === item.id}
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Tekrar Dene
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
 
                         <TableCell className="max-w-md">
                           {editingItem === item.id ? (

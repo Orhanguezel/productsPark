@@ -107,6 +107,14 @@ export const apiProvidersApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: 'ApiProviders', id: 'LIST' }],
     }),
 
+    // GET /admin/api-providers/:id/services
+    listApiProviderServices: b.query<
+      { success: boolean; services: Array<{ service: number; name: string; type: string; rate: string; min: string; max: string; category: string }> },
+      { id: string }
+    >({
+      query: ({ id }) => ({ url: `${BASE}/${id}/services` }),
+    }),
+
     // BALANCE CHECK
     checkApiProviderBalance: b.mutation<ApiProviderBalanceResponse, { id: string }>({
       query: ({ id }) => ({
@@ -129,4 +137,6 @@ export const {
   useUpdateApiProviderMutation,
   useDeleteApiProviderMutation,
   useCheckApiProviderBalanceMutation,
+  useListApiProviderServicesQuery,
+  useLazyListApiProviderServicesQuery,
 } = apiProvidersApi;

@@ -15,8 +15,8 @@ import { db } from '@/db/client';
 import { setContentRange } from '@/common/utils/contentRange';
 import { paymentRequests } from './schema';
 
-// ✅ orders schema import (path sende farklıysa düzelt)
-import { orders } from '@/modules/orders/schema';
+import { orders, order_items } from '@/modules/orders/schema';
+import { users } from '@/modules/auth/schema';
 
 // ---------- validations ----------
 const listPaymentRequestsAdminQuery = z
@@ -24,7 +24,7 @@ const listPaymentRequestsAdminQuery = z
     user_id: z.string().uuid().optional(),
     order_id: z.string().uuid().optional(),
     status: z.string().optional(),
-    limit: z.coerce.number().int().min(0).max(100).optional(),
+    limit: z.coerce.number().int().min(0).max(500).optional(),
     offset: z.coerce.number().int().min(0).optional(),
     q: z.string().optional(),
     include: z.string().optional(),
@@ -54,7 +54,10 @@ const colUpdatedAt = (O.updatedAt ?? O.updated_at) as any;
 const colStatus = (O.status ?? O.orderStatus ?? O.order_status) as any;
 
 // ---------- mapper ----------
-const mapPaymentRequestAdmin = (r: typeof paymentRequests.$inferSelect) => ({
+const mapPaymentRequestAdmin = (
+  r: typeof paymentRequests.$inferSelect,
+  orderData?: Record<string, unknown> | null,
+) => ({
   id: r.id,
   order_id: r.orderId,
   user_id: r.userId ?? null,
@@ -65,7 +68,7 @@ const mapPaymentRequestAdmin = (r: typeof paymentRequests.$inferSelect) => ({
   processed_at: r.processedAt ? String(r.processedAt) : null,
   created_at: r.createdAt ? String(r.createdAt) : undefined,
   updated_at: r.updatedAt ? String(r.updatedAt) : undefined,
-  orders: null,
+  orders: orderData ?? null,
 });
 
 // ---------- handlers ----------
@@ -108,22 +111,66 @@ export async function listPaymentRequestsAdminHandler(
         : db.select({ total: sql<number>`COUNT(*)`.as('total') }).from(paymentRequests))
     )[0]?.total ?? 0;
 
-  const rows = conds.length
-    ? await db
-        .select()
-        .from(paymentRequests)
-        .where(and(...conds))
-        .orderBy(desc(paymentRequests.createdAt))
-        .limit(Math.min(limit, 100))
-        .offset(Math.max(offset, 0))
-    : await db
-        .select()
-        .from(paymentRequests)
-        .orderBy(desc(paymentRequests.createdAt))
-        .limit(Math.min(limit, 100))
-        .offset(Math.max(offset, 0));
+  const baseQ = db
+    .select()
+    .from(paymentRequests)
+    .orderBy(desc(paymentRequests.createdAt))
+    .limit(Math.min(limit, 500))
+    .offset(Math.max(offset, 0));
 
-  const data = rows.map(mapPaymentRequestAdmin);
+  const rows = conds.length ? await baseQ.where(and(...conds)) : await baseQ;
+
+  // Enrich with order + user + items data
+  const orderIds = [...new Set(rows.map((r) => r.orderId).filter(Boolean))];
+  const orderMap = new Map<string, Record<string, unknown>>();
+
+  if (orderIds.length) {
+    const orderRows = await db
+      .select({
+        o_id: orders.id,
+        o_order_number: orders.order_number,
+        o_status: orders.status,
+        o_total: orders.total,
+        u_full_name: users.full_name,
+        u_email: users.email,
+      })
+      .from(orders)
+      .leftJoin(users, eq(users.id, orders.user_id))
+      .where(sql`${orders.id} IN (${sql.join(orderIds.map((id) => sql`${id}`), sql`, `)})`);
+
+    const itemRows = await db
+      .select({
+        oi_order_id: order_items.order_id,
+        oi_product_name: order_items.product_name,
+        oi_quantity: order_items.quantity,
+      })
+      .from(order_items)
+      .where(sql`${order_items.order_id} IN (${sql.join(orderIds.map((id) => sql`${id}`), sql`, `)})`);
+
+    const itemsByOrder = new Map<string, Array<{ product_name: string; quantity: number }>>();
+    for (const it of itemRows) {
+      const oid = String(it.oi_order_id);
+      if (!itemsByOrder.has(oid)) itemsByOrder.set(oid, []);
+      itemsByOrder.get(oid)!.push({
+        product_name: String(it.oi_product_name ?? ''),
+        quantity: Number(it.oi_quantity ?? 0),
+      });
+    }
+
+    for (const o of orderRows) {
+      const oid = String(o.o_id);
+      orderMap.set(oid, {
+        order_number: o.o_order_number,
+        status: o.o_status,
+        total: o.o_total,
+        customer_name: o.u_full_name ?? null,
+        customer_email: o.u_email ?? null,
+        order_items: itemsByOrder.get(oid) ?? [],
+      });
+    }
+  }
+
+  const data = rows.map((r) => mapPaymentRequestAdmin(r, orderMap.get(r.orderId) ?? null));
 
   reply.header('x-total-count', String(total));
   reply.header('access-control-expose-headers', 'x-total-count, content-range');

@@ -18,7 +18,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { useCreateOrderMutation, useGetSiteSettingByKeyQuery } from '@/integrations/hooks';
+import {
+  useCreateOrderMutation,
+  useGetSiteSettingByKeyQuery,
+  useGetOrderByIdQuery,
+} from '@/integrations/hooks';
 import { useCreatePaymentRequestMutation } from '@/integrations/rtk/public/payment_requests.endpoints';
 import type { CreateOrderBody } from '@/integrations/types';
 import { toStr, isPlainObject } from '@/integrations/types/common';
@@ -137,6 +141,9 @@ export default function PaymentInfo() {
 
   const { data: bankSetting, isLoading: bankLoading } =
     useGetSiteSettingByKeyQuery('bank_account_info');
+  const { data: existingOrder } = useGetOrderByIdQuery(String(orderId ?? ''), {
+    skip: !isExistingOrder,
+  });
 
   const [createOrder] = useCreateOrderMutation();
   const [createPaymentRequest] = useCreatePaymentRequestMutation();
@@ -223,10 +230,27 @@ export default function PaymentInfo() {
       return;
     }
 
-    // Existing order: burada payment_request yaratmıyoruz (backend/önceki akış).
+    // Existing order: bu akışta da payment_request oluştur (idempotent backend).
     if (isExistingOrder) {
+      try {
+        const amount = Number((existingOrder as any)?.total_price ?? (existingOrder as any)?.total ?? 0);
+        await createPaymentRequest({
+          order_id: String(orderId),
+          user_id: user?.id ?? null,
+          amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+          currency: 'TRY',
+          payment_method: 'bank_transfer',
+          proof_image_url: null,
+          status: 'pending',
+        } as any).unwrap();
+      } catch (e) {
+        console.error('createPaymentRequest for existing bank_transfer order failed:', e);
+      }
+
       sessionStorage.removeItem('checkoutData');
       sessionStorage.removeItem('havalepaymentData');
+      sessionStorage.removeItem('bankTransferKind');
+      sessionStorage.removeItem('bankTransferConfig');
       toast.success('Bilgiler kaydedildi');
       navigate('/odeme-beklemede');
       return;
@@ -293,6 +317,7 @@ export default function PaymentInfo() {
         } as any).unwrap();
       } catch (e) {
         console.error('createPaymentRequest for bank_transfer failed:', e);
+        toast.error('Ödeme bildirimi kaydedilemedi. Lütfen tekrar deneyin.');
       }
 
       // local caches temizliği

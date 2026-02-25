@@ -108,7 +108,7 @@ const itemsListSchema = z.object({
 
 // --------------------------- Timeline helpers ---------------------------
 
-async function addTimeline(
+export async function addTimeline(
   orderId: string,
   type: string,
   message: string,
@@ -559,10 +559,15 @@ export const updateOrderStatusAdmin: RouteHandler = async (req, reply) => {
       if (!ord) return { kind: 'not_found' as const };
 
       const currentPayment = String((ord as any).payment_status ?? 'pending') as any;
+      const impliedPaid =
+        (body.status === 'completed' || body.status === 'processing') &&
+        body.payment_status === undefined
+          ? 'paid'
+          : undefined;
 
       // ---- POLICY: payment gate ----
       // Admin ayni anda payment_status=paid gonderiyorsa gate'i gec
-      const effectivePayment = body.payment_status || currentPayment;
+      const effectivePayment = body.payment_status || impliedPaid || currentPayment;
       if (requiresPaidForStatus(body.status) && effectivePayment !== 'paid') {
         return { kind: 'conflict' as const, message: 'payment_required' };
       }
@@ -584,6 +589,8 @@ export const updateOrderStatusAdmin: RouteHandler = async (req, reply) => {
 
       if (body.payment_status) {
         patch.payment_status = body.payment_status;
+      } else if (impliedPaid) {
+        patch.payment_status = impliedPaid;
       }
 
       await tx
@@ -632,6 +639,19 @@ export const updateOrderStatusAdmin: RouteHandler = async (req, reply) => {
       'status_change',
       body.note ? `Status → ${body.status}. ${body.note}` : `Status → ${body.status}`,
     );
+
+    // SMM API auto-fulfillment: fire-and-forget (don't block response)
+    if (body.status === 'completed') {
+      const { fulfillApiOrderItems } = await import('./smm.service');
+      fulfillApiOrderItems(id, req.log).catch((err) => {
+        (req as any).log?.error?.(err, 'smm_fulfillment_error');
+      });
+
+      const { fulfillTurkpinOrderItems } = await import('./turkpin.service');
+      fulfillTurkpinOrderItems(id, req.log).catch((err) => {
+        (req as any).log?.error?.(err, 'turkpin_fulfillment_error');
+      });
+    }
 
     return reply.send(result.view);
   } catch (e: any) {
@@ -897,5 +917,201 @@ export const deleteOrderAdmin: RouteHandler = async (req, reply) => {
   } catch (e: any) {
     (req as any).log?.error?.(e, 'admin_delete_order_failed');
     return reply.code(500).send({ error: { message: 'admin_order_delete_failed' } });
+  }
+};
+
+// ===================================================================
+// POST /admin/orders/:orderId/items/:itemId/check-api-status
+// ===================================================================
+export const checkApiDeliveryStatus: RouteHandler = async (req, reply) => {
+  try {
+    const { orderId, itemId } = req.params as { orderId: string; itemId: string };
+
+    // Load order item
+    const [item] = await db
+      .select()
+      .from(order_items)
+      .where(and(eq(order_items.id, itemId as any), eq(order_items.order_id, orderId as any)))
+      .limit(1);
+
+    if (!item) return reply.code(404).send({ error: { message: 'item_not_found' } });
+
+    const smmOrderId = (item as any).api_order_id as string | null;
+    if (!smmOrderId) return reply.code(400).send({ error: { message: 'no_api_order_id' } });
+
+    // Load product to get api_provider_id
+    const [prod] = await db
+      .select({ api_provider_id: products.api_provider_id })
+      .from(products)
+      .where(eq(products.id, item.product_id as any))
+      .limit(1);
+
+    if (!prod?.api_provider_id) return reply.code(400).send({ error: { message: 'no_provider' } });
+
+    // Load provider credentials
+    const provRows: any = await db.execute(sql`
+      SELECT credentials FROM api_providers
+      WHERE id = ${prod.api_provider_id} AND is_active = 1
+      LIMIT 1
+    `);
+    const provData: any[] = Array.isArray(provRows) ? provRows : (provRows?.rows ?? []);
+    if (!provData.length) return reply.code(400).send({ error: { message: 'provider_not_found' } });
+
+    let creds: any;
+    try { creds = typeof provData[0].credentials === 'string' ? JSON.parse(provData[0].credentials) : provData[0].credentials; } catch { creds = {}; }
+    const apiUrl = creds?.api_url as string;
+    const apiKey = creds?.api_key as string;
+    if (!apiUrl || !apiKey) return reply.code(400).send({ error: { message: 'missing_credentials' } });
+
+    // Call SMM API
+    const { smmCheckStatus } = await import('./smm.service');
+    const status = await smmCheckStatus(apiUrl, apiKey, smmOrderId);
+
+    // Map SMM status → delivery_status
+    const smmSt = String(status.status).toLowerCase();
+    let deliveryStatus: string;
+    let deliveredAt: any = undefined;
+
+    if (['completed', 'partial'].includes(smmSt)) {
+      deliveryStatus = 'delivered';
+      deliveredAt = sql`NOW(3)`;
+    } else if (['in progress', 'processing', 'pending'].includes(smmSt)) {
+      deliveryStatus = 'processing';
+    } else {
+      deliveryStatus = 'failed';
+    }
+
+    const patch: Record<string, any> = {
+      delivery_status: deliveryStatus,
+      updated_at: sql`NOW(3)`,
+    };
+    if (deliveredAt) patch.delivered_at = deliveredAt;
+
+    await db
+      .update(order_items)
+      .set(patch as any)
+      .where(eq(order_items.id, itemId as any));
+
+    await addTimeline(
+      orderId,
+      'api_delivery',
+      `API durum güncellendi: SMM #${smmOrderId} → ${status.status} (${deliveryStatus})`,
+    );
+
+    return reply.send({
+      delivery_status: deliveryStatus,
+      api_order_id: smmOrderId,
+      smm_status: status.status,
+      charge: status.charge,
+      remains: status.remains,
+    });
+  } catch (e: any) {
+    (req as any).log?.error?.(e, 'check_api_delivery_status_failed');
+    return reply.code(502).send({
+      error: { message: 'api_status_check_failed', details: e?.message },
+    });
+  }
+};
+
+// ===================================================================
+// POST /admin/orders/:orderId/items/:itemId/retry-api-delivery
+// ===================================================================
+export const retryApiDelivery: RouteHandler = async (req, reply) => {
+  try {
+    const { orderId, itemId } = req.params as { orderId: string; itemId: string };
+
+    // Load order item + product
+    const rows = await db
+      .select({
+        itemId: order_items.id,
+        itemOptions: order_items.options,
+        apiOrderId: order_items.api_order_id,
+        deliveryStatus: order_items.delivery_status,
+        productName: order_items.product_name,
+        productId: products.id,
+        apiProviderId: products.api_provider_id,
+        apiProductId: products.api_product_id,
+        apiQuantity: products.api_quantity,
+        customFields: products.custom_fields,
+      })
+      .from(order_items)
+      .innerJoin(products, eq(products.id, order_items.product_id))
+      .where(and(eq(order_items.id, itemId as any), eq(order_items.order_id, orderId as any)))
+      .limit(1);
+
+    if (!rows.length) return reply.code(404).send({ error: { message: 'item_not_found' } });
+
+    const row = rows[0];
+    const st = String(row.deliveryStatus ?? '').toLowerCase();
+    if (st !== 'failed' && row.apiOrderId) {
+      return reply.code(400).send({ error: { message: 'item_already_fulfilled' } });
+    }
+
+    const providerId = row.apiProviderId as string | null;
+    const serviceId = row.apiProductId as string | null;
+    if (!providerId || !serviceId) {
+      return reply.code(400).send({ error: { message: 'missing_provider_or_service' } });
+    }
+
+    // Load provider
+    const provRows: any = await db.execute(sql`
+      SELECT credentials FROM api_providers
+      WHERE id = ${providerId} AND is_active = 1
+      LIMIT 1
+    `);
+    const provData: any[] = Array.isArray(provRows) ? provRows : (provRows?.rows ?? []);
+    if (!provData.length) return reply.code(400).send({ error: { message: 'provider_not_found' } });
+
+    let creds: any;
+    try { creds = typeof provData[0].credentials === 'string' ? JSON.parse(provData[0].credentials) : provData[0].credentials; } catch { creds = {}; }
+    const apiUrl = creds?.api_url as string;
+    const apiKey = creds?.api_key as string;
+    if (!apiUrl || !apiKey) return reply.code(400).send({ error: { message: 'missing_credentials' } });
+
+    // Extract link
+    const { extractLinkFromOptions, smmPlaceOrder } = await import('./smm.service');
+
+    let options: Record<string, string> | null = null;
+    try { options = typeof row.itemOptions === 'string' ? JSON.parse(row.itemOptions) : row.itemOptions as any; } catch { /* ignore */ }
+
+    let customFields: any[] | null = null;
+    try {
+      const cf = row.customFields;
+      customFields = typeof cf === 'string' ? JSON.parse(cf) : cf as any;
+    } catch { /* ignore */ }
+
+    const link = extractLinkFromOptions(options, customFields);
+    if (!link) return reply.code(400).send({ error: { message: 'no_link_found' } });
+
+    const quantity = Number(row.apiQuantity ?? 1);
+
+    // Place SMM order
+    const result = await smmPlaceOrder(apiUrl, apiKey, serviceId, link, quantity);
+
+    // Update order item
+    await db
+      .update(order_items)
+      .set({
+        api_order_id: result.orderId as any,
+        delivery_status: 'processing' as any,
+        updated_at: sql`NOW(3)`,
+      })
+      .where(eq(order_items.id, itemId as any));
+
+    await addTimeline(
+      orderId,
+      'api_delivery',
+      `API sipariş tekrar gönderildi: ${row.productName} → SMM #${result.orderId}`,
+    );
+
+    return reply.send({
+      delivery_status: 'processing',
+      api_order_id: result.orderId,
+    });
+  } catch (e: any) {
+    (req as any).log?.error?.(e, 'retry_api_delivery_failed');
+    return reply.code(502).send({
+      error: { message: 'retry_failed', details: e?.message },
+    });
   }
 };

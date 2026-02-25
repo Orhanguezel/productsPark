@@ -131,11 +131,20 @@ const TurkpinSettings = () => {
           variant: "destructive",
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Balance refresh error:", err);
+      const msgKey = err?.data?.message ?? "";
+      const isWaf =
+        msgKey === "provider_blocked_by_waf" ||
+        (typeof err?.data?.raw === "string" && err.data.raw.includes("cloudflare"));
+
+      const description = isWaf
+        ? "Turkpin Cloudflare WAF tarafından engelleniyor. Sunucu IP adresinin Turkpin tarafından beyaz listeye alınması gerekiyor."
+        : err?.data?.error || msgKey || err?.error || "Bakiye güncellenirken bir hata oluştu";
+
       toast({
-        title: "Hata",
-        description: "Bakiye güncellenirken bir hata oluştu",
+        title: "Bakiye Alınamadı",
+        description,
         variant: "destructive",
       });
     } finally {

@@ -335,70 +335,214 @@ export async function adminCheckApiProviderBalance(
 
   if (!apiUrl || !apiKey)
     return reply.code(400).send({ message: "missing_credentials" });
-  if (row.type !== "smm")
-    return reply.code(400).send({ message: "unsupported_provider_type" });
-
-  const body = new URLSearchParams({
-    key: apiKey,
-    action: "balance",
-    format: "json",
-  }).toString();
 
   let rawText = "";
   try {
-    const res = await fetchAny(apiUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        accept: "application/json, text/plain, */*",
-      },
-      body,
-    });
-
-    rawText = await res.text();
-
-    // 1) JSON parse dene
-    let j: any;
-    try {
-      j = JSON.parse(rawText);
-    } catch {
-      j = null;
-    }
-
     let balance: number | null = null;
     let currency: string | null = null;
+    let providerError: string | null = null;
 
-    if (j && typeof j === "object") {
-      if (j.error) {
-        // Örn: key hatalı vs.
-        return reply.code(502).send({
-          message: "provider_error",
-          raw: String(j.error).slice(0, 200),
-        });
+    const parseBalanceFromObj = (
+      obj: Record<string, unknown> | null
+    ): { balance: number | null; currency: string | null } => {
+      if (!obj) return { balance: null, currency: null };
+
+      const parseNumLoose = (v: unknown): number | null => {
+        if (typeof v === "number" && Number.isFinite(v)) return v;
+        if (typeof v === "string") {
+          const s = v.trim();
+          if (!s) return null;
+          const direct = Number(s.replace(",", "."));
+          if (Number.isFinite(direct)) return direct;
+          const m = s.match(/(-?\d+(?:[.,]\d+)?)/);
+          if (!m) return null;
+          const n = Number(m[1].replace(",", "."));
+          return Number.isFinite(n) ? n : null;
+        }
+        return null;
+      };
+
+      const b1 = obj.balance ?? obj.bakiye ?? obj.credit ?? obj.money;
+      const b2 = obj.funds;
+      const c1 = obj.currency;
+
+      if (b1 !== undefined) {
+        const n = parseNumLoose(b1);
+        if (n !== null)
+          return {
+            balance: n,
+            currency: typeof c1 === "string" ? c1 : null,
+          };
       }
-      if (j.balance !== undefined) {
-        balance = Number(j.balance);
-        currency = typeof j.currency === "string" ? j.currency : null;
-      } else if (j.funds !== undefined) {
-        balance = Number(j.funds);
-        currency = typeof j.currency === "string" ? j.currency : null;
+      if (b2 !== undefined) {
+        const n = parseNumLoose(b2);
+        if (n !== null)
+          return {
+            balance: n,
+            currency: typeof c1 === "string" ? c1 : null,
+          };
       }
+
+      for (const k of ["data", "result", "account"]) {
+        const data = obj[k];
+        if (data && typeof data === "object" && !Array.isArray(data)) {
+          const nested = data as Record<string, unknown>;
+          const bn =
+            nested.balance ?? nested.funds ?? nested.bakiye ?? nested.credit ?? nested.money;
+          const cn = nested.currency;
+          const n = parseNumLoose(bn);
+          if (n !== null) {
+            return {
+              balance: n,
+              currency: typeof cn === "string" ? cn : null,
+            };
+          }
+        }
+      }
+
+      return { balance: null, currency: null };
+    };
+
+    const parseBalanceFromText = (txt: string): number | null => {
+      // Skip HTML responses — they contain random numbers (e.g. height:100%)
+      if (txt.trimStart().startsWith('<!') || txt.trimStart().startsWith('<html')) return null;
+      const m = txt.match(/(-?\d+(?:[.,]\d+)?)/);
+      if (!m) return null;
+      const n = Number(m[1].replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const postBody = async (payload: Record<string, string>, asForm = true) => {
+      const body = asForm
+        ? new URLSearchParams(payload).toString()
+        : JSON.stringify(payload);
+      const res = await fetchAny(apiUrl, {
+        method: "POST",
+        headers: asForm
+          ? {
+              "content-type": "application/x-www-form-urlencoded",
+              accept: "application/json, text/plain, */*",
+              "user-agent": "Mozilla/5.0 (compatible; ProductSpark/1.0)",
+            }
+          : {
+              "content-type": "application/json",
+              accept: "application/json, text/plain, */*",
+              "user-agent": "Mozilla/5.0 (compatible; ProductSpark/1.0)",
+            },
+        body,
+      });
+      rawText = await res.text();
+      let j: Record<string, unknown> | null = null;
+      try {
+        const parsed = JSON.parse(rawText);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          j = parsed as Record<string, unknown>;
+        }
+      } catch {
+        j = null;
+      }
+      return { res, j };
+    };
+
+    const tryUserPassBalance = async () => {
+      const [username, ...rest] = apiKey.split(":");
+      const password = rest.join(":");
+      const actions = [
+        "balance",
+        "get_balance",
+        "account_balance",
+        "bakiye",
+        "user_balance",
+        "getBalance",
+      ];
+
+      for (const action of actions) {
+        for (const asForm of [true, false]) {
+          const { j } = await postBody(
+            {
+              action,
+              username: username ?? "",
+              user: username ?? "",
+              email: username ?? "",
+              mail: username ?? "",
+              password: password ?? "",
+              pass: password ?? "",
+              sifre: password ?? "",
+              api_key: apiKey,
+              format: "json",
+            },
+            asForm
+          );
+
+          if (j?.error && !providerError) {
+            providerError = String(j.error).slice(0, 200);
+          }
+
+          const p = parseBalanceFromObj(j);
+          if (p.balance !== null && !Number.isNaN(p.balance)) {
+            balance = p.balance;
+            currency = p.currency;
+            return;
+          }
+
+          const n = parseBalanceFromText(rawText);
+          if (n !== null) {
+            balance = n;
+            return;
+          }
+        }
+      }
+    };
+
+    if (row.type === "smm") {
+      const { j } = await postBody({
+        key: apiKey,
+        action: "balance",
+        format: "json",
+      });
+
+      if (j?.error) {
+        providerError = String(j.error).slice(0, 200);
+      } else {
+        const p = parseBalanceFromObj(j);
+        balance = p.balance;
+        currency = p.currency;
+      }
+      // Some providers are saved as "smm" but actually expect user:pass style auth.
+      if ((balance === null || Number.isNaN(balance)) && apiKey.includes(":")) {
+        await tryUserPassBalance();
+      }
+    } else if (row.type === "epin" || row.type === "topup") {
+      await tryUserPassBalance();
+    } else {
+      return reply.code(400).send({ message: "unsupported_provider_type" });
     }
 
     // 2) JSON değilse: ham metinden sayı yakala
     if (balance === null) {
-      const m = rawText.match(/(-?\d+(?:[.,]\d+)?)/);
-      if (m) {
-        balance = Number(m[1].replace(",", "."));
+      const n = parseBalanceFromText(rawText);
+      if (n !== null) {
+        balance = n;
         currency = typeof creds.currency === "string" ? creds.currency : null;
       }
     }
 
     // 3) hâlâ yoksa: provider cevabı bozuk
     if (balance === null || Number.isNaN(balance)) {
+      const rawLower = rawText.toLowerCase();
+      const looksLikeHtml =
+        rawLower.includes("<!doctype html") || rawLower.includes("<html");
+      const isWafPage =
+        rawLower.includes("cloudflare") || rawLower.includes("attention required");
       return reply.code(502).send({
-        message: "bad_provider_response",
-        raw: rawText.slice(0, 300),
+        message: isWafPage
+          ? "provider_blocked_by_waf"
+          : providerError
+          ? "provider_error"
+          : "bad_provider_response",
+        ...(providerError ? { error: providerError } : {}),
+        ...(looksLikeHtml && !isWafPage ? { error: "html_response_received" } : {}),
+        ...(isWafPage ? { error: "Cloudflare WAF engeli — sunucu IP beyaz listeye alınmalı" } : {}),
       });
     }
 
@@ -433,6 +577,72 @@ export async function adminCheckApiProviderBalance(
       { err: e, raw: rawText.slice(0, 160) },
       "balance_check_failed"
     );
+    return reply.code(502).send({
+      message: "provider_unreachable",
+      error: e?.message ?? String(e),
+    });
+  }
+}
+
+/** GET /admin/api-providers/:id/services */
+export async function adminListApiProviderServices(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
+  const mysql = getMysql(req);
+  const { id } = IdParamSchema.parse(req.params);
+
+  const [rows] = await mysql.query<ApiProviderDbRow[]>(
+    `SELECT id, name, \`type\`, credentials, is_active, created_at, updated_at
+     FROM api_providers WHERE id = ? LIMIT 1`,
+    [id]
+  );
+  if (!rows?.length) return reply.code(404).send({ message: "not_found" });
+
+  const row = rows[0];
+  const creds = toCredentials(safeParseJson(row.credentials));
+  const apiUrl = typeof creds.api_url === "string" ? creds.api_url : "";
+  const apiKey = typeof creds.api_key === "string" ? creds.api_key : "";
+
+  if (!apiUrl || !apiKey)
+    return reply.code(400).send({ message: "missing_credentials" });
+  if (row.type !== "smm")
+    return reply.code(400).send({ message: "unsupported_provider_type" });
+
+  const body = new URLSearchParams({
+    key: apiKey,
+    action: "services",
+  }).toString();
+
+  try {
+    const res = await fetchAny(apiUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json, text/plain, */*",
+      },
+      body,
+    });
+
+    const rawText = await res.text();
+    let json: any;
+    try {
+      json = JSON.parse(rawText);
+    } catch {
+      json = null;
+    }
+
+    if (!json || (json && !Array.isArray(json) && json.error)) {
+      return reply.code(502).send({
+        message: "provider_error",
+        raw: String(json?.error ?? rawText).slice(0, 300),
+      });
+    }
+
+    const services = Array.isArray(json) ? json : [];
+    return reply.send({ success: true, services });
+  } catch (e: any) {
+    req.log.error({ err: e }, "list_services_failed");
     return reply.code(502).send({
       message: "provider_unreachable",
       error: e?.message ?? String(e),

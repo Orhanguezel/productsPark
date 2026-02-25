@@ -14,6 +14,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { payments, paymentSessions, paymentEvents } from './schema';
 import { getShopierConfig } from './service';
+import { syncOrderAfterPayment } from './order-sync.service';
 
 /* -------------------- helpers -------------------- */
 
@@ -255,6 +256,13 @@ export const shopierNotifyHandler: RouteHandlerMethod = async (req, reply) => {
       message: paymentStatus === 'paid' ? 'shopier_notify_success' : 'shopier_notify_failed',
       raw: safeJsonStringify(body),
     } as any);
+
+    await syncOrderAfterPayment({
+      orderId: platform_order_id,
+      paymentStatus,
+      source: 'shopier_notify',
+      logger: req.log,
+    });
 
     req.log.info(
       { platform_order_id, payment_id, status, paymentStatus, signature_verified: sig.verifiedBy },

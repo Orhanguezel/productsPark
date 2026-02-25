@@ -16,6 +16,8 @@ import {
   addOrderNoteAdmin,
   deleteOrderAdmin,
   listAllOrderItemsAdmin,
+  checkApiDeliveryStatus,
+  retryApiDelivery,
 } from "./admin.controller";
 
 const BASE = "/orders";
@@ -38,5 +40,9 @@ export async function registerAdminOrders(app: FastifyInstance) {
   app.post(`${BASE}/:id/timeline`, guard, addOrderNoteAdmin);
 
   app.delete(`${BASE}/:id`, guard, deleteOrderAdmin);
+
+  // SMM API delivery
+  app.post(`${BASE}/:orderId/items/:itemId/check-api-status`, guard, checkApiDeliveryStatus);
+  app.post(`${BASE}/:orderId/items/:itemId/retry-api-delivery`, guard, retryApiDelivery);
 }
 

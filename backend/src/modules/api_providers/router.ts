@@ -7,7 +7,8 @@ import {
   adminCreateApiProvider,
   adminUpdateApiProvider,
   adminDeleteApiProvider,
-  adminCheckApiProviderBalance, // <-- NEW
+  adminCheckApiProviderBalance,
+  adminListApiProviderServices,
 } from "./controller";
 
 const BASE = "/admin/api-providers";
@@ -19,6 +20,7 @@ export async function registerApiProviders(app: FastifyInstance) {
   app.put(`${BASE}/:id`, { preHandler: [requireAuth] }, adminUpdateApiProvider);
   app.delete(`${BASE}/:id`, { preHandler: [requireAuth] }, adminDeleteApiProvider);
 
-  // NEW: balance check
+  // Balance check + services
   app.post(`${BASE}/:id/check-balance`, { preHandler: [requireAuth] }, adminCheckApiProviderBalance);
+  app.get(`${BASE}/:id/services`, { preHandler: [requireAuth] }, adminListApiProviderServices);
 }

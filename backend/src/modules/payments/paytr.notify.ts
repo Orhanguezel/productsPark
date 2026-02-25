@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { db } from '@/db/client';
 import { paymentSessions, payments, paymentEvents } from './schema';
 import { getPaytrConfig } from './service';
+import { syncOrderAfterPayment } from './order-sync.service';
 
 const PAYTR_NOTIFY_BODY = z.object({
   merchant_oid: z.string().min(1),
@@ -252,6 +253,13 @@ export const paytrNotifyHandler: RouteHandlerMethod = async (req, reply) => {
     message: status === 'success' ? 'paytr_notify_success' : 'paytr_notify_failed',
     raw: safeJsonStringify(body),
   } as any);
+
+  await syncOrderAfterPayment({
+    orderId: session.orderId ?? merchant_oid,
+    paymentStatus: newPaymentStatus,
+    source: 'paytr_notify',
+    logger: req.log,
+  });
 
   return reply.type('text/plain; charset=utf-8').send('OK');
 };

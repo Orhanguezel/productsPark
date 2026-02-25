@@ -313,8 +313,390 @@ export async function manualDeliveryEmail(req: FastifyRequest, reply: FastifyRep
 }
 
 /* ==================================================================
-   TELEGRAM / SMM / TURKPIN STUB’LARI
+   TELEGRAM / SMM / TURKPIN
    ================================================================== */
+
+type MySQL = { query<T = any[]>(sql: string, params?: unknown[]): Promise<[T, unknown]> };
+
+type ApiProviderDbRow = {
+  id: string;
+  name: string;
+  type: string;
+  credentials: string | Record<string, unknown> | null;
+  is_active: 0 | 1;
+};
+
+type TurkpinProviderConfig = {
+  id: string;
+  name: string;
+  providerType: string;
+  apiUrl: string;
+  apiKey: string;
+  username: string;
+  password: string;
+  credentials: Record<string, unknown>;
+};
+
+type TurkpinCallResult = {
+  ok: boolean;
+  status: number;
+  rawText: string;
+  rawJson: unknown;
+  actionUsed: string;
+};
+
+function getMysql(req: FastifyRequest): MySQL {
+  const s = req.server as any;
+  const r = req as any;
+  const db = s.mysql ?? r.mysql ?? s.db ?? s.mariadb ?? null;
+  if (!db?.query) {
+    throw new Error('mysql_pool_not_found');
+  }
+  return db as MySQL;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function parseJsonObject(v: unknown): Record<string, unknown> {
+  if (typeof v === 'string') {
+    try {
+      const j = JSON.parse(v) as unknown;
+      return isRecord(j) ? j : {};
+    } catch {
+      return {};
+    }
+  }
+  return isRecord(v) ? v : {};
+}
+
+function pickStr(obj: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (s) return s;
+    }
+    if (typeof v === 'number' || typeof v === 'boolean') {
+      const s = String(v).trim();
+      if (s) return s;
+    }
+  }
+  return undefined;
+}
+
+function pickNum(obj: Record<string, unknown>, keys: string[], fallback = 0): number {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+      const n = Number(v.replace(',', '.').trim());
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return fallback;
+}
+
+function pickBool(obj: Record<string, unknown>, keys: string[], fallback = false): boolean {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v !== 0;
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase();
+      if (['1', 'true', 'yes', 'on', 'ok', 'active'].includes(s)) return true;
+      if (['0', 'false', 'no', 'off', 'inactive'].includes(s)) return false;
+    }
+  }
+  return fallback;
+}
+
+function splitUserPass(apiKey: string): { username: string; password: string } {
+  const raw = apiKey.trim();
+  if (!raw) return { username: '', password: '' };
+  const idx = raw.indexOf(':');
+  if (idx < 0) return { username: raw, password: '' };
+  return {
+    username: raw.slice(0, idx).trim(),
+    password: raw.slice(idx + 1).trim(),
+  };
+}
+
+async function loadTurkpinProvider(req: FastifyRequest, providerId: string): Promise<TurkpinProviderConfig> {
+  const mysql = getMysql(req);
+
+  const [rows] = await mysql.query<ApiProviderDbRow[]>(
+    `SELECT id, name, \`type\`, credentials, is_active
+     FROM api_providers
+     WHERE id = ?
+     LIMIT 1`,
+    [providerId],
+  );
+
+  if (!rows?.length) throw new Error('provider_not_found');
+
+  const row = rows[0];
+  const creds = parseJsonObject(row.credentials);
+
+  const apiUrl = pickStr(creds, ['api_url', 'apiUrl']);
+  const apiKey = pickStr(creds, ['api_key', 'apiKey']);
+  const { username, password } = splitUserPass(apiKey ?? '');
+
+  if (row.is_active !== 1) throw new Error('provider_inactive');
+  if (!apiUrl) throw new Error('missing_api_url');
+  if (!apiKey) throw new Error('missing_api_key');
+
+  return {
+    id: row.id,
+    name: row.name,
+    providerType: row.type,
+    apiUrl,
+    apiKey,
+    username,
+    password,
+    credentials: creds,
+  };
+}
+
+async function postTurkpin(
+  url: string,
+  payload: Record<string, unknown>,
+  asForm: boolean,
+): Promise<{ ok: boolean; status: number; rawText: string; rawJson: unknown }> {
+  const body = asForm
+    ? new URLSearchParams(
+        Object.entries(payload).map(([k, v]) => [k, v == null ? '' : String(v)]),
+      ).toString()
+    : JSON.stringify(payload);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: asForm
+      ? {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json, text/plain, */*',
+          'user-agent': 'Mozilla/5.0 (compatible; ProductSpark/1.0)',
+        }
+      : {
+          'content-type': 'application/json',
+          accept: 'application/json, text/plain, */*',
+          'user-agent': 'Mozilla/5.0 (compatible; ProductSpark/1.0)',
+        },
+    body,
+  });
+
+  const rawText = await res.text();
+  let rawJson: unknown = rawText;
+  try {
+    rawJson = JSON.parse(rawText);
+  } catch {
+    // response text olarak kalır
+  }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    rawText,
+    rawJson,
+  };
+}
+
+function hasProviderError(j: unknown): string | undefined {
+  if (!isRecord(j)) return undefined;
+  const explicitError = pickStr(j, ['error', 'err', 'error_message']);
+  if (explicitError) return explicitError;
+
+  const status = pickStr(j, ['status', 'success', 'result']);
+  if (status && ['false', '0', 'error', 'failed'].includes(status.toLowerCase())) {
+    return pickStr(j, ['error', 'message', 'msg']) ?? 'provider_error';
+  }
+  return undefined;
+}
+
+async function callTurkpinAction(
+  cfg: TurkpinProviderConfig,
+  actions: string[],
+  params: Record<string, unknown>,
+): Promise<TurkpinCallResult> {
+  const uniqueActions = [...new Set(actions.map((x) => x.trim()).filter(Boolean))];
+
+  let last: TurkpinCallResult | null = null;
+  for (const action of uniqueActions) {
+    const payload: Record<string, unknown> = {
+      action,
+      username: cfg.username,
+      user: cfg.username,
+      email: cfg.username,
+      mail: cfg.username,
+      password: cfg.password,
+      pass: cfg.password,
+      sifre: cfg.password,
+      api_key: cfg.apiKey,
+      format: 'json',
+      ...params,
+    };
+
+    // Bu tip API'ler çoğunlukla form-urlencoded bekliyor; json'u da fallback deneyelim.
+    for (const asForm of [true, false]) {
+      const r = await postTurkpin(cfg.apiUrl, payload, asForm);
+      last = { ...r, actionUsed: action };
+
+      // HTTP OK değilse diğer aksiyonu dene
+      if (!r.ok) continue;
+
+      // Provider explicit hata döndürmediyse başarılı kabul edelim.
+      if (!hasProviderError(r.rawJson)) return last;
+    }
+  }
+
+  return (
+    last ?? {
+      ok: false,
+      status: 502,
+      rawText: 'no_attempt',
+      rawJson: null,
+      actionUsed: uniqueActions[0] ?? 'unknown',
+    }
+  );
+}
+
+function toArray(v: unknown): unknown[] {
+  if (Array.isArray(v)) return v;
+  if (isRecord(v)) {
+    for (const k of ['data', 'items', 'list', 'games', 'products', 'result']) {
+      if (Array.isArray(v[k])) return v[k] as unknown[];
+    }
+  }
+  return [];
+}
+
+function extractGames(v: unknown): Array<{ id: string; name: string }> {
+  const src = toArray(v);
+  const out: Array<{ id: string; name: string }> = [];
+
+  for (const item of src) {
+    if (!isRecord(item)) continue;
+    const id = pickStr(item, ['id', 'game_id', 'gid', 'code']);
+    const name = pickStr(item, ['name', 'game_name', 'title']);
+    if (!id || !name) continue;
+    out.push({ id, name });
+  }
+
+  return out;
+}
+
+function extractProducts(v: unknown): Array<{
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  min_order: number;
+  max_order: number;
+  tax_type: number;
+  pre_order: boolean;
+  min_barem?: number;
+  max_barem?: number;
+  barem_step?: number;
+}> {
+  const src = toArray(v);
+  const out: Array<{
+    id: string;
+    name: string;
+    price: number;
+    stock: number;
+    min_order: number;
+    max_order: number;
+    tax_type: number;
+    pre_order: boolean;
+    min_barem?: number;
+    max_barem?: number;
+    barem_step?: number;
+  }> = [];
+
+  for (const item of src) {
+    if (!isRecord(item)) continue;
+
+    const id = pickStr(item, ['id', 'product_id', 'pid', 'service_id', 'code']);
+    const name = pickStr(item, ['name', 'product_name', 'title']);
+    if (!id || !name) continue;
+
+    const min_barem = pickNum(item, ['min_barem', 'min_step'], 0);
+    const max_barem = pickNum(item, ['max_barem', 'max_step'], 0);
+    const barem_step = pickNum(item, ['barem_step', 'step'], 0);
+
+    out.push({
+      id,
+      name,
+      price: pickNum(item, ['price', 'sale_price', 'amount'], 0),
+      stock: pickNum(item, ['stock', 'quantity', 'available'], 0),
+      min_order: pickNum(item, ['min_order', 'min', 'min_qty'], 1),
+      max_order: pickNum(item, ['max_order', 'max', 'max_qty'], 0),
+      tax_type: pickNum(item, ['tax_type', 'tax'], 0),
+      pre_order: pickBool(item, ['pre_order', 'preorder', 'allow_preorder'], false),
+      ...(min_barem > 0 ? { min_barem } : {}),
+      ...(max_barem > 0 ? { max_barem } : {}),
+      ...(barem_step > 0 ? { barem_step } : {}),
+    });
+  }
+
+  return out;
+}
+
+function extractBalance(v: unknown): { balance: number | null; currency: string | null } {
+  if (typeof v === 'string') {
+    const trimmed = v.trimStart().toLowerCase();
+    if (trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html')) {
+      return { balance: null, currency: null };
+    }
+    const direct = Number(v.replace(',', '.').trim());
+    if (Number.isFinite(direct)) return { balance: direct, currency: null };
+
+    const m = v.match(/(-?\d+(?:[.,]\d+)?)/);
+    if (m) {
+      const parsed = Number(m[1].replace(',', '.'));
+      if (Number.isFinite(parsed)) return { balance: parsed, currency: null };
+    }
+  }
+
+  if (!isRecord(v)) return { balance: null, currency: null };
+
+  const balance = pickNum(v, ['balance', 'bakiye', 'funds', 'credit'], Number.NaN);
+  const currency = pickStr(v, ['currency', 'curr', 'unit']) ?? null;
+  if (Number.isFinite(balance)) return { balance, currency };
+
+  for (const k of ['data', 'result']) {
+    if (!isRecord(v[k])) continue;
+    const nested = v[k] as Record<string, unknown>;
+    const b = pickNum(nested, ['balance', 'bakiye', 'funds', 'credit'], Number.NaN);
+    const c = pickStr(nested, ['currency', 'curr', 'unit']) ?? null;
+    if (Number.isFinite(b)) return { balance: b, currency: c };
+  }
+
+  return { balance: null, currency: null };
+}
+
+async function persistProviderBalance(
+  req: FastifyRequest,
+  provider: TurkpinProviderConfig,
+  balance: number,
+  currency: string | null,
+) {
+  const mysql = getMysql(req);
+  const nowIso = new Date().toISOString();
+
+  const nextCreds = {
+    ...provider.credentials,
+    balance,
+    last_balance_check: nowIso,
+    ...(currency ? { currency } : {}),
+  };
+
+  await mysql.query(`UPDATE api_providers SET credentials = ?, updated_at = NOW(3) WHERE id = ?`, [
+    JSON.stringify(nextCreds),
+    provider.id,
+  ]);
+}
 
 export async function sendTelegramNotification(req: FastifyRequest, reply: FastifyReply) {
   const body = (req.body as Record<string, unknown>) || {};
@@ -334,25 +716,176 @@ export async function smmApiStatus(req: FastifyRequest, reply: FastifyReply) {
 
 export async function turkpinGameList(req: FastifyRequest, reply: FastifyReply) {
   const body = (req.body as Record<string, unknown>) || {};
-  req.log.info(body, 'turkpin-game-list stub');
-  return reply.send({ success: true, games: [] });
+  const providerId = safeString(body.providerId) ?? safeString(body.provider_id);
+  const listType = safeString(body.listType)?.toLowerCase() === 'topup' ? 'topup' : 'epin';
+
+  if (!providerId) {
+    return reply.code(400).send({ success: false, error: 'missing_provider_id' });
+  }
+
+  try {
+    const provider = await loadTurkpinProvider(req, providerId);
+    const res = await callTurkpinAction(
+      provider,
+      [`${listType}_game_list`, 'game_list', 'games', 'get_games', 'list_games'],
+      { list_type: listType, type: listType },
+    );
+
+    const games = extractGames(res.rawJson);
+    if (!games.length) {
+      return reply.code(502).send({
+        success: false,
+        error: hasProviderError(res.rawJson) ?? 'empty_games_response',
+      });
+    }
+
+    return reply.send({ success: true, games });
+  } catch (err: any) {
+    req.log.error({ err, body }, 'turkpin-game-list failed');
+    return reply.code(502).send({ success: false, error: err?.message ?? 'turkpin_game_list_failed' });
+  }
 }
 
 export async function turkpinProductList(req: FastifyRequest, reply: FastifyReply) {
   const body = (req.body as Record<string, unknown>) || {};
-  req.log.info(body, 'turkpin-product-list stub');
-  return reply.send({ success: true, products: [] });
+  const providerId = safeString(body.providerId) ?? safeString(body.provider_id);
+  const gameId = safeString(body.gameId) ?? safeString(body.game_id);
+  const listType = safeString(body.listType)?.toLowerCase() === 'topup' ? 'topup' : 'epin';
+
+  if (!providerId) {
+    return reply.code(400).send({ success: false, error: 'missing_provider_id' });
+  }
+  if (!gameId) {
+    return reply.code(400).send({ success: false, error: 'missing_game_id' });
+  }
+
+  try {
+    const provider = await loadTurkpinProvider(req, providerId);
+    const res = await callTurkpinAction(
+      provider,
+      [`${listType}_product_list`, 'product_list', 'products', 'get_products', 'list_products'],
+      {
+        list_type: listType,
+        type: listType,
+        game_id: gameId,
+        gid: gameId,
+        category_id: gameId,
+      },
+    );
+
+    const products = extractProducts(res.rawJson);
+    if (!products.length) {
+      return reply.code(502).send({
+        success: false,
+        error: hasProviderError(res.rawJson) ?? 'empty_products_response',
+      });
+    }
+
+    return reply.send({ success: true, products });
+  } catch (err: any) {
+    req.log.error({ err, body }, 'turkpin-product-list failed');
+    return reply
+      .code(502)
+      .send({ success: false, error: err?.message ?? 'turkpin_product_list_failed' });
+  }
 }
 
 export async function turkpinBalance(req: FastifyRequest, reply: FastifyReply) {
   const body = (req.body as Record<string, unknown>) || {};
-  req.log.info(body, 'turkpin-balance stub');
-  return reply.send({ success: true, balance: 0, currency: 'TRY' });
+  const providerId = safeString(body.providerId) ?? safeString(body.provider_id);
+
+  if (!providerId) {
+    return reply.code(400).send({ success: false, error: 'missing_provider_id' });
+  }
+
+  try {
+    const provider = await loadTurkpinProvider(req, providerId);
+    const res = await callTurkpinAction(
+      provider,
+      ['balance', 'get_balance', 'account_balance', 'bakiye', 'user_balance', 'getBalance'],
+      {},
+    );
+    const parsed = extractBalance(res.rawJson);
+
+    if (parsed.balance == null || Number.isNaN(parsed.balance)) {
+      const raw = String(res.rawText ?? '');
+      const rawLower = raw.toLowerCase();
+      const isWaf = rawLower.includes('cloudflare') || rawLower.includes('attention required');
+      return reply.code(502).send({
+        success: false,
+        message: isWaf ? 'provider_blocked_by_waf' : 'bad_provider_response',
+        error: isWaf
+          ? 'Cloudflare WAF engeli — sunucu IP beyaz listeye alınmalı'
+          : hasProviderError(res.rawJson) ?? 'invalid_balance_response',
+        action: res.actionUsed,
+      });
+    }
+
+    const currency =
+      parsed.currency ?? pickStr(provider.credentials, ['currency']) ?? (provider.providerType === 'topup' ? null : 'TRY');
+
+    await persistProviderBalance(req, provider, parsed.balance, currency);
+
+    return reply.send({
+      success: true,
+      balance: parsed.balance,
+      currency,
+      action: res.actionUsed,
+    });
+  } catch (err: any) {
+    req.log.error({ err, body }, 'turkpin-balance failed');
+    return reply.code(502).send({ success: false, error: err?.message ?? 'turkpin_balance_failed' });
+  }
 }
 
 export async function turkpinCreateOrder(req: FastifyRequest, reply: FastifyReply) {
-  req.log.info({ body: req.body }, 'turkpin-create-order stub');
-  return reply.send({ success: true, order_id: `TP_${Date.now()}`, status: 'ok' });
+  const body = (req.body as Record<string, unknown>) || {};
+  const providerId =
+    safeString(body.providerId) ?? safeString(body.provider_id) ?? safeString(body.api_provider_id);
+
+  if (!providerId) {
+    return reply.code(400).send({ success: false, error: 'missing_provider_id' });
+  }
+
+  try {
+    const provider = await loadTurkpinProvider(req, providerId);
+
+    const payload =
+      (isRecord(body.payload) ? body.payload : null) ??
+      (isRecord(body.order) ? body.order : null) ??
+      Object.fromEntries(
+        Object.entries(body).filter(
+          ([k]) => !['providerId', 'provider_id', 'api_provider_id', 'action', 'payload', 'order'].includes(k),
+        ),
+      );
+
+    const actionFromBody = safeString(body.action);
+    const actionCandidates = actionFromBody
+      ? [actionFromBody]
+      : ['create_order', 'order_create', 'new_order', 'place_order'];
+
+    const res = await callTurkpinAction(provider, actionCandidates, payload);
+    const data = isRecord(res.rawJson) ? res.rawJson : {};
+
+    const orderId =
+      pickStr(data, ['order_id', 'order_no', 'siparis_no', 'id', 'reference']) ?? `TP_${Date.now()}`;
+
+    const status = pickStr(data, ['status', 'state', 'result']) ?? 'ok';
+    const providerErr = hasProviderError(res.rawJson);
+    if (providerErr) {
+      return reply.code(502).send({ success: false, error: providerErr });
+    }
+
+    return reply.send({
+      success: true,
+      order_id: orderId,
+      status,
+      action: res.actionUsed,
+    });
+  } catch (err: any) {
+    req.log.error({ err, body }, 'turkpin-create-order failed');
+    return reply.code(502).send({ success: false, error: err?.message ?? 'turkpin_create_order_failed' });
+  }
 }
 
 /* ==================================================================

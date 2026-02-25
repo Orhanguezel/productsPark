@@ -31,6 +31,7 @@ export default function ApiProviderForm() {
     name: "",
     api_url: "",
     api_key: "",
+    provider_type: "smm",
     is_active: true,
   });
 
@@ -41,6 +42,7 @@ export default function ApiProviderForm() {
         name: provider.name ?? "",
         api_url: provider.api_url ?? "",
         api_key: provider.api_key ?? "",
+        provider_type: provider.provider_type ?? "smm",
         is_active: provider.is_active ?? true,
       });
     }
@@ -56,7 +58,7 @@ export default function ApiProviderForm() {
         name: formData.name,
         api_url: formData.api_url,
         api_key: formData.api_key,
-        provider_type: "smm", // default
+        provider_type: formData.provider_type,
         is_active: formData.is_active,
       };
 
@@ -120,10 +122,29 @@ export default function ApiProviderForm() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="provider_type">Sağlayıcı Tipi *</Label>
+                <select
+                  id="provider_type"
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={formData.provider_type}
+                  onChange={(e) => setFormData({ ...formData, provider_type: e.target.value })}
+                  required
+                >
+                  <option value="smm">SMM</option>
+                  <option value="epin">EPIN</option>
+                  <option value="topup">TOPUP</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Turkpin için genelde EPIN veya TOPUP seçilir.
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="api_key">API Key *</Label>
                 <Input
                   id="api_key"
                   type="password"
+                  autoComplete="current-password"
                   value={formData.api_key}
                   onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
                   placeholder="API anahtarınızı girin"

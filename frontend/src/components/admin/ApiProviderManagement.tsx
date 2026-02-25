@@ -1,8 +1,9 @@
 // src/components/admin/ApiProviderManagement.tsx
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, RefreshCw, List } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -13,10 +14,18 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
   useListApiProvidersQuery,
   useDeleteApiProviderMutation,
   useUpdateApiProviderMutation,
   useCheckApiProviderBalanceMutation,
+  useLazyListApiProviderServicesQuery,
 } from "@/integrations/hooks";
 import type { ApiProviderBalanceResponse } from "@/integrations/types";
 
@@ -31,6 +40,16 @@ export const ApiProviderManagement = () => {
   const [updateProvider] = useUpdateApiProviderMutation();
   const [checkBalance, { isLoading: checking }] =
     useCheckApiProviderBalanceMutation();
+  const [fetchServices, { isLoading: loadingServices }] =
+    useLazyListApiProviderServicesQuery();
+
+  const [servicesDialog, setServicesDialog] = useState<{
+    open: boolean;
+    providerName: string;
+    services: Array<{ service: number; name: string; type: string; rate: string; min: string; max: string; category: string }>;
+  }>({ open: false, providerName: '', services: [] });
+
+  const [serviceSearch, setServiceSearch] = useState('');
 
   const handleDelete = async (id: string) => {
     if (!confirm("API sağlayıcıyı silmek istediğinizden emin misiniz?")) return;
@@ -75,22 +94,51 @@ export const ApiProviderManagement = () => {
       refetch();
     } catch (e: any) {
       // RTK error shape: { status, data }
-      const msg = e?.data?.message ?? "Bilinmeyen hata";
-      const raw = e?.data?.raw
-        ? ` • Sağlayıcı: ${String(e.data.raw).slice(0, 120)}`
-        : "";
-      const err = e?.data?.error
-        ? ` • Hata: ${String(e.data.error).slice(0, 120)}`
-        : "";
+      const msgKey = e?.data?.message ?? "";
+
+      // User-friendly messages for known error keys
+      const friendlyMessages: Record<string, string> = {
+        provider_blocked_by_waf: "Sağlayıcı Cloudflare WAF tarafından engelleniyor. Sunucu IP adresinin sağlayıcı tarafından beyaz listeye alınması gerekiyor.",
+        bad_provider_response: "Sağlayıcıdan geçersiz yanıt alındı.",
+        missing_credentials: "Sağlayıcı kimlik bilgileri eksik.",
+        provider_error: e?.data?.error ? `Sağlayıcı hatası: ${String(e.data.error).slice(0, 150)}` : "Sağlayıcı hatası.",
+      };
+
+      const description = friendlyMessages[msgKey] ?? msgKey || "Bilinmeyen hata";
 
       console.error("Error refreshing balance:", e);
       toast({
-        title: "Hata",
-        description: `${msg}${raw}${err}`,
+        title: "Bakiye Alınamadı",
+        description,
         variant: "destructive",
       });
     }
   };
+
+  const handleShowServices = async (providerId: string, providerName: string) => {
+    try {
+      const result = await fetchServices({ id: providerId }).unwrap();
+      setServicesDialog({
+        open: true,
+        providerName,
+        services: result.services ?? [],
+      });
+      setServiceSearch('');
+    } catch (e: any) {
+      const msg = e?.data?.message ?? 'Servis listesi alınamadı';
+      toast({ title: 'Hata', description: msg, variant: 'destructive' });
+    }
+  };
+
+  const filteredServices = servicesDialog.services.filter((s) => {
+    if (!serviceSearch.trim()) return true;
+    const q = serviceSearch.toLowerCase();
+    return (
+      String(s.service).includes(q) ||
+      s.name?.toLowerCase().includes(q) ||
+      s.category?.toLowerCase().includes(q)
+    );
+  });
 
   if (isLoading) return <div>Yükleniyor...</div>;
 
@@ -167,6 +215,15 @@ export const ApiProviderManagement = () => {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleShowServices(p.id, p.name)}
+                      disabled={loadingServices}
+                      title="Servisleri Gör"
+                    >
+                      <List className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() =>
                         navigate(`/admin/api-providers/edit/${p.id}`)
                       }
@@ -187,6 +244,59 @@ export const ApiProviderManagement = () => {
           </TableBody>
         </Table>
       )}
+
+      <Dialog open={servicesDialog.open} onOpenChange={(open) => setServicesDialog((s) => ({ ...s, open }))}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{servicesDialog.providerName} — Servisler</DialogTitle>
+          </DialogHeader>
+
+          <Input
+            placeholder="Servis ara (ID, isim veya kategori)..."
+            value={serviceSearch}
+            onChange={(e) => setServiceSearch(e.target.value)}
+            className="mb-2"
+          />
+
+          <div className="overflow-auto flex-1">
+            {filteredServices.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                {servicesDialog.services.length === 0 ? 'Servis bulunamadı' : 'Arama sonucu yok'}
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-20">ID</TableHead>
+                    <TableHead>Servis Adı</TableHead>
+                    <TableHead>Kategori</TableHead>
+                    <TableHead className="w-24">Fiyat</TableHead>
+                    <TableHead className="w-20">Min</TableHead>
+                    <TableHead className="w-20">Max</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredServices.slice(0, 200).map((s) => (
+                    <TableRow key={s.service}>
+                      <TableCell className="font-mono text-xs">{s.service}</TableCell>
+                      <TableCell className="text-sm">{s.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{s.category}</TableCell>
+                      <TableCell className="text-sm">{s.rate}</TableCell>
+                      <TableCell className="text-sm">{s.min}</TableCell>
+                      <TableCell className="text-sm">{s.max}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {filteredServices.length > 200 && (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                {filteredServices.length} sonuçtan ilk 200 gösteriliyor
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

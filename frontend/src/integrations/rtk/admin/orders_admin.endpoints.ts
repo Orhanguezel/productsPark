@@ -164,6 +164,34 @@ export const ordersAdminApi = extendedApi.injectEndpoints({
       ],
     }),
 
+    // POST /admin/orders/:orderId/items/:itemId/check-api-status
+    checkApiDeliveryStatus: b.mutation<
+      { delivery_status: string; api_order_id: string | null; smm_status?: string; charge?: string; remains?: string },
+      { orderId: string; itemId: string }
+    >({
+      query: ({ orderId, itemId }) => ({
+        url: `${BASE}/${encodeURIComponent(orderId)}/items/${encodeURIComponent(itemId)}/check-api-status`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { orderId }) => [
+        { type: 'Orders' as const, id: `ITEMS_${orderId}` },
+      ],
+    }),
+
+    // POST /admin/orders/:orderId/items/:itemId/retry-api-delivery
+    retryApiDelivery: b.mutation<
+      { delivery_status: string; api_order_id: string | null },
+      { orderId: string; itemId: string }
+    >({
+      query: ({ orderId, itemId }) => ({
+        url: `${BASE}/${encodeURIComponent(orderId)}/items/${encodeURIComponent(itemId)}/retry-api-delivery`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { orderId }) => [
+        { type: 'Orders' as const, id: `ITEMS_${orderId}` },
+      ],
+    }),
+
     // GET /admin/orders/items
     listAllOrderItemsAdmin: b.query<OrderItemView[], OrdersAdminListItemsParams | void>({
       query: (p) => {
@@ -190,4 +218,6 @@ export const {
   useAddOrderNoteAdminMutation,
   useDeleteOrderAdminMutation,
   useListAllOrderItemsAdminQuery,
+  useCheckApiDeliveryStatusMutation,
+  useRetryApiDeliveryMutation,
 } = ordersAdminApi;
