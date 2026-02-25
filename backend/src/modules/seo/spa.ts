@@ -165,6 +165,9 @@ const GLOBAL_SEO_KEYS = [
   'canonical_base_url',
   'twitter_card',
   'twitter_site',
+  // logo fallback for og:image
+  'logo_url',
+  'light_logo',
   // page-specific SEO
   'seo_home_title',
   'seo_home_description',
@@ -203,7 +206,7 @@ async function getGlobalSeo(): Promise<GlobalSeoCache> {
     siteName: nonEmpty(bag.og_site_name) || nonEmpty(bag.site_title),
     siteTitle: nonEmpty(bag.site_title),
     siteDescription: nonEmpty(bag.site_description),
-    ogDefaultImage: nonEmpty(bag.og_default_image),
+    ogDefaultImage: nonEmpty(bag.og_default_image) || nonEmpty(bag.logo_url) || nonEmpty(bag.light_logo),
     robotsMeta: nonEmpty(bag.robots_meta) || 'index,follow',
     canonicalBaseUrl: nonEmpty(bag.canonical_base_url),
     twitterCard: nonEmpty(bag.twitter_card) || 'summary_large_image',
