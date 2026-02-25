@@ -142,8 +142,8 @@ const Admin = () => {
       return Number.isNaN(d.getTime()) ? null : d;
     };
 
-    const sumFinalAmount = (arr: any[]) =>
-      arr.reduce((sum, o) => sum + Number(o?.final_amount ?? 0), 0);
+    const sumTotal = (arr: any[]) =>
+      arr.reduce((sum, o) => sum + Number(o?.total ?? 0), 0);
 
     const todayOrdersArr = paidOrders.filter((o) => {
       const d = toDate(o?.created_at);
@@ -181,13 +181,13 @@ const Admin = () => {
       todayOrders: todayOrdersArr.length,
       pendingOrders: pendingOrdersArr.length,
       totalUsers,
-      todayRevenue: sumFinalAmount(todayOrdersArr),
-      yesterdayRevenue: sumFinalAmount(yesterdayOrdersArr),
-      thisMonthRevenue: sumFinalAmount(thisMonthOrders),
-      lastMonthRevenue: sumFinalAmount(lastMonthOrders),
-      last7DaysRevenue: sumFinalAmount(last7DaysOrders),
-      last30DaysRevenue: sumFinalAmount(last30DaysOrders),
-      allTimeRevenue: sumFinalAmount(paidOrders),
+      todayRevenue: sumTotal(todayOrdersArr),
+      yesterdayRevenue: sumTotal(yesterdayOrdersArr),
+      thisMonthRevenue: sumTotal(thisMonthOrders),
+      lastMonthRevenue: sumTotal(lastMonthOrders),
+      last7DaysRevenue: sumTotal(last7DaysOrders),
+      last30DaysRevenue: sumTotal(last30DaysOrders),
+      allTimeRevenue: sumTotal(paidOrders),
     });
 
     const openOrders = allOrders.filter((o) => {
@@ -375,7 +375,7 @@ const Admin = () => {
                                   )}
                                 </TableCell>
 
-                                <TableCell>{formatPrice(Number(order?.final_amount ?? 0))}</TableCell>
+                                <TableCell>{formatPrice(Number(order?.total ?? 0))}</TableCell>
 
                                 <TableCell>
                                   <Badge
