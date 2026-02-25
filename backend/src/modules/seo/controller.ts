@@ -15,6 +15,14 @@ type SettingRow = { key: string; value: unknown };
 
 const toStr = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
+/** DB'deki value kolonu string. Admin tarafı JSON.stringify ile kaydetmiş olabilir → parse et. */
+function parseDbValue(s: unknown): unknown {
+  if (typeof s !== 'string') return s;
+  const t = s.trim();
+  if (!t) return '';
+  try { return JSON.parse(t); } catch { return s; }
+}
+
 const toBool = (v: unknown): boolean => {
   if (typeof v === 'boolean') return v;
   if (typeof v === 'number') return v !== 0;
@@ -163,38 +171,6 @@ export const sitemapXmlController: RouteHandler = async (req, reply) => {
 };
 
 
-type SeoMetaResponse = {
-  robots_meta: string;
-
-  favicon_url: string;
-  logo_url: string;
-  apple_touch_icon: string;
-  pwa_icon_192: string;
-  pwa_icon_512: string;
-
-  og_site_name: string;
-  og_default_image: string;
-  twitter_site: string;
-  twitter_card: string;
-
-  google_site_verification: string;
-  bing_site_verification: string;
-
-  schema_org_enabled: boolean;
-  schema_org_organization: string;
-  schema_org_website: string;
-
-  analytics_ga_id: string;
-  analytics_gtm_id: string;
-  facebook_pixel_id: string;
-
-  // custom codes
-  custom_header_code: string;
-  custom_footer_code: string;
-
-  updated_at: string | null;
-};
-
 const SEO_META_KEYS = [
   'site_title',
   'site_description',
@@ -260,7 +236,7 @@ export const seoMetaController: RouteHandler = async (_req, reply) => {
 
   for (const r of rows as Array<{ key: string; value: unknown; updated_at: unknown }>) {
     const k = String(r.key ?? '');
-    bag[k] = r.value;
+    bag[k] = parseDbValue(r.value);
     const u = typeof r.updated_at === 'string' && r.updated_at.trim() ? r.updated_at : null;
     // en yeni updated_at seçmek istiyorsan karşılaştırabilirsin; basitçe ilk doluyu alıyoruz
     if (!lastUpdated && u) lastUpdated = u;
@@ -380,7 +356,7 @@ export const manifestJsonController: RouteHandler = async (_req, reply) => {
 
   const bag: Record<string, unknown> = {};
   for (const r of rows as Array<{ key: string; value: unknown }>) {
-    bag[String(r.key ?? '')] = r.value;
+    bag[String(r.key ?? '')] = parseDbValue(r.value);
   }
 
   const name = toStr(bag.site_title).trim() || 'Dijimins';
