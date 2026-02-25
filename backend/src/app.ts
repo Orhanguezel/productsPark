@@ -52,6 +52,7 @@ import { registerContacts } from '@/modules/contact/router';
 import { registerApiProviders } from '@/modules/api_providers/router';
 import { registerSeoRoutes } from '@/modules/seo/router';
 import { registerNewsletter } from '@/modules/newsletter/router';
+import { registerSpaMiddleware, handleSpaRequest } from '@/modules/seo/spa';
 
 // -------------------- Admin modules --------------------
 import { registerProductsAdmin } from '@/modules/products/admin.routes';
@@ -308,7 +309,27 @@ export async function createApp() {
     { prefix: '/api' },
   );
 
-  // Error handlers en sonda
-  registerErrorHandlers(app);
+  // SPA static + meta injection (only when dist/ exists)
+  const distPath = path.resolve(process.cwd(), env.SPA_DIST_PATH);
+  const distIndexExists = fs.existsSync(path.join(distPath, 'index.html'));
+  let spaHandler: typeof handleSpaRequest | undefined;
+
+  if (distIndexExists) {
+    // Serve static assets from dist/ (JS, CSS, images, fonts)
+    await app.register(fastifyStatic, {
+      root: distPath,
+      prefix: '/',
+      decorateReply: false,
+      wildcard: false,
+      index: false,
+    });
+
+    // Initialize SPA template + meta resolver
+    await app.register(registerSpaMiddleware, { distPath });
+    spaHandler = handleSpaRequest;
+  }
+
+  // Error handlers en sonda (with optional SPA fallback)
+  registerErrorHandlers(app, spaHandler);
   return app;
 }
