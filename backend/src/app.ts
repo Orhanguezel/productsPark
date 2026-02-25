@@ -318,16 +318,8 @@ export async function createApp() {
   let spaHandler: typeof handleSpaRequest | undefined;
 
   if (distIndexExists) {
-    // Serve static assets from dist/ (JS, CSS, images, fonts)
-    await app.register(fastifyStatic, {
-      root: distPath,
-      prefix: '/',
-      decorateReply: false,
-      wildcard: false,
-      index: false,
-    });
-
-    // Initialize SPA template + meta resolver
+    // Static assets (JS, CSS, images) are served by Nginx in production.
+    // Only register SPA meta injection here.
     await app.register(registerSpaMiddleware, { distPath });
     spaHandler = handleSpaRequest;
   }
