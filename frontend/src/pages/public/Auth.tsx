@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import SeoHelmet from '@/seo/SeoHelmet';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
@@ -216,6 +217,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SeoHelmet title="Giriş Yap | Kayıt Ol" robots="noindex,nofollow" />
       <Navbar />
       <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-background to-secondary py-12 px-4">
         <Card className="w-full max-w-md shadow-elegant">

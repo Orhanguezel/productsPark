@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import SeoHelmet from '@/seo/SeoHelmet';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { ArrowLeft } from 'lucide-react';
@@ -145,6 +146,10 @@ const PasswordReset = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SeoHelmet
+        title={isConfirmation ? 'Yeni Şifre Belirle' : 'Şifremi Unuttum'}
+        robots="noindex,nofollow"
+      />
       <Navbar />
       <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-background to-secondary py-12 px-4">
         <Card className="w-full max-w-md shadow-elegant">

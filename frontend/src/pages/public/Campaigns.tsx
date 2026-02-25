@@ -5,6 +5,7 @@
 
 import { Copy, Check, Tag } from "lucide-react";
 import { useState } from "react";
+import SeoHelmet from "@/seo/SeoHelmet";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useListCouponsQuery } from "@/integrations/hooks";
+import { useSeoSettings } from "@/hooks/useSeoSettings";
 
 function CouponCard({ coupon }: { coupon: any }) {
   const [copied, setCopied] = useState(false);
@@ -94,12 +96,18 @@ function CouponCard({ coupon }: { coupon: any }) {
 }
 
 export default function Campaigns() {
+  const { settings } = useSeoSettings();
   // FE'de is_active filtresi de uygula (backend validation geçiş güvencesi)
   const { data: rawCoupons = [], isLoading } = useListCouponsQuery({ is_active: 1 });
   const coupons = rawCoupons.filter((c: any) => c.is_active);
 
   return (
     <>
+      <SeoHelmet
+        title={settings.seo_campaigns_title}
+        description={settings.seo_campaigns_description}
+        ogType="website"
+      />
       <Navbar />
 
       <main className="min-h-[60vh] bg-background">

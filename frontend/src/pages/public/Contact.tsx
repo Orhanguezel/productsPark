@@ -9,7 +9,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import { Helmet } from 'react-helmet-async';
+import SeoHelmet from '@/seo/SeoHelmet';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
@@ -250,14 +250,12 @@ const Contact: React.FC = () => {
   // -------------------- Render --------------------
   return (
     <div className="min-h-screen flex flex-col">
-      <Helmet>
-        <title>{settings.seo_contact_title}</title>
-        <meta name="description" content={settings.seo_contact_description} />
-        <meta property="og:title" content={settings.seo_contact_title} />
-        <meta property="og:description" content={settings.seo_contact_description} />
-        <meta property="og:type" content="website" />
-        <script type="application/ld+json">{JSON.stringify(generateContactSchema())}</script>
-      </Helmet>
+      <SeoHelmet
+        title={settings.seo_contact_title}
+        description={settings.seo_contact_description}
+        ogType="website"
+        jsonLd={generateContactSchema()}
+      />
 
       <Navbar />
 

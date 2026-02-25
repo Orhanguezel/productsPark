@@ -2,8 +2,8 @@
 // FILE: src/pages/public/Cart.tsx
 // =============================================================
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
+import { useNavigate } from "react-router-dom";
+import SeoHelmet from "@/seo/SeoHelmet";
 import { skipToken } from "@reduxjs/toolkit/query";
 
 import Navbar from "@/components/layout/Navbar";
@@ -38,7 +38,6 @@ type GuestStoredItem = {
 
 const Cart = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
 
   // Guest sepeti için local raw state
@@ -459,16 +458,11 @@ const Cart = () => {
     }
   };
 
-  // Query param varsa noindex
-  const hasParams = Array.from(searchParams.keys()).length > 0;
-
   // Loading state
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col">
-        <Helmet>
-          <meta name="robots" content="noindex, nofollow" />
-        </Helmet>
+        <SeoHelmet title="Sepetim" robots="noindex,nofollow" />
         <Navbar />
         <div className="flex-1 flex items-center justify-center">
           Yükleniyor...
@@ -482,9 +476,7 @@ const Cart = () => {
   if (!cartItems || cartItems.length === 0) {
     return (
       <div className="min-h-screen flex flex-col">
-        <Helmet>
-          <meta name="robots" content="noindex, nofollow" />
-        </Helmet>
+        <SeoHelmet title="Sepetim" robots="noindex,nofollow" />
         <Navbar />
         <div className="flex-1 py-12">
           <div className="container mx-auto px-4">
@@ -518,10 +510,7 @@ const Cart = () => {
   // Cart with items
   return (
     <div className="min-h-screen flex flex-col">
-      <Helmet>
-        <meta name="robots" content="noindex, nofollow" />
-        {hasParams && <meta name="robots" content="noindex, nofollow" />}
-      </Helmet>
+      <SeoHelmet title="Sepetim" robots="noindex,nofollow" />
       <Navbar />
       <div className="flex-1 py-12">
         <div className="container mx-auto px-4">

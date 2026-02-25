@@ -226,6 +226,7 @@ const ProductsPage: React.FC = () => {
 
   const seoTitle = nonEmpty(flat?.seo_products_title);
   const seoDesc = nonEmpty(flat?.seo_products_description);
+  const ogImage = nonEmpty(flat?.og_default_image);
 
   const url = useMemo(() => {
     const origin = getOrigin();
@@ -246,6 +247,7 @@ const ProductsPage: React.FC = () => {
         ogType="website"
         url={url || null}
         robots={robots}
+        imageUrl={ogImage}
       />
 
       <Navbar />

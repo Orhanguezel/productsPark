@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import SeoHelmet from '@/seo/SeoHelmet';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
@@ -503,6 +504,7 @@ const Checkout = () => {
   if (authLoading || !user || !checkoutData) {
     return (
       <div className="min-h-screen flex flex-col">
+        <SeoHelmet title="Ödeme" robots="noindex,nofollow" />
         <Navbar />
         <div className="flex-1 flex items-center justify-center">Yükleniyor...</div>
         <Footer />
@@ -517,6 +519,7 @@ const Checkout = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SeoHelmet title="Ödeme" robots="noindex,nofollow" />
       <Navbar />
       <div className="flex-1 py-12">
         <div className="container mx-auto px-4">

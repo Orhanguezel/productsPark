@@ -54,7 +54,7 @@ import { ClampScrollHtml } from '@/components/common/ClampScrollHtml';
 
 import { getOrigin, imgSrc, nonEmpty } from '@/integrations/types';
 import { stripHtmlToText, truncateText } from '@/integrations/types';
-import { buildFaqJsonLd, buildProductJsonLd } from '@/seo/jsonld';
+import { buildBreadcrumbJsonLd, buildFaqJsonLd, buildProductJsonLd } from '@/seo/jsonld';
 
 /* ----------------------------- local helpers (non-SEO) ----------------------------- */
 
@@ -701,10 +701,29 @@ const ProductDetail = () => {
 
   const faqJsonLd = useMemo(() => buildFaqJsonLd(faqs), [faqs]);
 
+  const breadcrumbJsonLd = useMemo(() => {
+    const origin = getOrigin();
+    if (!origin || !product) return null;
+
+    const categoryName = nonEmpty((product as any)?.categories?.name);
+    const categorySlug = nonEmpty((product as any)?.categories?.slug);
+
+    const items = [
+      { name: 'Ana Sayfa', url: `${origin}/` },
+      { name: 'Ürünler', url: `${origin}/urunler` },
+      ...(categoryName && categorySlug
+        ? [{ name: categoryName, url: `${origin}/kategoriler/${categorySlug}` }]
+        : []),
+      { name: nonEmpty(product.name) || '' },
+    ];
+
+    return buildBreadcrumbJsonLd(items);
+  }, [product]);
+
   const jsonLd = useMemo(() => {
-    const arr = [productJsonLd, faqJsonLd].filter(Boolean) as Array<Record<string, unknown>>;
+    const arr = [productJsonLd, faqJsonLd, breadcrumbJsonLd].filter(Boolean) as Array<Record<string, unknown>>;
     return arr.length ? (arr.length === 1 ? arr[0] : arr) : null;
-  }, [productJsonLd, faqJsonLd]);
+  }, [productJsonLd, faqJsonLd, breadcrumbJsonLd]);
 
   /* ----------------------------- render guards ----------------------------- */
 

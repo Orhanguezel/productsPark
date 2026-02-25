@@ -9,9 +9,9 @@
 // =============================================================
 
 import React, { useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import SeoHelmet from '@/seo/SeoHelmet';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
@@ -57,7 +57,7 @@ function cleanParams<T extends Record<string, unknown>>(obj: T): Partial<T> {
 export default function Categories() {
   const navigate = useNavigate();
   const [sp] = useSearchParams();
-  const { settings } = useSeoSettings();
+  const { settings, flat } = useSeoSettings();
 
   // URL → param
   const only = sp.get('only'); // "main" | "sub" | null
@@ -127,6 +127,7 @@ export default function Categories() {
   // SEO (no fallbacks)
   const seoTitle = nonEmpty(settings?.seo_categories_title);
   const seoDesc = nonEmpty(settings?.seo_categories_description);
+  const ogImage = nonEmpty(flat?.og_default_image);
 
   const canonicalUrl = useMemo(() => {
     const origin = getOrigin();
@@ -156,18 +157,15 @@ export default function Categories() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Same pattern as Blog: canonical + optional title/description, plus conditional robots + json-ld */}
-      {canonicalUrl || seoTitle || seoDesc || hasParams || itemListSchema ? (
-        <Helmet>
-          {seoTitle ? <title>{seoTitle}</title> : null}
-          {seoDesc ? <meta name="description" content={seoDesc} /> : null}
-          {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
-          {hasParams ? <meta name="robots" content="noindex,follow" /> : null}
-          {itemListSchema ? (
-            <script type="application/ld+json">{JSON.stringify(itemListSchema)}</script>
-          ) : null}
-        </Helmet>
-      ) : null}
+      <SeoHelmet
+        title={seoTitle || null}
+        description={seoDesc || null}
+        ogType="website"
+        url={canonicalUrl || null}
+        imageUrl={ogImage}
+        robots={hasParams ? 'noindex,follow' : null}
+        jsonLd={itemListSchema}
+      />
 
       <Navbar />
 

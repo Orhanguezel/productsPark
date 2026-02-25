@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
 
 import Navbar from '@/components/layout/Navbar';
 import Hero from '@/components/home/Hero';
@@ -11,7 +10,7 @@ import Blog from '@/components/home/Blog';
 import Newsletter from '@/components/home/Newsletter';
 import Footer from '@/components/layout/Footer';
 
-import SeoJsonLd from '@/seo/SeoJsonLd';
+import SeoHelmet from '@/seo/SeoHelmet';
 
 import { useSeoSettings } from '@/hooks/useSeoSettings';
 import { nonEmpty, getOrigin } from '@/integrations/types';
@@ -29,6 +28,7 @@ export default function Index() {
   // Home SEO (no fallbacks)
   const seoTitle = nonEmpty(settings?.seo_home_title);
   const seoDesc = nonEmpty(settings?.seo_home_description);
+  const ogImage = nonEmpty(flat?.og_default_image);
 
   const shouldEmitSeo = !!(canonicalUrl || seoTitle || seoDesc);
 
@@ -41,21 +41,14 @@ export default function Index() {
       ) : (
         <>
           {shouldEmitSeo ? (
-            <Helmet>
-              {seoTitle ? <title>{seoTitle}</title> : null}
-              {seoDesc ? <meta name="description" content={seoDesc} /> : null}
-              {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
-
-              {/* OG/Twitter (only if same fields exist; no fallbacks) */}
-              {seoTitle ? <meta property="og:title" content={seoTitle} /> : null}
-              {seoDesc ? <meta property="og:description" content={seoDesc} /> : null}
-              <meta property="og:type" content="website" />
-              {seoTitle ? <meta name="twitter:title" content={seoTitle} /> : null}
-              {seoDesc ? <meta name="twitter:description" content={seoDesc} /> : null}
-            </Helmet>
+            <SeoHelmet
+              title={seoTitle}
+              description={seoDesc}
+              ogType="website"
+              url={canonicalUrl}
+              imageUrl={ogImage}
+            />
           ) : null}
-
-          <SeoJsonLd settings={settings} />
 
           <Navbar />
           <Hero />

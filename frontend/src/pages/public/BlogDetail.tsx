@@ -27,6 +27,7 @@ import { useGetBlogPostBySlugQuery, useListBlogPostsQuery } from '@/integrations
 import type { BlogPost as BlogPostType } from '@/integrations/types';
 import { getOrigin, hasText, nonEmpty } from '@/integrations/types';
 import { stripHtmlToText, truncateText } from '@/integrations/types';
+import { buildBreadcrumbJsonLd } from '@/seo/jsonld';
 
 type SeoMetaItem = { name?: string; property?: string; content: string };
 
@@ -86,6 +87,44 @@ const BlogDetail: React.FC = () => {
     if (!post) return null;
     return post.is_published ? null : 'noindex,nofollow';
   }, [post]);
+
+  const blogPostingJsonLd = useMemo(() => {
+    if (!post) return null;
+
+    const schema: Record<string, unknown> = {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: seoTitle || post.title,
+      ...(seoDesc ? { description: seoDesc } : {}),
+      ...(ogImage ? { image: ogImage } : {}),
+      ...(url ? { url } : {}),
+      ...(post.published_at ? { datePublished: new Date(post.published_at).toISOString() } : {}),
+      ...(post.updated_at ? { dateModified: new Date(post.updated_at).toISOString() } : {}),
+      ...(hasText(post.author_name)
+        ? { author: { '@type': 'Person', name: post.author_name } }
+        : {}),
+      ...(hasText(post.category) ? { articleSection: post.category } : {}),
+    };
+
+    return schema;
+  }, [post, seoTitle, seoDesc, ogImage, url]);
+
+  const breadcrumbJsonLd = useMemo(() => {
+    if (!origin || !post) return null;
+
+    const items = [
+      { name: 'Ana Sayfa', url: `${origin}/` },
+      { name: 'Blog', url: `${origin}/blog` },
+      { name: nonEmpty(post.title) || '' },
+    ];
+
+    return buildBreadcrumbJsonLd(items);
+  }, [origin, post]);
+
+  const combinedJsonLd = useMemo(() => {
+    const arr = [blogPostingJsonLd, breadcrumbJsonLd].filter(Boolean) as Array<Record<string, unknown>>;
+    return arr.length ? (arr.length === 1 ? arr[0] : arr) : null;
+  }, [blogPostingJsonLd, breadcrumbJsonLd]);
 
   const extraMeta: SeoMetaItem[] = useMemo(() => {
     if (!post) return [];
@@ -174,6 +213,7 @@ const BlogDetail: React.FC = () => {
         imageUrl={ogImage || null}
         robots={robots}
         meta={extraMeta}
+        jsonLd={combinedJsonLd}
       />
 
       <Navbar />

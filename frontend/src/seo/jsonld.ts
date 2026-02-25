@@ -164,6 +164,25 @@ export function buildProductJsonLd(args: {
   return out;
 }
 
+/* ----------------------------- Breadcrumb JSON-LD ----------------------------- */
+
+export type BreadcrumbItem = { name: string; url?: string };
+
+export function buildBreadcrumbJsonLd(items: BreadcrumbItem[]): JsonLd | null {
+  if (!items.length) return null;
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: item.name,
+      ...(item.url ? { item: item.url } : {}),
+    })),
+  };
+}
+
 export function buildFaqJsonLd(faqs: ProductFaq[] | null | undefined): JsonLd | null {
   if (!Array.isArray(faqs) || !faqs.length) return null;
 
