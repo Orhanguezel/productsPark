@@ -88,6 +88,7 @@ function buildMetaHtml(meta: SeoMeta): string {
 
   if (meta.title) {
     lines.push(`<title>${esc(meta.title)}</title>`);
+    lines.push(`<meta name="title" content="${esc(meta.title)}" />`);
   }
   if (meta.description) {
     lines.push(`<meta name="description" content="${esc(meta.description)}" />`);
