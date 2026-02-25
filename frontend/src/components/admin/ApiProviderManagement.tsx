@@ -104,7 +104,7 @@ export const ApiProviderManagement = () => {
         provider_error: e?.data?.error ? `Sağlayıcı hatası: ${String(e.data.error).slice(0, 150)}` : "Sağlayıcı hatası.",
       };
 
-      const description = friendlyMessages[msgKey] ?? msgKey || "Bilinmeyen hata";
+      const description = (friendlyMessages[msgKey] ?? msgKey) || "Bilinmeyen hata";
 
       console.error("Error refreshing balance:", e);
       toast({
