@@ -89,6 +89,7 @@ export default function UserOrderDetail() {
 
   const { data, isLoading, isFetching, isError, error } = useGetOrderByIdQuery(String(id ?? ''), {
     skip,
+    refetchOnMountOrArgChange: true,
   });
 
   const order = useMemo(() => unwrapOrderPayload(data), [data]);

@@ -37,7 +37,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-import { useListOrdersQuery, useAdminListQuery } from '@/integrations/hooks';
+import { useAdminListQuery } from '@/integrations/hooks';
+import { useListOrdersAdminQuery } from '@/integrations/rtk/admin/orders_admin.endpoints';
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -63,9 +64,9 @@ const Admin = () => {
 
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
-  // ✅ Orders (admin list)
-  const { data: orders = [], isLoading: ordersLoading } = useListOrdersQuery(
-    { sort: 'created_at', order: 'desc' },
+  // ✅ Orders (admin list — tüm siparişler)
+  const { data: orders = [], isLoading: ordersLoading } = useListOrdersAdminQuery(
+    { sort: 'created_at', order: 'desc', limit: 500 },
     { skip: !user || !isAdmin },
   );
 

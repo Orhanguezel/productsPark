@@ -561,8 +561,9 @@ export const updateOrderStatusAdmin: RouteHandler = async (req, reply) => {
       const currentPayment = String((ord as any).payment_status ?? 'pending') as any;
 
       // ---- POLICY: payment gate ----
-      // ileri order status’a geçiş
-      if (requiresPaidForStatus(body.status) && currentPayment !== 'paid') {
+      // Admin ayni anda payment_status=paid gonderiyorsa gate'i gec
+      const effectivePayment = body.payment_status || currentPayment;
+      if (requiresPaidForStatus(body.status) && effectivePayment !== 'paid') {
         return { kind: 'conflict' as const, message: 'payment_required' };
       }
 

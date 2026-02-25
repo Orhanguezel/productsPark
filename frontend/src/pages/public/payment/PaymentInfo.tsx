@@ -19,6 +19,7 @@ import { CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useCreateOrderMutation, useGetSiteSettingByKeyQuery } from '@/integrations/hooks';
+import { useCreatePaymentRequestMutation } from '@/integrations/rtk/public/payment_requests.endpoints';
 import type { CreateOrderBody } from '@/integrations/types';
 import { toStr, isPlainObject } from '@/integrations/types/common';
 
@@ -138,6 +139,7 @@ export default function PaymentInfo() {
     useGetSiteSettingByKeyQuery('bank_account_info');
 
   const [createOrder] = useCreateOrderMutation();
+  const [createPaymentRequest] = useCreatePaymentRequestMutation();
 
   const [paymentData, setPaymentData] = useState<PaymentSessionData | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -275,7 +277,23 @@ export default function PaymentInfo() {
         notes: paymentData.notes ?? null,
       };
 
-      await createOrder(orderBody).unwrap();
+      const order = await createOrder(orderBody).unwrap();
+
+      // payment_request kaydı oluştur — admin ödeme taleplerinde görünsün
+      try {
+        await createPaymentRequest({
+          order_id: (order as any)?.id ?? '',
+          user_id: user?.id ?? null,
+          amount: total,
+          currency: 'TRY',
+          payment_method: 'bank_transfer',
+          proof_image_url: null,
+          payment_proof: null,
+          status: 'pending',
+        } as any).unwrap();
+      } catch (e) {
+        console.error('createPaymentRequest for bank_transfer failed:', e);
+      }
 
       // local caches temizliği
       sessionStorage.removeItem('checkoutData');

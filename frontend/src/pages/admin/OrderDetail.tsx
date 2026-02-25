@@ -108,9 +108,18 @@ export default function OrderDetail() {
     if (!id || !order) return;
 
     try {
+      // Admin "tamamlandı/işleniyor" yapıyorsa ve ödeme henüz paid değilse,
+      // otomatik olarak payment_status='paid' gönder (payment gate bypass)
+      const needsPaid =
+        (newStatus === 'completed' || newStatus === 'processing') &&
+        safeLower(order.payment_status) !== 'paid';
+
       await updateStatus({
         id,
-        body: { status: newStatus as OrderStatus },
+        body: {
+          status: newStatus as OrderStatus,
+          ...(needsPaid ? { payment_status: 'paid' as any } : {}),
+        },
       }).unwrap();
 
       toast({ title: 'Başarılı', description: 'Sipariş durumu güncellendi.' });
@@ -120,9 +129,12 @@ export default function OrderDetail() {
     } catch (error: unknown) {
       console.error('Error updating order status:', error);
       const err = error as { data?: any };
+      const serverMsg = err?.data?.error?.message;
       const msg =
-        err?.data?.error?.message === 'insufficient_auto_stock'
+        serverMsg === 'insufficient_auto_stock'
           ? 'Otomatik stok yetersiz. Ürün stokunu kontrol edin.'
+          : serverMsg === 'payment_required'
+          ? 'Ödeme yapılmadan bu duruma geçilemez.'
           : 'Durum güncellenirken bir hata oluştu.';
 
       toast({ title: 'Hata', description: msg, variant: 'destructive' });
