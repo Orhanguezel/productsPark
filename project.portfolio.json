@@ -1,0 +1,60 @@
+{
+  "title": "Products Park",
+  "slug": "products-park",
+  "summary": "Commerce management platform with admin dashboard, product and catalog workflows, order flows and Fastify backend.",
+  "category": "COMMERCE PLATFORM",
+  "services": [
+    "Frontend Development",
+    "Backend Development",
+    "Admin Panel"
+  ],
+  "techs": [
+    "React",
+    "TypeScript",
+    "Vite",
+    "Redux Toolkit",
+    "React Query",
+    "Radix UI",
+    "Shadcn UI",
+    "Tailwind CSS",
+    "React Hook Form",
+    "dnd-kit",
+    "Fastify",
+    "Drizzle ORM",
+    "MySQL",
+    "Bun",
+    "Zod",
+    "Cloudinary",
+    "Stripe",
+    "JWT",
+    "Google OAuth"
+  ],
+  "features": [
+    "Product and catalog management",
+    "Cart and order flows",
+    "Stripe payments",
+    "Admin dashboard",
+    "Media management",
+    "Google OAuth"
+  ],
+  "designHighlights": [
+    "Drag-and-drop merchandising UX",
+    "Shadcn UI components",
+    "Stripe integration"
+  ],
+  "featured": false,
+  "displayOrder": 40,
+  "clientName": "Own Project",
+  "status": "active",
+  "startDate": "2025-01-01",
+  "completeDate": null,
+  "completionTimeLabel": "Ongoing",
+  "repoUrl": null,
+  "websiteUrl": null,
+  "demoUrl": null,
+  "featuredImage": "/assets/imgs/work/img-4.png",
+  "featuredImageAlt": "Products Park Commerce Platform",
+  "resumeTitle": "Products Park",
+  "resumeSubtitle": "Commerce Management Platform",
+  "excludeFromPortfolio": false
+}
