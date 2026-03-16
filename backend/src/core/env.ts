@@ -112,7 +112,7 @@ export const env = {
 
   PUBLIC_URL: process.env.PUBLIC_URL || "http://localhost:8081",
   FRONTEND_URL: FRONTEND_URL,
-  SPA_DIST_PATH: process.env.SPA_DIST_PATH || "../frontend/dist",
+  SPA_DIST_PATH: process.env.SPA_DIST_PATH || "../frontend",
 
   // ✅ SMTP / Mail
   SMTP_HOST: process.env.SMTP_HOST || "",
