@@ -302,6 +302,7 @@ export default function ProductForm() {
     api_provider_id: null,
     api_product_id: null,
     api_quantity: 1,
+    is_smm: 0,
 
     demo_url: null,
     demo_embed_enabled: 0,
@@ -699,6 +700,7 @@ export default function ProductForm() {
       out.api_provider_id = formData.api_provider_id ?? null;
     if (formData.api_product_id !== undefined) out.api_product_id = formData.api_product_id ?? null;
     if (formData.api_quantity !== undefined) out.api_quantity = formData.api_quantity ?? null;
+    if ((formData as any).is_smm !== undefined) (out as any).is_smm = to01((formData as any).is_smm);
 
     if (formData.demo_url !== undefined) out.demo_url = formData.demo_url ?? null;
     if (formData.demo_button_text !== undefined)

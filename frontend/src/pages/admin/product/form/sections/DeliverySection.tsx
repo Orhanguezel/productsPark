@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 
 import UsedStockList from './UsedStockList';
 
@@ -155,6 +156,20 @@ export default function DeliverySection({
             <p className="text-xs text-muted-foreground">
               Her sipariş için API'ye gönderilecek sabit miktar
             </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label className="text-base">SMM Ürünü</Label>
+              <p className="text-xs text-muted-foreground">
+                Açıksa müşteriden sosyal medya profil linki otomatik istenir. Kapalıysa
+                "Ürün Özelleştirme" sekmesinde manuel custom field tanımlanmalıdır.
+              </p>
+            </div>
+            <Switch
+              checked={!!(formData as any).is_smm}
+              onCheckedChange={(checked) => setField('is_smm' as any, checked ? 1 : 0)}
+            />
           </div>
         </>
       )}

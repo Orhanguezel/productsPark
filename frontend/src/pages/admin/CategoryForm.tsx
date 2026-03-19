@@ -50,6 +50,7 @@ type FormState = {
   parent_id: string | null;
   is_active: boolean;
   is_featured: boolean;
+  is_smm: boolean;
   display_order: number;
   seo_title: string;
   seo_description: string;
@@ -96,6 +97,7 @@ export default function CategoryForm() {
     parent_id: null,
     is_active: true,
     is_featured: false,
+    is_smm: false,
     display_order: 0,
     seo_title: "",
     seo_description: "",
@@ -124,6 +126,7 @@ export default function CategoryForm() {
       parent_id: cat.parent_id || null,
       is_active: !!cat.is_active,
       is_featured: !!cat.is_featured,
+      is_smm: !!((cat as any).is_smm ?? false),
       display_order: cat.display_order ?? 0,
       seo_title: (cat as any).seo_title || "",
       seo_description: (cat as any).seo_description || "",
@@ -161,6 +164,7 @@ export default function CategoryForm() {
     parent_id: s.parent_id || null,
     is_active: !!s.is_active,
     is_featured: !!s.is_featured,
+    is_smm: !!s.is_smm,
     display_order: Number.isFinite(s.display_order) ? s.display_order : 0,
     seo_title: s.seo_title.trim() || null,
     seo_description: s.seo_description.trim() || null,
@@ -524,7 +528,7 @@ export default function CategoryForm() {
                   </div>
                 </div>
 
-                {/* Durum & Öne Çıkan & Sıra */}
+                {/* Durum & Öne Çıkan & SMM & Sıra */}
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="flex items-center gap-2">
                     <Switch
@@ -561,6 +565,24 @@ export default function CategoryForm() {
                       }
                     />
                   </div>
+                </div>
+
+                {/* SMM Kategorisi */}
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">SMM Kategorisi</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Açıksa bu kategorideki tüm API ürünlerinde müşteriden
+                      sosyal medya profil linki otomatik istenir.
+                    </p>
+                  </div>
+                  <Switch
+                    id="is_smm"
+                    checked={formData.is_smm}
+                    onCheckedChange={(v) =>
+                      setFormData({ ...formData, is_smm: v })
+                    }
+                  />
                 </div>
 
                 {/* SEO */}
