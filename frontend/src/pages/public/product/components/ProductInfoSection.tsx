@@ -213,8 +213,38 @@ const ProductInfoSection = ({
 
       <Separator />
 
-      {/* Custom Fields */}
-      {Array.isArray(product.custom_fields) && product.custom_fields.length > 0 ? (
+      {/* SMM Ürünü: is_smm=true ise tek URL input otomatik göster */}
+      {(product as any).is_smm ? (
+        <Card>
+          <CardHeader>
+            <h3 className="font-semibold">Sosyal Medya Bilgisi</h3>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="smm_link">
+                Sosyal Medya Profil Linki
+                <span className="text-destructive ml-1">*</span>
+              </Label>
+              <Input
+                id="smm_link"
+                type="url"
+                placeholder="https://instagram.com/kullanici_adi"
+                value={customFieldValues['smm_link'] ?? ''}
+                onChange={(e) =>
+                  onCustomFieldValuesChange({
+                    ...customFieldValues,
+                    smm_link: e.target.value,
+                  })
+                }
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Hizmetin uygulanacağı sosyal medya profilinizin tam linkini girin.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : Array.isArray(product.custom_fields) && product.custom_fields.length > 0 ? (
         <Card>
           <CardHeader>
             <h3 className="font-semibold">Ürün Bilgileri</h3>

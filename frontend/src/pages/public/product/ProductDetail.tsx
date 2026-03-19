@@ -78,6 +78,18 @@ const isSameCustomFields = (
 };
 
 const validateCustomFields = (product: Product, values: Record<string, string>): string | null => {
+  // SMM ürünlerinde smm_link zorunlu URL kontrolü
+  if ((product as any).is_smm) {
+    const link = (values['smm_link'] ?? '').trim();
+    if (!link) return 'Sosyal medya profil linki zorunludur';
+    try {
+      new URL(link);
+    } catch {
+      return 'Geçerli bir sosyal medya profil linki giriniz (https:// ile başlamalı)';
+    }
+    return null;
+  }
+
   if (!product.custom_fields || product.custom_fields.length === 0) return null;
 
   for (const field of product.custom_fields) {
@@ -351,7 +363,8 @@ const ProductDetail = () => {
       : quantity;
 
     const selectedOptionsPayload =
-      (product as any).custom_fields && (product as any).custom_fields.length > 0
+      (product as any).is_smm ||
+      ((product as any).custom_fields && (product as any).custom_fields.length > 0)
         ? (customFieldValues as Record<string, unknown>)
         : null;
 
@@ -370,7 +383,7 @@ const ProductDetail = () => {
           ? (selectedQuantityOption as any).price
           : (product as any).price;
 
-        if ((product as any).delivery_type === 'api' && (product as any).custom_fields?.length) {
+        if ((product as any).delivery_type === 'api' && ((product as any).is_smm || (product as any).custom_fields?.length)) {
           const duplicateItem = guestCart.find(
             (item) =>
               item.productId === (product as any).id &&
@@ -537,7 +550,8 @@ const ProductDetail = () => {
       : quantity;
 
     const selectedOptionsPayload =
-      (product as any).custom_fields && (product as any).custom_fields.length > 0
+      (product as any).is_smm ||
+      ((product as any).custom_fields && (product as any).custom_fields.length > 0)
         ? (customFieldValues as Record<string, unknown>)
         : null;
 
@@ -552,7 +566,7 @@ const ProductDetail = () => {
         const guestCartData = localStorage.getItem('guestCart');
         const guestCart: any[] = guestCartData ? JSON.parse(guestCartData) : [];
 
-        if ((product as any).delivery_type === 'api' && (product as any).custom_fields?.length) {
+        if ((product as any).delivery_type === 'api' && ((product as any).is_smm || (product as any).custom_fields?.length)) {
           const duplicateItem = guestCart.find(
             (item) =>
               item.productId === (product as any).id &&
