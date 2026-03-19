@@ -65,15 +65,17 @@ const Admin = () => {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   // ✅ Orders (admin list — tüm siparişler)
-  const { data: orders = [], isLoading: ordersLoading } = useListOrdersAdminQuery(
+  const { data: ordersData, isLoading: ordersLoading } = useListOrdersAdminQuery(
     { sort: 'created_at', order: 'desc', limit: 500 },
     { skip: !user || !isAdmin },
   );
+  const orders = useMemo(() => ordersData ?? [], [ordersData]);
 
   // ✅ Users (admin users list)
-  const { data: users = [], isLoading: usersLoading } = useAdminListQuery(undefined, {
+  const { data: usersData, isLoading: usersLoading } = useAdminListQuery(undefined, {
     skip: !user || !isAdmin,
   });
+  const users = useMemo(() => usersData ?? [], [usersData]);
 
   const handleTabChange = (tab: MenuValue) => {
     setActiveTab(tab);

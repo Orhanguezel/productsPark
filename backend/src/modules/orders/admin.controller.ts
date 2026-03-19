@@ -954,7 +954,7 @@ export const checkApiDeliveryStatus: RouteHandler = async (req, reply) => {
       WHERE id = ${prod.api_provider_id} AND is_active = 1
       LIMIT 1
     `);
-    const provData: any[] = Array.isArray(provRows) ? provRows : (provRows?.rows ?? []);
+    const provData: any[] = Array.isArray(provRows) && Array.isArray(provRows[0]) ? provRows[0] : (Array.isArray(provRows) ? provRows : (provRows?.rows ?? []));
     if (!provData.length) return reply.code(400).send({ error: { message: 'provider_not_found' } });
 
     let creds: any;
@@ -1059,7 +1059,7 @@ export const retryApiDelivery: RouteHandler = async (req, reply) => {
       WHERE id = ${providerId} AND is_active = 1
       LIMIT 1
     `);
-    const provData: any[] = Array.isArray(provRows) ? provRows : (provRows?.rows ?? []);
+    const provData: any[] = Array.isArray(provRows) && Array.isArray(provRows[0]) ? provRows[0] : (Array.isArray(provRows) ? provRows : (provRows?.rows ?? []));
     if (!provData.length) return reply.code(400).send({ error: { message: 'provider_not_found' } });
 
     let creds: any;

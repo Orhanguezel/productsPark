@@ -174,7 +174,7 @@ async function loadProviderCreds(providerId: string): Promise<ProviderCreds | nu
     LIMIT 1
   `);
 
-  const data: any[] = Array.isArray(rows) ? rows : (rows?.rows ?? []);
+  const data: any[] = Array.isArray(rows) && Array.isArray(rows[0]) ? rows[0] : (Array.isArray(rows) ? rows : (rows?.rows ?? []));
   if (!data.length) return null;
 
   let creds: any;
