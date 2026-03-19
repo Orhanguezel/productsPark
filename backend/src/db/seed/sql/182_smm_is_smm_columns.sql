@@ -1,18 +1,26 @@
 -- ============================================================
 -- MIGRATION: SMM is_smm alanları — CANLI VERİTABANI GÜNCELLEME
 -- ============================================================
--- NOT: Yeni kurulumlar için is_smm zaten
---   48_product_schema.sql (products tablosu CREATE TABLE)
---   20_catalog_schema.sql (categories tablosu CREATE TABLE)
--- dosyalarına eklendi. Bu dosya sadece tablolar zaten mevcut olan
--- canlı veritabanlarına kolon eklemek için çalıştırılır.
--- ADD COLUMN IF NOT EXISTS → idempotent, tekrar çalıştırmak güvenlidir.
+-- Bu dosya SADECE tabloların zaten mevcut olduğu canlı
+-- veritabanlarına kolon eklemek için MANUEL çalıştırılır.
+--
+-- Yeni kurulumlar için is_smm zaten base schema'larda mevcut:
+--   48_product_schema.sql   → products tablosu CREATE TABLE
+--   20_catalog_schema.sql   → categories tablosu CREATE TABLE
+--
+-- db:seed komutu DB'yi sıfırdan oluşturur, bu dosya orada
+-- gereksizdir ve içinde çalıştırılacak SQL bırakılmamıştır.
+--
+-- CANLI VERİTABANI İÇİN MANUEL ÇALIŞTIR:
+--
+--   ALTER TABLE `products`
+--     ADD COLUMN `is_smm` TINYINT(1) NOT NULL DEFAULT 0
+--     COMMENT 'SMM ürünü: müşteriden otomatik sosyal medya linki alınır';
+--
+--   ALTER TABLE `categories`
+--     ADD COLUMN `is_smm` TINYINT(1) NOT NULL DEFAULT 0
+--     COMMENT 'SMM kategorisi: bu kategorideki API ürünleri otomatik link alır';
+--
+-- NOT: Kolon zaten varsa "Duplicate column name" hatası alırsın,
+-- bu durumda ALTER'ı çalıştırmana gerek yok.
 -- ============================================================
-
-ALTER TABLE `products`
-  ADD COLUMN IF NOT EXISTS `is_smm` TINYINT(1) NOT NULL DEFAULT 0
-    COMMENT 'SMM ürünü: müşteriden otomatik sosyal medya linki alınır';
-
-ALTER TABLE `categories`
-  ADD COLUMN IF NOT EXISTS `is_smm` TINYINT(1) NOT NULL DEFAULT 0
-    COMMENT 'SMM kategorisi: bu kategorideki API ürünleri otomatik link alır';
