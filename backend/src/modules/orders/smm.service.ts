@@ -137,7 +137,12 @@ export function extractLinkFromOptions(
   const vals = Object.values(options).filter((v) => typeof v === 'string' && v.trim());
   if (!vals.length) return null;
 
-  // 1) type='url' custom field value
+  // 1) smm_link key — is_smm ürünlerde müşterinin girdiği sosyal medya linki
+  if (typeof options['smm_link'] === 'string' && options['smm_link'].trim()) {
+    return options['smm_link'].trim();
+  }
+
+  // 2) type='url' custom field value
   if (Array.isArray(customFields)) {
     for (const f of customFields) {
       if (f.type === 'url') {
@@ -148,11 +153,11 @@ export function extractLinkFromOptions(
     }
   }
 
-  // 2) first value that looks like a URL
+  // 3) first value that looks like a URL
   const urlVal = vals.find((v) => /^https?:\/\//i.test(v.trim()));
   if (urlVal) return urlVal.trim();
 
-  // 3) first non-empty value
+  // 4) first non-empty value
   return vals[0].trim();
 }
 
