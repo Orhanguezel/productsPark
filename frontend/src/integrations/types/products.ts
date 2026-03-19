@@ -36,6 +36,7 @@ export type CategoryRow = {
   slug?: string | null;
   parent_id?: string | null;
   is_featured?: BoolLike;
+  is_smm?: BoolLike;
 };
 
 /* ----------------------------- DB/FE models ----------------------------- */
@@ -99,6 +100,7 @@ export type ProductAdmin = {
 
   epin_game_id?: string | null;
   epin_product_id?: string | null;
+  is_smm?: BoolLike;
   auto_delivery_enabled?: BoolLike;
   pre_order_enabled?: BoolLike;
 
@@ -182,6 +184,7 @@ export type Product = {
 
   is_active: boolean;
   is_featured: boolean;
+  is_smm: boolean;
   requires_shipping: boolean;
 
   brand_id: string | null;
@@ -262,6 +265,7 @@ export type ApiProduct = Partial<{
 
   epin_game_id: unknown;
   epin_product_id: unknown;
+  is_smm: unknown;
   auto_delivery_enabled: unknown;
   pre_order_enabled: unknown;
 
@@ -456,6 +460,7 @@ export function normalizeProductAdmin(row: unknown): ProductAdmin {
 
     epin_game_id: nullify(p.epin_game_id),
     epin_product_id: nullify(p.epin_product_id),
+    is_smm: toBool(asBoolLike(p.is_smm)) ? 1 : 0,
     auto_delivery_enabled: toBool(asBoolLike(p.auto_delivery_enabled)) ? 1 : 0,
     pre_order_enabled: toBool(asBoolLike(p.pre_order_enabled)) ? 1 : 0,
 
@@ -551,6 +556,7 @@ export function normalizeProductPublic(row: unknown): Product {
 
     is_active: toBool(a.is_active),
     is_featured: toBool(a.is_featured),
+    is_smm: toBool(a.is_smm),
     requires_shipping: toBool(a.requires_shipping),
 
     brand_id: nullify(a.brand_id),
@@ -783,6 +789,7 @@ export type CommonProductPayload = {
   is_active?: boolean | 0 | 1;
   show_on_homepage?: boolean; // FE alias -> backend is_featured
   is_featured?: boolean | 0 | 1; // opsiyonel: direkt yazmak istersen
+  is_smm?: boolean | 0 | 1;
   requires_shipping?: boolean | 0 | 1;
   is_digital?: boolean | 0 | 1;
 
@@ -918,6 +925,7 @@ export function toProductAdminApiBody(
   }
 
   if (has('requires_shipping')) out.requires_shipping = to01(b.requires_shipping);
+  if (has('is_smm')) out.is_smm = to01(b.is_smm);
   if (has('is_digital')) out.is_digital = to01(b.is_digital);
 
   if (has('auto_delivery_enabled')) out.auto_delivery_enabled = to01(b.auto_delivery_enabled);

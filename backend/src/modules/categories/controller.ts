@@ -188,6 +188,10 @@ export function buildInsertPayload(input: CategoryCreateInput) {
         ? false
         : toBool(input.article_enabled),
 
+    is_smm:
+      (input as any).is_smm === undefined
+        ? false
+        : toBool((input as any).is_smm),
     is_active:
       input.is_active === undefined
         ? true
@@ -253,6 +257,8 @@ export function buildUpdatePayload(patch: CategoryUpdateInput) {
   if (patch.article_enabled !== undefined)
     set.article_enabled = toBool(patch.article_enabled);
 
+  if ((patch as any).is_smm !== undefined)
+    set.is_smm = toBool((patch as any).is_smm);
   if (patch.is_active !== undefined)
     set.is_active = toBool(patch.is_active);
   if (patch.is_featured !== undefined)

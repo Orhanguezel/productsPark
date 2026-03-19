@@ -265,6 +265,7 @@ function normalizeProduct(row: any) {
   if ('is_digital' in p) p.is_digital = toBool(p.is_digital);
   if ('auto_delivery_enabled' in p) p.auto_delivery_enabled = toBool(p.auto_delivery_enabled);
   if ('pre_order_enabled' in p) p.pre_order_enabled = toBool(p.pre_order_enabled);
+  if ('is_smm' in p) (p as any).is_smm = toBool((p as any).is_smm);
 
   // FE alias
   p.show_on_homepage = toBool(p.is_featured);

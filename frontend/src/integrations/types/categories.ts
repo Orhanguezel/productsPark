@@ -20,6 +20,7 @@ export type Category = {
 
   is_active: boolean;
   is_featured: boolean;
+  is_smm: boolean;
   display_order: number;
 
   seo_title: string | null;
@@ -48,6 +49,7 @@ export type UpsertCategoryBody = {
 
   is_active?: boolean;
   is_featured?: boolean;
+  is_smm?: boolean;
   display_order?: number;
 
   seo_title?: string | null;
@@ -191,6 +193,9 @@ export function normalizeCategory(row: unknown): Category {
   const featuredRaw = pickFirst(r, ['is_featured', 'featured', 'isFeatured']);
   const is_featured = featuredRaw == null ? false : toBoolLoose(featuredRaw, false);
 
+  const smmRaw = pickFirst(r, ['is_smm']);
+  const is_smm = smmRaw == null ? false : toBoolLoose(smmRaw, false);
+
   const seo_title = pickString(r, ['seo_title', 'meta_title', 'title']) ?? null;
   const seo_description = pickString(r, ['seo_description', 'meta_description']) ?? null;
 
@@ -215,6 +220,7 @@ export function normalizeCategory(row: unknown): Category {
 
     is_active,
     is_featured,
+    is_smm,
     display_order: pickNumber(
       r,
       ['display_order', 'order', 'sort', 'position', 'rank', 'priority'],
@@ -282,6 +288,7 @@ export function toCategoryUpsertApiBody(body: UpsertCategoryBody): Record<string
 
   if (typeof body.is_active !== 'undefined') out.is_active = !!body.is_active;
   if (typeof body.is_featured !== 'undefined') out.is_featured = !!body.is_featured;
+  if (typeof body.is_smm !== 'undefined') out.is_smm = !!body.is_smm;
   if (typeof body.display_order !== 'undefined') out.display_order = toNum(body.display_order, 0);
 
   if (typeof body.seo_title !== 'undefined') out.seo_title = body.seo_title ?? null;

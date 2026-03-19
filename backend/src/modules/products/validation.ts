@@ -128,6 +128,7 @@ export const productCreateSchema = z.object({
 
   is_active: z.coerce.number().int().min(0).max(1).optional().default(1),
   is_featured: z.coerce.number().int().min(0).max(1).optional().default(0),
+  is_smm: z.coerce.number().int().min(0).max(1).optional().default(0),
 
   requires_shipping: z.coerce.number().int().min(0).max(1).optional().default(1),
 

@@ -30,6 +30,7 @@ export const categoryCreateSchema = z
     icon: emptyToNull(z.string().max(100).optional().nullable()),
     parent_id: emptyToNull(z.string().uuid().optional().nullable()),
 
+    is_smm: boolLike.optional(),
     is_active: boolLike.optional(),
     is_featured: boolLike.optional(),
     display_order: z.coerce.number().int().min(0).optional(),

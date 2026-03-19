@@ -131,6 +131,7 @@ function normalizeProduct(row: ProductRow) {
   p.demo_embed_enabled = toBool(p.demo_embed_enabled);
   p.auto_delivery_enabled = toBool((p as any).auto_delivery_enabled);
   p.pre_order_enabled = toBool((p as any).pre_order_enabled);
+  (p as any).is_smm = toBool((p as any).is_smm);
 
   // alias
   p.show_on_homepage =

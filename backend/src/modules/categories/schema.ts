@@ -43,6 +43,7 @@ export const categories = mysqlTable(
       .default(0)
       .$type<boolean>(),
 
+    is_smm: tinyint("is_smm").notNull().default(0).$type<boolean>(),
     is_active: tinyint("is_active").notNull().default(1).$type<boolean>(),
     is_featured: tinyint("is_featured")
       .notNull()

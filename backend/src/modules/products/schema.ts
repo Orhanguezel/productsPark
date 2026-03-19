@@ -83,6 +83,7 @@ export const products = mysqlTable(
     file_url: varchar('file_url', { length: 500 }),
     epin_game_id: varchar('epin_game_id', { length: 64 }),
     epin_product_id: varchar('epin_product_id', { length: 64 }),
+    is_smm: tinyint('is_smm').notNull().default(0),
     auto_delivery_enabled: tinyint('auto_delivery_enabled').notNull().default(0),
     pre_order_enabled: tinyint('pre_order_enabled').notNull().default(0),
     min_order: int('min_order'),
