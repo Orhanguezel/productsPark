@@ -1,117 +1,192 @@
-# SMM Link Flow — Uygulama Planı
+# SMM Link Akışı — Yapılanlar ve Kullanım Kılavuzu
 
 **Tarih:** 2026-03-19
-**Konu:** SMM ürünlerinde müşteriden link alma akışının düzeltilmesi
 
 ---
 
-## Mevcut Sorun
+## Sorun Neydi?
 
-`delivery_type='api'` ürünlerde müşteriden link (sosyal medya profil URL'i) alabilmek için
-admin'in **iki ayrı sekmeye** gidip iki ayrı şeyi doğru yapması gerekiyor:
+Daha önce bir ürüne SMM (sosyal medya pazarlama) servisi tanımlamak için
+admin'in **iki ayrı sekmeye** gidip iki ayrı işlem yapması gerekiyordu:
 
-1. Teslimat sekmesi → `delivery_type='api'`, provider, service ID
-2. Özelleştirme sekmesi → `type='url'` olan bir custom field ekleme ← **Sıklıkla unutuluyor**
+1. **Teslimat sekmesi** → `delivery_type = API`, sağlayıcı ve servis ID seç
+2. **Özelleştirme sekmesi** → ayrıca manuel olarak `type = URL` custom field ekle
 
-Eğer 2. adım atlanırsa: Müşteri input görmez → sipariş linksiz oluşur →
-backend `api_delivery_failed` yazar → sipariş başarısız.
-
----
-
-## Hedef Mimari
-
-```
-Ürün: is_smm = true
-  │
-  ├── Ürün sayfasında tek bir "Sosyal Medya Linki" input otomatik çıkar
-  │     key: smm_link
-  │
-  └── Sipariş oluşunca backend smm_link'i options'dan öncelikli okur
-        → smmPlaceOrder(apiUrl, apiKey, serviceId, link, quantity)
-```
-
-Kategori bazında:
-```
-Kategori: is_smm = true
-  └── Bu kategorideki tüm ürünler otomatik SMM link davranışı alır
-        (ürün bazında override mümkün)
-```
+İkinci adım unutulduğunda müşteri ürün sayfasında hiç input görmüyor,
+link olmadan sipariş oluşuyor ve teslimat `failed` yazıyordu.
 
 ---
 
-## Uygulama Adımları
+## Ne Yapıldı?
 
-### BLOK 1 — Veritabanı & Schema
+### Özet
 
-- [ ] **1.1** Migration: `products` tablosuna `is_smm TINYINT(1) DEFAULT 0` ekle
-- [ ] **1.2** Migration: `categories` tablosuna `is_smm TINYINT(1) DEFAULT 0` ekle
-- [ ] **1.3** Drizzle schema — `products/schema.ts` güncelle (`is_smm` alanı)
-- [ ] **1.4** Drizzle schema — `categories/schema.ts` güncelle (`is_smm` alanı)
-
-### BLOK 2 — Backend Validation & Servis
-
-- [ ] **2.1** `products/validation.ts` — `is_smm` alanı ekle (z.boolean / z.coerce)
-- [ ] **2.2** `categories/validation.ts` — `is_smm` alanı ekle
-- [ ] **2.3** `smm.service.ts` — `extractLinkFromOptions`'da `smm_link` key'ini
-      öncelikli ara (type='url' öncesine ekle)
-- [ ] **2.4** `products` public/admin response mapper'larına `is_smm` ekle
-- [ ] **2.5** `categories` response mapper'larına `is_smm` ekle
-
-### BLOK 3 — Admin UI
-
-- [ ] **3.1** `DeliverySection.tsx` — `delivery_type='api'` seçilince
-      **"SMM Ürünü"** toggle göster (`is_smm`)
-- [ ] **3.2** `ProductForm.tsx` — `is_smm` field'ını `formData`'ya ekle,
-      `buildCommonPayload`'a dahil et
-- [ ] **3.3** Kategori admin formu / `CategoryForm` — `is_smm` toggle ekle
-
-### BLOK 4 — Frontend (Müşteri Tarafı)
-
-- [ ] **4.1** `ProductInfoSection.tsx` — ürün `is_smm=true` VEYA kategorisi
-      `is_smm=true` ise custom_fields'den bağımsız olarak tek bir
-      `<Input type="url" />` otomatik render et
-      - Key: `smm_link`
-      - Label: "Sosyal Medya Profil Linki"
-      - Placeholder: "https://instagram.com/kullanici_adi"
-      - Required: true
-      - URL format validasyonu
-- [ ] **4.2** `ProductDetail.tsx` — `smm_link` validasyonunu
-      `validateCustomFields` akışına entegre et (handleQuickBuy + handleAddToCart)
-
-### BLOK 5 — Tip Tanımları
-
-- [ ] **5.1** `integrations/types.ts` veya `types/` — `ProductAdmin`, `ProductPublic`
-      tiplerine `is_smm?: boolean | 0 | 1` ekle
-- [ ] **5.2** `CategoryRow` tipine `is_smm` ekle
+Ürün ve kategoriye **"SMM Ürünü / SMM Kategorisi"** anahtarı eklendi.
+Bu anahtar açıkken müşteriden sosyal medya profil linki **otomatik** isteniyor;
+admin'in ayrıca custom field tanımlamasına gerek kalmıyor.
 
 ---
 
-## Veri Akışı (Sonuç)
+### 1. Veritabanı
+
+Hem `products` hem `categories` tablosuna yeni bir kolon eklendi:
+
+```sql
+is_smm  TINYINT(1)  NOT NULL DEFAULT 0
+```
+
+- `0` → Normal ürün/kategori (eski davranış korunur)
+- `1` → SMM ürünü/kategorisi (otomatik link input çıkar)
+
+**Yeni kurulum:** Base seed dosyaları güncellendi, tablo oluşturulurken
+kolon zaten dahil gelir.
+
+**Canlı veritabanı için:** `182_smm_is_smm_columns.sql` seed dosyasını çalıştırmak yeterli.
+`ADD COLUMN IF NOT EXISTS` kullanıldığı için tekrar çalıştırmak güvenlidir, hata vermez.
+
+---
+
+### 2. Admin Paneli — Ürün Formu
+
+**Teslimat Ayarları** sekmesinde, `delivery_type = API` seçildiğinde
+artık altta bir switch gösteriliyor:
 
 ```
-Admin:
-  Teslimat Sekmesi → delivery_type='api' → provider + service_id + is_smm toggle (ON)
+┌─────────────────────────────────────────────────────┐
+│  SMM Ürünü                              [ ● Açık ]  │
+│  Açıksa müşteriden sosyal medya profil linki        │
+│  otomatik istenir.                                  │
+└─────────────────────────────────────────────────────┘
+```
 
-Müşteri:
-  Ürün sayfası → is_smm=true → "Sosyal Medya Profil Linki" input (tek alan)
-              → Değer sepete smm_link key'iyle eklenir
+Bu switch açıkken admin'in Özelleştirme sekmesine gidip ayrıca
+URL alanı eklemesine gerek yok.
 
-Sipariş:
-  order_items.options = { smm_link: "https://instagram.com/..." }
+---
 
-Backend fulfillment:
-  extractLinkFromOptions → smm_link key'i öncelikli → link bulundu
-  smmPlaceOrder(apiUrl, apiKey, serviceId, link, quantity)
+### 3. Admin Paneli — Kategori Formu
+
+Kategori düzenleme sayfasında yeni bir switch eklendi:
+
+```
+┌─────────────────────────────────────────────────────┐
+│  SMM Kategorisi                         [ ● Açık ]  │
+│  Bu kategorideki tüm API ürünlerinde müşteriden     │
+│  sosyal medya profil linki otomatik istenir.        │
+└─────────────────────────────────────────────────────┘
+```
+
+Kategoriyi SMM olarak işaretleyince o kategorideki her ürün
+için tek tek switch açmak yerine toplu çalışır.
+
+---
+
+### 4. Müşteri Sayfası (Ürün Detay)
+
+`is_smm = true` olan bir ürün sayfasına girildiğinde
+**custom field tanımı olmasa bile** otomatik olarak şu input çıkar:
+
+```
+┌─────────────────────────────────────────┐
+│  Sosyal Medya Profil Linki *            │
+│  ┌─────────────────────────────────┐    │
+│  │ https://instagram.com/...       │    │
+│  └─────────────────────────────────┘    │
+│  Hizmetin uygulanacağı profilin         │
+│  tam linkini girin.                     │
+└─────────────────────────────────────────┘
+```
+
+- Alan **zorunlu**, boş geçilemez
+- Geçerli bir URL formatı (`https://...`) kontrol edilir
+- Hatalı girilirse sepete eklenemez, uyarı verilir
+
+---
+
+### 5. Sipariş ve Teslimat Akışı
+
+Müşteri linki girdikten sonra:
+
+```
+Müşteri → "https://instagram.com/hesap_adi" girer
+         ↓
+Sepete eklenir → options: { smm_link: "https://..." }
+         ↓
+Ödeme tamamlanır → sipariş oluşur
+         ↓
+Backend fulfillment devreye girer:
+  1. smm_link key'ini options'dan okur (öncelikli)
+  2. smmPlaceOrder(apiUrl, apiKey, serviceId, link, quantity)
+  3. SMM panel API'ye gönderir → order ID döner
+  4. Teslimat durumu "processing" olur
 ```
 
 ---
 
-## Öncelik
+## Kullanım — Adım Adım
 
-| Blok | Öncelik | Açıklama |
-|------|---------|----------|
-| Blok 1 (Migration) | Kritik | Önce yapılmalı |
-| Blok 2 (Backend) | Kritik | Migration sonrası |
-| Blok 3 (Admin UI) | Yüksek | Admin konfigürasyonu |
-| Blok 4 (Müşteri UI) | Yüksek | Müşteri deneyimi |
-| Blok 5 (Tipler) | Orta | Blok 3-4 ile paralel |
+### Yeni SMM ürünü nasıl tanımlanır?
+
+1. Admin panel → Ürünler → Yeni Ürün (veya mevcut ürünü düzenle)
+2. **Teslimat Ayarları** sekmesi
+3. Teslimat Tipi: **API Entegrasyonu** seç
+4. API Sağlayıcı seç (örn: smmget.com)
+5. Service ID gir (SMM paneldeki servis numarası)
+6. **SMM Ürünü** switch'ini **açık** konuma getir
+7. Kaydet
+
+Bu kadar. Müşteri ürün sayfasına girdiğinde link alanını görecek.
+
+---
+
+## Veritabanı Güncelleme (Canlı Sunucu)
+
+Canlı veritabanında bu kolon henüz yok. Seed dosyasını çalıştırmak gerekiyor:
+
+```
+backend/src/db/seed/sql/182_smm_is_smm_columns.sql
+```
+
+Bu dosya `ADD COLUMN IF NOT EXISTS` kullandığı için:
+- Kolon yoksa → ekler
+- Kolon zaten varsa → sessizce geçer, hata vermez
+
+---
+
+## Test Durumu
+
+Bu değişiklikler **henüz canlı ortamda test edilmedi.**
+Yerel ortamda test için yapılması gerekenler:
+
+- [ ] `182_smm_is_smm_columns.sql` çalıştır (veya DB'yi seed'le)
+- [ ] Admin panelde bir ürün aç → Teslimat = API → SMM switch'i aç → kaydet
+- [ ] Ürün sayfasına git → link input göründüğünü doğrula
+- [ ] Linksiz sepete eklemeyi dene → hata mesajı çıkmalı
+- [ ] Geçerli link gir → sepete ekle → sipariş oluştur
+- [ ] Backend log'unda `smm_order_placed` satırını kontrol et
+- [ ] Kategori formunda `is_smm` toggle açık olan kategorideki ürünü test et
+
+---
+
+## Değiştirilen Dosyalar
+
+| Dosya | Değişiklik |
+|---|---|
+| `182_smm_is_smm_columns.sql` | Canlı DB için ALTER migration |
+| `48_product_schema.sql` | is_smm CREATE TABLE'a eklendi |
+| `20_catalog_schema.sql` | is_smm CREATE TABLE'a eklendi |
+| `products/schema.ts` | Drizzle schema |
+| `categories/schema.ts` | Drizzle schema |
+| `products/validation.ts` | Zod schema |
+| `categories/validation.ts` | Zod schema |
+| `products/controller.ts` | Public mapper |
+| `products/admin.controller.ts` | Admin mapper |
+| `categories/controller.ts` | buildInsertPayload + buildUpdatePayload |
+| `smm.service.ts` | extractLinkFromOptions: smm_link öncelikli |
+| `types/products.ts` | ProductAdmin, Product, CommonProductPayload tipleri |
+| `types/categories.ts` | Category, UpsertCategoryBody tipleri |
+| `DeliverySection.tsx` | Admin: SMM Ürünü toggle |
+| `ProductForm.tsx` | Admin: is_smm payload'a eklendi |
+| `CategoryForm.tsx` | Admin: SMM Kategorisi toggle |
+| `ProductInfoSection.tsx` | Müşteri: otomatik smm_link input |
+| `ProductDetail.tsx` | Müşteri: validasyon + payload düzeltmesi |

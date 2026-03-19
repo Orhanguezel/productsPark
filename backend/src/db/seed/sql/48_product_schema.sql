@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS products (
   is_active          TINYINT(1)    NOT NULL DEFAULT 1,
   is_featured        TINYINT(1)    NOT NULL DEFAULT 0,
   is_digital         TINYINT(1)    NOT NULL DEFAULT 0,
+  is_smm             TINYINT(1)    NOT NULL DEFAULT 0,
   requires_shipping  TINYINT(1)    NOT NULL DEFAULT 1,
 
   -- FE / auto-delivery

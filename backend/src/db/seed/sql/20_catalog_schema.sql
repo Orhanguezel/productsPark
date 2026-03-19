@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS `categories` (
 
   `is_active`       TINYINT(1)    NOT NULL DEFAULT 1,
   `is_featured`     TINYINT(1)    NOT NULL DEFAULT 0,
+  `is_smm`          TINYINT(1)    NOT NULL DEFAULT 0,
   `display_order`   INT(11)       NOT NULL DEFAULT 0,
 
   `created_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
