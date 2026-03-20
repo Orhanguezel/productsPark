@@ -509,7 +509,8 @@ export const createPaymentSessionHandler: RouteHandlerMethod = async (req, reply
       return reply.code(400).send({ error: { message: 'invalid_amount' } });
     }
 
-    const merchant_oid = orderIdIn ?? `OID_${Date.now()}`;
+    // Strip hyphens: PayTR requires alphanumeric merchant_oid (no special chars)
+    const merchant_oid = orderIdIn ? orderIdIn.replace(/-/g, '') : `OID${Date.now()}`;
 
     const emailFromMeta = typeof metaObj?.email === 'string' ? metaObj.email.trim() : '';
     const emailFromCustomer =

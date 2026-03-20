@@ -17,6 +17,15 @@ import { paymentSessions, payments, paymentEvents } from './schema';
 import { getPaytrConfig } from './service';
 import { syncOrderAfterPayment } from './order-sync.service';
 
+// merchant_oid, UUID tirelerini silerek oluşturulur (PayTR alfanumerik zorunlu).
+// Notify'da geri dönüştürüp gerçek order UUID'sini buluyoruz.
+function merchantOidToUuid(oid: string): string {
+  if (/^[0-9a-f]{32}$/i.test(oid)) {
+    return `${oid.slice(0, 8)}-${oid.slice(8, 12)}-${oid.slice(12, 16)}-${oid.slice(16, 20)}-${oid.slice(20)}`;
+  }
+  return oid; // OID... fallback veya zaten UUID formatı
+}
+
 const PAYTR_NOTIFY_BODY = z.object({
   merchant_oid: z.string().min(1),
   status: z.enum(['success', 'failed']),
@@ -255,7 +264,7 @@ export const paytrNotifyHandler: RouteHandlerMethod = async (req, reply) => {
   } as any);
 
   await syncOrderAfterPayment({
-    orderId: session.orderId ?? merchant_oid,
+    orderId: merchantOidToUuid(session.orderId ?? merchant_oid),
     paymentStatus: newPaymentStatus,
     source: 'paytr_notify',
     logger: req.log,
