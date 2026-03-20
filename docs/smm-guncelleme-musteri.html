@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMM Otomatik Link Sistemi — Güncelleme Raporu</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 48px 60px;
+    max-width: 820px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 3px solid #16a34a;
+    padding-bottom: 20px;
+    margin-bottom: 32px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #16a34a;
+    margin-bottom: 6px;
+  }
+  .header .meta {
+    font-size: 12px;
+    color: #555;
+  }
+  .badge {
+    display: inline-block;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 10px;
+    vertical-align: middle;
+  }
+
+  /* Sections */
+  h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111;
+    margin: 28px 0 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #374151;
+    margin: 16px 0 6px;
+  }
+  p { margin-bottom: 10px; }
+
+  /* Problem/Solution boxes */
+  .box {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 12px 0;
+  }
+  .box-red   { background: #fef2f2; border-left: 4px solid #ef4444; }
+  .box-green { background: #f0fdf4; border-left: 4px solid #16a34a; }
+  .box-blue  { background: #eff6ff; border-left: 4px solid #3b82f6; }
+  .box-gray  { background: #f9fafb; border-left: 4px solid #9ca3af; }
+  .box-yellow{ background: #fffbeb; border-left: 4px solid #f59e0b; }
+
+  .box strong { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+
+  /* Steps */
+  ol.steps { padding-left: 0; list-style: none; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    min-width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #16a34a;
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* Flow */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 12px 0;
+  }
+  .flow-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    font-size: 12.5px;
+  }
+  .flow-item .icon {
+    font-size: 18px;
+    min-width: 24px;
+    text-align: center;
+  }
+  .flow-arrow {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 16px;
+    line-height: 1;
+    margin: 1px 0;
+  }
+
+  /* Check table */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th {
+    text-align: left;
+    background: #f3f4f6;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+  }
+  td {
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    font-size: 12.5px;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .check { color: #16a34a; font-weight: 700; }
+
+  /* Code */
+  code {
+    font-family: 'Courier New', monospace;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    color: #b91c1c;
+  }
+  pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 11.5px;
+    font-family: 'Courier New', monospace;
+    overflow-x: auto;
+    margin: 10px 0;
+    line-height: 1.7;
+  }
+  pre .comment { color: #94a3b8; }
+  pre .kw { color: #7dd3fc; }
+  pre .str { color: #86efac; }
+
+  /* DB section */
+  .db-note {
+    background: #fefce8;
+    border: 1px solid #fde047;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    font-size: 12.5px;
+  }
+  .db-note strong { color: #92400e; }
+
+  /* Footer */
+  .footer {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 11px;
+    color: #9ca3af;
+    text-align: center;
+  }
+
+  /* Print */
+  @media print {
+    body { padding: 30px 40px; }
+    .box, .flow-item, .db-note { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>SMM Otomatik Link Sistemi <span class="badge">Tamamlandi</span></h1>
+  <div class="meta">Hazirlayan: Gelistirme Ekibi &nbsp;|&nbsp; Tarih: 19 Mart 2026 &nbsp;|&nbsp; Surum: 1.0</div>
+</div>
+
+
+<!-- SORUN -->
+<h2>1. Mevcut Sorun Neydi?</h2>
+
+<div class="box box-red">
+  <strong>Sorun</strong>
+  SMM urunleri icin musteri linki sistem tarafindan otomatik istenmiyordu. Admin her urun icin iki ayri sekmeye gidip manuel ayar yapmak zorundaydi. Bu adim unutulduğunda musteri link girmeden siparis olusturuyordu ve teslimat basarisiz oluyordu.
+</div>
+
+<p>Eski akis:</p>
+<ol class="steps">
+  <li>Teslimat sekmesi → <code>delivery_type = API</code>, saglayici ve servis ID sec</li>
+  <li>Ozellestirme sekmesi → ayrica manuel olarak <code>type = URL</code> custom field ekle</li>
+  <li>Ikinci adim unutulursa musteri hic input gormuyor, link olmadan siparis olusturuluyor, teslimat basarisiz oluyor</li>
+</ol>
+
+
+<!-- COZUM -->
+<h2>2. Ne Yapildi?</h2>
+
+<div class="box box-green">
+  <strong>Cozum</strong>
+  Urun ve kategoriye "SMM Urunu / SMM Kategorisi" anahtari eklendi. Bu anahtar acikken musteriden sosyal medya profil linki otomatik olarak isteniyor. Admin'in ayrica custom field tanimlamasina gerek kalmadi.
+</div>
+
+<h3>Admin Paneli — Urun Formu</h3>
+<p>Teslimat Ayarlari sekmesinde, API teslimati secildiginde yeni bir toggle goruntuleniyor:</p>
+
+<div class="box box-gray">
+  <strong>Yeni toggle — Admin paneli / Teslimat Ayarlari sekmesi</strong>
+  <table style="margin:0; border:none;">
+    <tr>
+      <td style="border:none; padding: 4px 0; font-weight:600;">SMM Urunu</td>
+      <td style="border:none; padding: 4px 0; text-align:right; color:#16a34a; font-weight:700;">[ ACIK ]</td>
+    </tr>
+    <tr>
+      <td colspan="2" style="border:none; padding: 2px 0; color:#6b7280; font-size:12px;">Aciksa musteriden sosyal medya profil linki otomatik istenir.</td>
+    </tr>
+  </table>
+</div>
+
+<h3>Admin Paneli — Kategori Formu</h3>
+<p>Kategori duzenleme sayfasinda da ayni toggle eklendi. Kategoriyi SMM olarak isaretleyince o kategorideki tum API urunleri otomatik link ister — her urun icin ayri ayri acmaya gerek kalmaz.</p>
+
+<h3>Musteri Urun Sayfasi</h3>
+<p><code>SMM Urunu</code> acik olan bir urune girildiginde, custom field tanimi olmasa bile asagidaki input otomatik goruntuleniyor:</p>
+
+<div class="box box-blue">
+  <strong>Musteri sayfasinda gorunen alan</strong>
+  Sosyal Medya Profil Linki <span style="color:#ef4444;">*</span><br>
+  <span style="color:#6b7280; font-size:12px;">Hizmetin uygulanacagi profilin tam linkini girin. (ornek: https://instagram.com/kullanici_adi)</span>
+</div>
+
+<ul style="padding-left:18px; margin: 8px 0;">
+  <li>Alan <strong>zorunlu</strong> — bos birakilirsa sepete eklenemiyor</li>
+  <li><strong>Gecerli URL formati</strong> kontrol ediliyor (https:// ile baslamali)</li>
+  <li>Hatali girilirse uyari mesaji gosteriliyor</li>
+</ul>
+
+
+<!-- AKIS -->
+<h2>3. Yeni Siparis Akisi</h2>
+
+<div class="flow">
+  <div class="flow-item"><span class="icon">👤</span> <span>Musteri urun sayfasina girer</span></div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-item"><span class="icon">🔗</span> <span>Sosyal medya profil linkini girer (zorunlu, URL kontrolu yapilir)</span></div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-item"><span class="icon">🛒</span> <span>Sepete eklenir — link <code>smm_link</code> olarak siparis seceneklerine kaydedilir</span></div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-item"><span class="icon">💳</span> <span>Odeme tamamlanir, siparis olusur</span></div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-item"><span class="icon">⚙️</span> <span>Sistem <code>smm_link</code>'i okur ve SMM panel API'sine gonderir</span></div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-item"><span class="icon">✅</span> <span>Teslimat baslar — Admin panelinde "API ID" ve teslimat durumu goruntulenir</span></div>
+</div>
+
+
+<!-- ADMIN KULLANIM -->
+<h2>4. Admin Kullanim Kilavuzu</h2>
+
+<h3>Yeni SMM urunu nasil tanimlanir?</h3>
+
+<ol class="steps">
+  <li>Admin panel → Urunler → Yeni Urun (veya mevcut urunu duzenle)</li>
+  <li>Teslimat Ayarlari sekmesine gec</li>
+  <li>Teslimat Tipi: <strong>API Entegrasyonu</strong> sec</li>
+  <li>API saglayici sec (ornegin: smmget.com)</li>
+  <li>Service ID gir (SMM panelindeki servis numarasi)</li>
+  <li><strong>SMM Urunu</strong> toggle'ini <strong>acik</strong> konuma getir</li>
+  <li>Kaydet</li>
+</ol>
+
+<div class="box box-green">
+  <strong>Sonuc</strong>
+  Musteri bu urune girdiginde sosyal medya link alanini gorur. Baska hicbir ayar yapmana gerek yok.
+</div>
+
+<h3>Bir kategorinin tamamini SMM olarak isaretlemek icin:</h3>
+
+<ol class="steps">
+  <li>Admin panel → Kategoriler → Ilgili kategoriyi duzenle</li>
+  <li><strong>SMM Kategorisi</strong> toggle'ini <strong>acik</strong> konuma getir</li>
+  <li>Kaydet</li>
+</ol>
+
+<p>Bu kategoriye bagli olan tum API urunleri artik musteri link isteyecek.</p>
+
+
+<!-- TEST SONUCLARI -->
+<h2>5. Test Sonuclari</h2>
+
+<table>
+  <thead>
+    <tr><th>Test Senaryosu</th><th style="text-align:center; width:80px;">Sonuc</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Admin panelde is_smm toggle acik urun olusturma</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Musteri urun sayfasinda sosyal medya link inputu gorunuyor</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Bos link ile sepete ekleme engelleniyor + hata mesaji</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Gecersiz URL ile sepete ekleme engelleniyor + hata mesaji</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Gecerli link girilince sepete ekleniyor</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Siparisde smm_link admin panelinde gorunuyor</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Kategori SMM toggle urunlere yansıyor</td><td class="check" style="text-align:center;">GECTI</td></tr>
+    <tr><td>Teslimat akisinda link SMM API'sine iletiliyor</td><td class="check" style="text-align:center;">GECTI</td></tr>
+  </tbody>
+</table>
+
+
+<!-- CANLI SUNUCU -->
+<h2>6. Canli Sunucu Icin Yapilmasi Gerekenler</h2>
+
+<div class="db-note">
+  <strong>Onemli:</strong> Canlı veritabanı yeniden kurulmadıysa asagidaki SQL sorgularini MySQL konsolunda calistirmaniz gerekmektedir. Bu islem tek seferlik olup mevcut verileri etkilemez.
+</div>
+
+<pre><span class="comment">-- products tablosuna is_smm kolonu ekle</span>
+<span class="kw">ALTER TABLE</span> `products`
+  <span class="kw">ADD COLUMN</span> `is_smm` TINYINT(1) <span class="kw">NOT NULL DEFAULT</span> 0
+  COMMENT <span class="str">'SMM urunu: musteriden otomatik sosyal medya linki alinir'</span>;
+
+<span class="comment">-- categories tablosuna is_smm kolonu ekle</span>
+<span class="kw">ALTER TABLE</span> `categories`
+  <span class="kw">ADD COLUMN</span> `is_smm` TINYINT(1) <span class="kw">NOT NULL DEFAULT</span> 0
+  COMMENT <span class="str">'SMM kategorisi: bu kategorideki API urunleri otomatik link alir'</span>;</pre>
+
+<div class="box box-yellow">
+  <strong>Not</strong>
+  Kolon zaten varsa "Duplicate column name" hatasini alirsiniz — bu durumda ALTER calistirmaniza gerek yok, sistem zaten guncel demektir.
+</div>
+
+<p>SQL'i calistirdiktan sonra ek bir isleme gerek yoktur. Frontend ve backend kodlari yeni deploy ile birlikte aktive olur.</p>
+
+
+<!-- OZET -->
+<h2>7. Ozet</h2>
+
+<table>
+  <thead>
+    <tr><th>Oncesi</th><th>Sonrasi</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Admin 2 ayri sekmeye gidip manuel custom field tanimlamak zorundaydi</td>
+      <td>Admin sadece "SMM Urunu" toggle'ini aciyor, sistem gerisi otomatik hallediyor</td>
+    </tr>
+    <tr>
+      <td>Adim atlanirsa musteri link girmeden siparis verebiliyor, teslimat basarisiz oluyor</td>
+      <td>Link girilmeden sepete eklemek mumkun degil — sistem zorunlu kiliyor</td>
+    </tr>
+    <tr>
+      <td>Her urun icin ayri custom field tanimlamak gerekiyor</td>
+      <td>Kategori seviyesinde isaretleme ile tum urunler toplu aktif edilebiliyor</td>
+    </tr>
+    <tr>
+      <td>SMM link'in teslimat akisina ulasmasi guvenilir degildi</td>
+      <td>smm_link key'i en yuksek oncelikle teslimat sistemine iletiliyor</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  ProductsPark Gelistirme Ekibi &nbsp;|&nbsp; 19 Mart 2026 &nbsp;|&nbsp; Gizli — Sadece yetkili personel
+</div>
+
+</body>
+</html>
