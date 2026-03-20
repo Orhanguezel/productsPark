@@ -167,7 +167,7 @@ export const listProducts: RouteHandler = async (req, reply) => {
     const rows = await db
       .select({
         p: products,
-        c: { id: categories.id, name: categories.name, slug: categories.slug },
+        c: { id: categories.id, name: categories.name, slug: categories.slug, is_smm: categories.is_smm },
       })
       .from(products)
       .leftJoin(categories, eq(products.category_id, categories.id))
@@ -248,7 +248,7 @@ export const listProducts: RouteHandler = async (req, reply) => {
   const dataBase = db
     .select({
       p: products,
-      c: { id: categories.id, name: categories.name, slug: categories.slug },
+      c: { id: categories.id, name: categories.name, slug: categories.slug, is_smm: categories.is_smm },
     })
     .from(products)
     .leftJoin(categories, eq(products.category_id, categories.id));
@@ -282,7 +282,7 @@ export const getProductByIdOrSlug: RouteHandler = async (req, reply) => {
   const rows = await db
     .select({
       p: products,
-      c: { id: categories.id, name: categories.name, slug: categories.slug },
+      c: { id: categories.id, name: categories.name, slug: categories.slug, is_smm: categories.is_smm },
     })
     .from(products)
     .leftJoin(categories, eq(products.category_id, categories.id))
@@ -301,7 +301,7 @@ export const getProductById: RouteHandler = async (req, reply) => {
   const rows = await db
     .select({
       p: products,
-      c: { id: categories.id, name: categories.name, slug: categories.slug },
+      c: { id: categories.id, name: categories.name, slug: categories.slug, is_smm: categories.is_smm },
     })
     .from(products)
     .leftJoin(categories, eq(products.category_id, categories.id))
@@ -320,7 +320,7 @@ export const getProductBySlug: RouteHandler = async (req, reply) => {
   const rows = await db
     .select({
       p: products,
-      c: { id: categories.id, name: categories.name, slug: categories.slug },
+      c: { id: categories.id, name: categories.name, slug: categories.slug, is_smm: categories.is_smm },
     })
     .from(products)
     .leftJoin(categories, eq(products.category_id, categories.id))

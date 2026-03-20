@@ -143,3 +143,4 @@ backend/uploads/db_snapshots/
 
 # DB snapshots (contain secrets)
 backend/uploads/db_snapshots/
+.claude

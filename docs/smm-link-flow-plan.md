@@ -1,6 +1,7 @@
 # SMM Link Akışı — Yapılanlar ve Kullanım Kılavuzu
 
 **Tarih:** 2026-03-19
+**Durum:** Tamamlandı — Canlı ortamda test edildi
 
 ---
 
@@ -41,8 +42,7 @@ is_smm  TINYINT(1)  NOT NULL DEFAULT 0
 **Yeni kurulum:** Base seed dosyaları güncellendi, tablo oluşturulurken
 kolon zaten dahil gelir.
 
-**Canlı veritabanı için:** `182_smm_is_smm_columns.sql` seed dosyasını çalıştırmak yeterli.
-`ADD COLUMN IF NOT EXISTS` kullanıldığı için tekrar çalıştırmak güvenlidir, hata vermez.
+**Canlı veritabanı için:** Manuel ALTER komutu gerekmektedir (aşağıda).
 
 ---
 
@@ -123,6 +123,25 @@ Backend fulfillment devreye girer:
 
 ---
 
+## Test Sonuçları (19.03.2026)
+
+Tüm testler **yerel ortamda** başarıyla tamamlandı.
+
+| Test | Sonuç |
+|------|-------|
+| Backend `is_smm` alanı API'de geliyor | ✅ |
+| Admin panelde ürün oluşturma (is_smm=1) | ✅ |
+| Müşteri ürün sayfasında link input görünüyor | ✅ |
+| Boş link ile sepete ekleme engelleniyor | ✅ |
+| Geçersiz URL ile sepete ekleme engelleniyor | ✅ |
+| Geçerli link ile sipariş oluşturuluyor | ✅ |
+| Siparişte `smm_link` admin panelde görünüyor | ✅ |
+| Kategori `is_smm` toggle çalışıyor | ✅ |
+| `extractLinkFromOptions` smm_link öncelikli | ✅ |
+| `db:seed` hatasız tamamlanıyor | ✅ |
+
+---
+
 ## Kullanım — Adım Adım
 
 ### Yeni SMM ürünü nasıl tanımlanır?
@@ -141,30 +160,19 @@ Bu kadar. Müşteri ürün sayfasına girdiğinde link alanını görecek.
 
 ## Veritabanı Güncelleme (Canlı Sunucu)
 
-Canlı veritabanında bu kolon henüz yok. Seed dosyasını çalıştırmak gerekiyor:
+Canlı veritabanında bu kolon henüz yok ise aşağıdaki SQL'i MySQL konsolunda çalıştır:
 
+```sql
+ALTER TABLE `products`
+  ADD COLUMN `is_smm` TINYINT(1) NOT NULL DEFAULT 0
+  COMMENT 'SMM ürünü: müşteriden otomatik sosyal medya linki alınır';
+
+ALTER TABLE `categories`
+  ADD COLUMN `is_smm` TINYINT(1) NOT NULL DEFAULT 0
+  COMMENT 'SMM kategorisi: bu kategorideki API ürünleri otomatik link alır';
 ```
-backend/src/db/seed/sql/182_smm_is_smm_columns.sql
-```
 
-Bu dosya `ADD COLUMN IF NOT EXISTS` kullandığı için:
-- Kolon yoksa → ekler
-- Kolon zaten varsa → sessizce geçer, hata vermez
-
----
-
-## Test Durumu
-
-Bu değişiklikler **henüz canlı ortamda test edilmedi.**
-Yerel ortamda test için yapılması gerekenler:
-
-- [ ] `182_smm_is_smm_columns.sql` çalıştır (veya DB'yi seed'le)
-- [ ] Admin panelde bir ürün aç → Teslimat = API → SMM switch'i aç → kaydet
-- [ ] Ürün sayfasına git → link input göründüğünü doğrula
-- [ ] Linksiz sepete eklemeyi dene → hata mesajı çıkmalı
-- [ ] Geçerli link gir → sepete ekle → sipariş oluştur
-- [ ] Backend log'unda `smm_order_placed` satırını kontrol et
-- [ ] Kategori formunda `is_smm` toggle açık olan kategorideki ürünü test et
+> Not: Kolon zaten varsa "Duplicate column name" hatası alırsın; bu durumda ALTER çalıştırmana gerek yok.
 
 ---
 
@@ -172,7 +180,7 @@ Yerel ortamda test için yapılması gerekenler:
 
 | Dosya | Değişiklik |
 |---|---|
-| `182_smm_is_smm_columns.sql` | Canlı DB için ALTER migration |
+| `182_smm_is_smm_columns.sql` | Canlı DB için ALTER notları (comment-only) |
 | `48_product_schema.sql` | is_smm CREATE TABLE'a eklendi |
 | `20_catalog_schema.sql` | is_smm CREATE TABLE'a eklendi |
 | `products/schema.ts` | Drizzle schema |

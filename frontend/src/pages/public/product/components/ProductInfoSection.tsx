@@ -213,8 +213,8 @@ const ProductInfoSection = ({
 
       <Separator />
 
-      {/* SMM Ürünü: is_smm=true ise tek URL input otomatik göster */}
-      {(product as any).is_smm ? (
+      {/* SMM Ürünü: ürün veya kategorisi SMM ise otomatik link input göster */}
+      {((product as any).is_smm || (product as any).categories?.is_smm) ? (
         <Card>
           <CardHeader>
             <h3 className="font-semibold">Sosyal Medya Bilgisi</h3>
